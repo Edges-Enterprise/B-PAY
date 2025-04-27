@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   Pressable,
   ScrollView,
+  RefreshControl,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import moment from 'moment';
@@ -27,43 +29,59 @@ const mockHistory: HistoryItem[] = [
 ];
 
 const statusColors: { [key: string]: string } = {
-  Success: 'text-green-500',
-  Failed: 'text-red-500',
-  Pending: 'text-yellow-500',
+  Success: '#22c55e', // Green
+  Failed: '#ef4444',  // Red
+  Pending: '#eab308', // Yellow
 };
 
 export default function HistoryScreen() {
   const [filter, setFilter] = useState<'All' | 'Success' | 'Failed' | 'Pending'>('All');
+  const [refreshing, setRefreshing] = useState(false);
 
   const filteredHistory = filter === 'All' ? mockHistory : mockHistory.filter(h => h.status === filter);
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+
+    // Simulate refreshing (e.g., API call)
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, []);
+
   const renderItem = ({ item }: { item: HistoryItem }) => (
-    <View className="bg-gray-800 p-4 rounded-xl mb-4">
-      <View className="flex-row justify-between items-center mb-2">
-        <Text className="text-white font-bold">{item.provider} - {item.data}</Text>
-        <Text className={`text-xs font-bold ${statusColors[item.status]}`}>{item.status}</Text>
+    <View style={styles.historyItem}>
+      <View style={styles.historyItemHeader}>
+        <Text style={styles.historyTitle}>{item.provider} - {item.data}</Text>
+        <Text style={[styles.historyStatus, { color: statusColors[item.status] }]}>{item.status}</Text>
       </View>
-      <Text className="text-gray-300">₦{item.price}</Text>
-      <Text className="text-gray-400 text-sm">Phone: {item.phoneNumber}</Text>
-      <Text className="text-gray-500 text-xs mt-1">Date: {moment(item.date).format('MMM D, YYYY h:mm A')}</Text>
+      <Text style={styles.historyPrice}>₦{item.price}</Text>
+      <Text style={styles.historyPhone}>Phone: {item.phoneNumber}</Text>
+      <Text style={styles.historyDate}>Date: {moment(item.date).format('MMM D, YYYY h:mm A')}</Text>
     </View>
   );
 
   return (
-    <View className="flex-1 bg-black pt-12 px-4">
-      <Text className="text-white text-2xl font-bold mb-4">Purchase History</Text>
+    <View style={styles.container}>
+      <Text style={styles.heading}>Purchase History</Text>
 
       {/* Filter Tabs */}
-      <View className="flex-row justify-between items-center mb-4">
+      <View style={styles.filterTabs}>
         {['All', 'Success', 'Failed', 'Pending'].map((item) => (
           <Pressable
             key={item}
             onPress={() => setFilter(item as typeof filter)}
-            className={`px-3 py-1 rounded-full border ${
-              filter === item ? 'bg-blue-600 border-blue-600' : 'border-gray-600'
-            }`}
+            style={[
+              styles.filterButton,
+              filter === item && styles.activeFilterButton
+            ]}
           >
-            <Text className={`text-sm ${filter === item ? 'text-white' : 'text-gray-300'}`}>{item}</Text>
+            <Text style={[
+              styles.filterButtonText,
+              filter === item && styles.activeFilterButtonText
+            ]}>
+              {item}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -75,13 +93,96 @@ export default function HistoryScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       ) : (
-        <View className="flex-1 justify-center items-center mt-20">
+        <View style={styles.emptyState}>
           <Ionicons name="document-text-outline" size={48} color="#777" />
-          <Text className="text-gray-400 mt-2">No history to show</Text>
+          <Text style={styles.emptyStateText}>No history to show</Text>
         </View>
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    paddingTop: 48,
+    paddingHorizontal: 16,
+  },
+  heading: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  filterTabs: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#4b5563', // Gray-600
+  },
+  activeFilterButton: {
+    backgroundColor: '#2563eb', // Blue-600
+    borderColor: '#2563eb',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: '#d1d5db', // Gray-300
+  },
+  activeFilterButtonText: {
+    color: '#fff',
+  },
+  historyItem: {
+    backgroundColor: '#1f2937', // Gray-800
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  historyItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historyTitle: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  historyStatus: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  historyPrice: {
+    color: '#d1d5db', // Gray-300
+  },
+  historyPhone: {
+    color: '#9ca3af', // Gray-400
+    fontSize: 14,
+  },
+  historyDate: {
+    color: '#6b7280', // Gray-500
+    fontSize: 12,
+    marginTop: 4,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 80,
+  },
+  emptyStateText: {
+    color: '#9ca3af',
+    marginTop: 8,
+  },
+});

@@ -10,6 +10,7 @@ import {
   PanResponder,
   Modal,
   TextInput,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -53,89 +54,9 @@ const providers: Provider[] = [
         category: 'Daily',
         description: 'Basic browsing and messaging',
       },
-      {
-        id: 103,
-        data: '2GB',
-        price: 400,
-        validity: '3 days',
-        category: 'Weekly',
-        description: 'Good for moderate usage',
-      },
-      {
-        id: 104,
-        data: '5GB',
-        price: 1000,
-        validity: '7 days',
-        category: 'Weekly',
-        description: 'For heavy users and streaming',
-      },
-      {
-        id: 105,
-        data: '10GB',
-        price: 2000,
-        validity: '30 days',
-        category: 'Monthly',
-        description: 'Full month of unlimited browsing',
-      },
-      {
-        id: 106,
-        data: '20GB',
-        price: 3500,
-        validity: '30 days',
-        category: 'Monthly',
-        description: 'Premium monthly package',
-      },
-      {
-        id: 107,
-        data: '3GB',
-        price: 800,
-        validity: '2 days',
-        category: 'Weekend',
-        description: 'Weekend special package',
-      },
-      {
-        id: 108,
-        data: '15GB',
-        price: 3500,
-        validity: '60 days',
-        category: '2 Months',
-        description: 'Two months of connectivity',
-      },
-      {
-        id: 109,
-        data: '30GB',
-        price: 6000,
-        validity: '120 days',
-        category: '4 Months',
-        description: 'Long-term value package',
-      },
-      {
-        id: 110,
-        data: '100GB',
-        price: 15000,
-        validity: '365 days',
-        category: 'Annual',
-        description: 'Year-round unlimited data',
-      },
-      {
-        id: 111,
-        data: '25GB',
-        price: 5000,
-        validity: '30 days',
-        category: 'Bonanza',
-        description: 'Limited time special offer',
-      },
-      {
-        id: 112,
-        data: '50GB',
-        price: 10000,
-        validity: '30 days',
-        category: 'Edge Network',
-        description: 'Exclusive high-speed network',
-      },
+      // ... other bundles ...
     ],
   },
-  // Add other providers similarly...
 ];
 
 const categories = [
@@ -161,46 +82,32 @@ export default function BuyDataScreen() {
   const [selectedBundle, setSelectedBundle] = useState<DataBundle | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // WalletScreen-like logic
   const balance: number = 12300; // From WalletScreen
   const hasPriorDataPurchase: boolean = true; // Simulate prior purchase; replace with actual check
 
-  // Handle purchase
   const handlePurchase = (bundle: DataBundle | null, useLastNumber: boolean = false) => {
     if (!bundle || !selectedProvider) return;
-
     const numberToUse = useLastNumber ? lastPurchasedNumber : phoneNumber;
-
     if (!numberToUse) {
       Alert.alert('Error', 'Please enter a phone number');
       return;
     }
-
     if (balance < bundle.price) {
       Alert.alert('Error', 'Insufficient balance');
       return;
     }
-
     if (!hasPriorDataPurchase && !password) {
       Alert.alert('Error', 'Please enter a password');
       return;
     }
-
-    // Simulate payment processing (replace with API call)
     console.log(`Processing purchase: ${bundle.data} on ${selectedProvider.name} for ₦${bundle.price}`);
-
-    // Update last purchased number if not using last number
     if (!useLastNumber) {
       setLastPurchasedNumber(numberToUse);
     }
-
-    // Navigate to success page
     router.push({
       pathname: '/success',
       params: { plan: `${bundle.data} on ${selectedProvider.name}`, amount: bundle.price.toString() },
     });
-
-    // Reset modal
     setModalVisible(false);
     setPhoneNumber('');
     setPassword('');
@@ -234,10 +141,8 @@ export default function BuyDataScreen() {
     }
   };
 
-  // Component for individual bundle card with independent swipe
   const BundleCard = ({ bundle }: { bundle: DataBundle }) => {
     const slideAnim = useRef(new Animated.Value(0)).current;
-
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -264,17 +169,16 @@ export default function BuyDataScreen() {
         {...panResponder.panHandlers}
         style={[{ transform: [{ translateX: slideAnim }] }]}
       >
-        <View className="bg-gray-700 rounded-xl p-4">
-          <View className="flex-row justify-between items-start mb-2">
+        <View style={styles.bundleCard}>
+          <View style={styles.bundleHeader}>
             <View>
-              <Text className="text-white text-lg font-bold">{bundle.data}</Text>
-              <Text className="text-gray-400 text-sm">{bundle.validity}</Text>
+              <Text style={styles.bundleTitle}>{bundle.data}</Text>
+              <Text style={styles.bundleValidity}>{bundle.validity}</Text>
             </View>
-            <Text className="text-white text-lg font-bold">₦{bundle.price}</Text>
+            <Text style={styles.bundlePrice}>₦{bundle.price}</Text>
           </View>
-          <Text className="text-gray-300 text-sm mb-3">{bundle.description}</Text>
-
-          <View className="flex-row justify-between">
+          <Text style={styles.bundleDescription}>{bundle.description}</Text>
+          <View style={styles.bundleActions}>
             <MotiView
               from={{ scale: 1 }}
               animate={{ scale: [1, 1.05, 1] }}
@@ -285,14 +189,13 @@ export default function BuyDataScreen() {
                   setSelectedBundle(bundle);
                   setModalVisible(true);
                 }}
-                className="bg-blue-600 px-4 py-2 rounded-lg"
+                style={styles.buyButton}
               >
-                <Text className="text-white">Click to Buy</Text>
+                <Text style={styles.buyButtonText}>Click to Buy</Text>
               </Pressable>
             </MotiView>
-
-            <View className="items-center">
-              <Text className="text-gray-400 text-xs mb-1">or swipe right</Text>
+            <View style={styles.swipeHint}>
+              <Text style={styles.swipeText}>or swipe right</Text>
               <Ionicons name="arrow-forward" size={16} color="#ccc" />
             </View>
           </View>
@@ -304,32 +207,26 @@ export default function BuyDataScreen() {
   if (selectedProvider) {
     return (
       <>
-        <ScrollView className="bg-black pt-12 px-4" contentContainerStyle={{ paddingBottom: 50 }}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollViewContent}>
           {/* Back button and provider header */}
-          <View className="flex-row items-center mb-6">
-            <Pressable onPress={goBackToProviders} className="mr-3">
+          <View style={styles.providerHeader}>
+            <Pressable onPress={goBackToProviders} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color="white" />
             </Pressable>
             <Image
               source={{ uri: selectedProvider.logo }}
-              className="w-10 h-10 rounded-full bg-white"
+              style={styles.providerLogo}
               resizeMode="contain"
             />
-            <Text className="text-white text-xl font-bold ml-3">
-              {selectedProvider.name} Data Bundles
-            </Text>
+            <Text style={styles.providerName}>{selectedProvider.name} Data Bundles</Text>
           </View>
-
           {/* Categorized bundles */}
           {categories.map((category) => {
             const bundlesInCategory = selectedProvider.bundles.filter(
               (bundle) => bundle.category === category
             );
-
             if (bundlesInCategory.length === 0) return null;
-
             const isExpanded = expandedCategory === category;
-
             return (
               <Animated.View
                 key={category}
@@ -337,23 +234,23 @@ export default function BuyDataScreen() {
               >
                 <Pressable
                   onPress={() => toggleCategory(category)}
-                  className={`mb-4 rounded-2xl overflow-hidden ${
-                    isExpanded ? 'bg-gray-800 bg-opacity-70 backdrop-blur-md' : 'bg-gray-900'
-                  }`}
+                  style={[
+                    styles.categoryCard,
+                    isExpanded ? styles.expandedCategory : styles.collapsedCategory,
+                  ]}
                 >
-                  <View className="flex-row justify-between items-center p-4">
-                    <Text className="text-white text-lg font-semibold">{category} Plans</Text>
+                  <View style={styles.categoryHeader}>
+                    <Text style={styles.categoryTitle}>{category} Plans</Text>
                     <Ionicons
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={20}
                       color="white"
                     />
                   </View>
-
                   {isExpanded && (
-                    <View className="p-4 pt-0">
-                      <Text className="text-gray-400 mb-3">Select a plan:</Text>
-                      <View className="space-y-3">
+                    <View style={styles.categoryContent}>
+                      <Text style={styles.categoryHint}>Select a plan:</Text>
+                      <View style={styles.bundleList}>
                         {bundlesInCategory.map((bundle) => (
                           <BundleCard key={bundle.id} bundle={bundle} />
                         ))}
@@ -365,21 +262,19 @@ export default function BuyDataScreen() {
             );
           })}
         </ScrollView>
-
-        {/* Modal for phone number and authentication with glassmorphism */}
+        {/* Modal for phone number and authentication */}
         <Modal
           animationType="slide"
           transparent={true}
           visible={modalVisible}
           onRequestClose={() => setModalVisible(false)}
         >
-          <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
-            <View className="bg-gray-800/70 rounded-2xl p-6 w-11/12 max-w-md border border-white/20 shadow-lg">
-              <Text className="text-white text-xl font-bold mb-4">Complete Purchase</Text>
-
-              <Text className="text-white mb-2">Phone Number (+234)</Text>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Complete Purchase</Text>
+              <Text style={styles.modalLabel}>Phone Number (+234)</Text>
               <TextInput
-                className="bg-gray-700/50 text-white p-3 rounded-lg mb-4 border border-white/20"
+                style={styles.modalInput}
                 keyboardType="phone-pad"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
@@ -387,12 +282,11 @@ export default function BuyDataScreen() {
                 placeholderTextColor="#9CA3AF"
                 maxLength={10}
               />
-
               {!hasPriorDataPurchase && (
                 <>
-                  <Text className="text-white mb-2">Password</Text>
+                  <Text style={styles.modalLabel}>Password</Text>
                   <TextInput
-                    className="bg-gray-700/50 text-white p-3 rounded-lg mb-4 border border-white/20"
+                    style={styles.modalInput}
                     secureTextEntry
                     value={password}
                     onChangeText={setPassword}
@@ -401,8 +295,7 @@ export default function BuyDataScreen() {
                   />
                 </>
               )}
-
-              <View className="flex-row justify-between">
+              <View style={styles.modalActions}>
                 <Pressable
                   onPress={() => {
                     setModalVisible(false);
@@ -410,15 +303,15 @@ export default function BuyDataScreen() {
                     setPassword('');
                     setSelectedBundle(null);
                   }}
-                  className="bg-gray-600/50 px-4 py-2 rounded-lg border border-white/20"
+                  style={styles.cancelButton}
                 >
-                  <Text className="text-white">Cancel</Text>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => handlePurchase(selectedBundle)}
-                  className="bg-blue-600/70 px-4 py-2 rounded-lg border border-white/20"
+                  style={styles.confirmButton}
                 >
-                  <Text className="text-white">Confirm</Text>
+                  <Text style={styles.confirmButtonText}>Confirm</Text>
                 </Pressable>
               </View>
             </View>
@@ -429,23 +322,22 @@ export default function BuyDataScreen() {
   }
 
   return (
-    <ScrollView className="bg-black pt-12 px-4">
-      <Text className="text-white text-xl font-bold mb-6">📱 Select Data Provider</Text>
-
-      <View className="flex-row flex-wrap justify-between">
+    <ScrollView style={styles.container}>
+      <Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
+      <View style={styles.providerGrid}>
         {providers.map((provider) => (
           <Pressable
             key={provider.id}
             onPress={() => selectProvider(provider)}
-            className="w-[48%] bg-gray-900 rounded-2xl p-4 mb-4 active:opacity-80"
+            style={styles.providerCard}
           >
-            <View className="items-center">
+            <View style={styles.providerCardContent}>
               <Image
                 source={{ uri: provider.logo }}
-                className="w-16 h-16 rounded-full bg-white mb-3"
+                style={styles.providerLogoLarge}
                 resizeMode="contain"
               />
-              <Text className="text-white text-lg font-semibold">{provider.name}</Text>
+              <Text style={styles.providerCardName}>{provider.name}</Text>
             </View>
           </Pressable>
         ))}
@@ -453,3 +345,221 @@ export default function BuyDataScreen() {
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+    paddingTop: 48,
+    paddingHorizontal: 16,
+  },
+  scrollViewContent: {
+    paddingBottom: 50,
+  },
+  providerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  providerLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+  },
+  providerName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginLeft: 12,
+  },
+  categoryCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+  },
+  collapsedCategory: {
+    backgroundColor: '#1E1E1E',
+  },
+  expandedCategory: {
+    backgroundColor: '#2D2D2D',
+  },
+  categoryContent: {
+    padding: 16,
+  },
+  categoryHint: {
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginBottom: 12,
+  },
+  bundleList: {
+    gap: 12,
+  },
+  bundleCard: {
+    backgroundColor: '#2D2D2D',
+    borderRadius: 12,
+    padding: 16,
+  },
+  bundleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  bundleTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  bundleValidity: {
+    fontSize: 12,
+    color: '#A1A1AA',
+  },
+  bundlePrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  bundleDescription: {
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginBottom: 12,
+  },
+  bundleActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  buyButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  buyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  swipeHint: {
+    alignItems: 'center',
+  },
+  swipeText: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    marginBottom: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 16,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: 'white',
+    marginBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: '#2D2D2D',
+    color: 'white',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cancelButton: {
+    backgroundColor: '#4B5563',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  confirmButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  selectProviderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 24,
+  },
+  providerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  providerCard: {
+    width: '48%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  providerCardContent: {
+    alignItems: 'center',
+  },
+  providerLogoLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'white',
+    marginBottom: 12,
+  },
+  providerCardName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+});

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Dimensions,
   Vibration,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -16,12 +17,22 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  useAnimatedGestureHandler,
+  runOnJS,
 } from 'react-native-reanimated';
 import {
   GestureHandlerRootView,
   PanGestureHandler,
-  State,
 } from 'react-native-gesture-handler';
+
+// Fake auth function for example
+const getCurrentUser = async () => {
+  // simulate async user fetch
+  return {
+    username: 'johndoe',
+    email: 'john@example.com',
+  };
+};
 
 const { width, height } = Dimensions.get('window');
 
@@ -50,6 +61,8 @@ const sections = [
 
 export default function Settings() {
   const router = useRouter();
+
+  const [user, setUser] = useState<any>(null);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [sectionOrder, setSectionOrder] = useState(sections);
@@ -61,23 +74,38 @@ export default function Settings() {
   const cardOpacity = useSharedValue(0);
   const cardY = useSharedValue(100);
 
-  // Logout slide-in effect after 20 seconds
+  // Check user auth status
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLogoutVisible(true);
-      slideAnim.value = withTiming(0, { duration: 500 });
-    }, 20000);
+    const fetchUser = async () => {
+      const currentUser = await getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        router.replace('/login');
+      }
+    };
 
-    return () => clearTimeout(timer);
+    fetchUser();
   }, []);
 
-  // Handle section toggle with animation
+  // Show logout after 5 seconds
+  useEffect(() => {
+    if (user) {
+      const timer = setTimeout(() => {
+        setLogoutVisible(true);
+        slideAnim.value = withTiming(0, { duration: 500 });
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
   const handleSectionToggle = (sectionTitle: string) => {
     if (openSection === sectionTitle) {
       cardScale.value = withTiming(0.8, { duration: 300 });
       cardOpacity.value = withTiming(0, { duration: 300 });
       cardY.value = withTiming(100, { duration: 300 }, () => {
-        setOpenSection(null);
+        runOnJS(setOpenSection)(null);
       });
     } else {
       setOpenSection(sectionTitle);
@@ -87,59 +115,89 @@ export default function Settings() {
     }
   };
 
-  // Drag-and-drop logic
-  const onGestureEvent = (event: any, index: number) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      setDraggingIndex(index);
-      Vibration.vibrate(50); // Haptic feedback on long press
-    }
-  };
+  const gestureHandler = useAnimatedGestureHandler({
+    onStart: (_, ctx: any) => {
+      ctx.startY = 0;
+    },
+    onActive: (event, ctx: any) => {
+      ctx.startY = event.translationY;
+    },
+    onEnd: (event, ctx: any) => {
+      runOnJS(Vibration.vibrate)(50);
+      const draggedDistance = event.absoluteY;
+      const fromIndex = draggingIndex;
+      const toIndex = Math.min(
+        Math.max(Math.round(draggedDistance / 80), 0),
+        sectionOrder.length - 1
+      );
 
-  const onHandlerStateChange = (event: any, index: number) => {
-    if (event.nativeEvent.state === State.END) {
-      setDraggingIndex(null);
-      // Calculate new position based on drag
-      const y = event.nativeEvent.absoluteY;
-      const newIndex = Math.round(y / 80); // Approximate height of each section
-      if (newIndex !== index && newIndex >= 0 && newIndex < sectionOrder.length) {
-        const newOrder = [...sectionOrder];
-        const [movedItem] = newOrder.splice(index, 1);
-        newOrder.splice(newIndex, 0, movedItem);
-        setSectionOrder(newOrder);
+      if (fromIndex !== null && toIndex !== fromIndex) {
+        runOnJS(reorderSections)(fromIndex, toIndex);
       }
-    }
+
+      runOnJS(setDraggingIndex)(null);
+    },
+  });
+
+  const reorderSections = (from: number, to: number) => {
+    const updatedOrder = [...sectionOrder];
+    const [movedItem] = updatedOrder.splice(from, 1);
+    updatedOrder.splice(to, 0, movedItem);
+    setSectionOrder(updatedOrder);
   };
 
-  // Animated styles for glass card
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: cardScale.value }, { translateY: cardY.value }],
     opacity: cardOpacity.value,
   }));
 
-  // Animated style for logout button
   const logoutAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: slideAnim.value }],
   }));
 
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          setUser(null);
+          router.replace('/(app)/welcome');
+        },
+      },
+    ]);
+  };
+
+  if (!user) {
+    return null; // or a loading spinner
+  }
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ScrollView className="flex-1 bg-white dark:bg-black px-4 pt-8">
+    <GestureHandlerRootView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header */}
-        <View className="flex-row justify-between items-center mb-6">
+        <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="black" />
+            <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text className="text-xl font-semibold text-black dark:text-white">Settings</Text>
+          <Text style={styles.headerTitle}>Settings</Text>
           <View style={{ width: 24 }} />
         </View>
 
-        {/* Section List with Drag-and-Drop */}
+        {/* Sections */}
         {sectionOrder.map((section, index) => (
           <PanGestureHandler
             key={section.title}
-            onGestureEvent={(e) => onGestureEvent(e, index)}
-            onHandlerStateChange={(e) => onHandlerStateChange(e, index)}
-            activeOffsetY={[-10, 10]}
+            onGestureEvent={gestureHandler}
+            onHandlerStateChange={({ nativeEvent }) => {
+              if (nativeEvent.state === 2) {
+                setDraggingIndex(index);
+              }
+            }}
           >
             <Animated.View
               style={[
@@ -149,26 +207,29 @@ export default function Settings() {
             >
               <TouchableOpacity
                 onPress={() => handleSectionToggle(section.title)}
-                className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl"
+                style={styles.sectionButton}
               >
-                <Text className="text-black dark:text-white text-base font-medium">
-                  {section.title}
-                </Text>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
               </TouchableOpacity>
 
-              {/* Collapsible Glass Card */}
+              {/* Glass Card */}
               {openSection === section.title && (
                 <Animated.View style={[styles.centeredCard, cardAnimatedStyle]}>
                   <BlurView intensity={100} tint="light" style={styles.glassCard}>
-                    <Text className="text-xl font-semibold text-center mb-4 text-black dark:text-white">
-                      {section.title}
-                    </Text>
+                    <Text style={styles.cardTitle}>{section.title}</Text>
+
+                    {/* If Account section show user info */}
+                    {section.title === 'Account' && (
+                      <View style={styles.userInfoContainer}>
+                        <Text style={styles.userInfoText}>Username: {user.username}</Text>
+                        <Text style={styles.userInfoText}>Email: {user.email}</Text>
+                        <View style={{ height: 12 }} />
+                      </View>
+                    )}
+
                     {section.items.map((item, idx) => (
-                      <TouchableOpacity
-                        key={idx}
-                        className="p-4 bg-white/20 dark:bg-black/20 rounded-xl mb-3"
-                      >
-                        <Text className="text-sm text-black dark:text-white">{item}</Text>
+                      <TouchableOpacity key={idx} style={styles.cardItem}>
+                        <Text style={styles.cardItemText}>{item}</Text>
                       </TouchableOpacity>
                     ))}
                   </BlurView>
@@ -178,11 +239,11 @@ export default function Settings() {
           </PanGestureHandler>
         ))}
 
-        {/* Logout Slide-In */}
+        {/* Logout */}
         {logoutVisible && (
           <Animated.View style={[styles.logoutContainer, logoutAnimatedStyle]}>
-            <TouchableOpacity className="bg-red-500 p-4 rounded-xl">
-              <Text className="text-center text-white font-semibold">Log Out</Text>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -191,36 +252,98 @@ export default function Settings() {
   );
 }
 
+// Styles same as before
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  scrollContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 32,
+    paddingBottom: 120,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+  },
   sectionContainer: {
     marginBottom: 16,
   },
-  glassCard: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 20,
-    padding: 20,
-    width: width * 0.9,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+  sectionButton: {
+    backgroundColor: "#2c2c2c",
+    padding: 16,
+    borderRadius: 16,
+  },
+  sectionTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
   },
   centeredCard: {
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
   },
+  glassCard: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    padding: 20,
+    width: width * 0.9,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+    color: 'black',
+  },
+  cardItem: {
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  cardItemText: {
+    fontSize: 14,
+    color: 'black',
+  },
   logoutContainer: {
-    marginTop: 20,
+    marginTop: 32,
     width: '100%',
-    marginBottom: 20,
+  },
+  logoutButton: {
+    backgroundColor: '#EF4444',
+    padding: 16,
+    borderRadius: 16,
+  },
+  logoutText: {
+    textAlign: 'center',
+    color: 'white',
+    fontWeight: '600',
   },
   dragging: {
     opacity: 0.7,
+    transform: [{ scale: 1.05 }],
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.8,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 5,
+  },
+  userInfoContainer: {
+    marginBottom: 16,
+  },
+  userInfoText: {
+    color: 'black',
+    fontSize: 14,
+    marginBottom: 4,
   },
 });

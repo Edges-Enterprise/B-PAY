@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet, StatusBar, Platform, SafeAreaView, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 
-// Define types for transaction and recommendation
+// Define types
 interface Transaction {
   type: string;
   amount: number;
@@ -27,7 +27,7 @@ export default function WalletScreen() {
   const [currentRecommendations, setCurrentRecommendations] = useState<Recommendation[]>([]);
 
   const balance: number = 12300;
-  const hasPriorDataPurchase: boolean = true; // Simulate prior data purchase; replace with actual check
+  const hasPriorDataPurchase: boolean = true; // Simulate prior data purchase
 
   const transactions: Transaction[] = [
     { type: 'Data Purchase', amount: -300, network: 'MTN', date: 'Apr 18, 2025' },
@@ -35,7 +35,6 @@ export default function WalletScreen() {
     { type: 'Cable TV Payment', amount: -2500, service: 'DSTV', date: 'Apr 16, 2025' },
   ];
 
-  // Expanded recommendations with prices
   const recommendations: Recommendation[] = [
     { id: 1, text: '1GB MTN data for just ₦200!', price: 200 },
     { id: 2, text: 'Airtel 500MB daily plan for ₦100.', price: 100 },
@@ -49,51 +48,42 @@ export default function WalletScreen() {
     { id: 10, text: 'MTN ₦100 airtime voucher.', price: 100 },
   ];
 
-  // Shuffle function
   const shuffleRecommendations = (): Recommendation[] => {
     const array = [...recommendations];
     for (let i = array.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [array[i], array[j]] = [array[j], array[i]];
     }
-    return array.slice(0, 6); // Limit to 6
+    return array.slice(0, 5);
   };
 
-  // Initial shuffle and periodic update
   useEffect(() => {
-    setCurrentRecommendations(shuffleRecommendations()); // Initial shuffle
-
+    setCurrentRecommendations(shuffleRecommendations());
     const interval = setInterval(() => {
-      setCurrentRecommendations(shuffleRecommendations()); // Update every 30s
+      setCurrentRecommendations(shuffleRecommendations());
     }, 30000);
 
-    return () => clearInterval(interval); // Cleanup
+    return () => clearInterval(interval);
   }, []);
 
-  // Format visible balance
   const formattedBalance: string = `₦${balance.toLocaleString(undefined, {
     minimumFractionDigits: 2,
   })}`;
 
-  // When hidden, use asterisk + .00
-  const hiddenBalance: string = '₦****' + formattedBalance.slice(-3); // takes `.00`
+  const hiddenBalance: string = '₦****' + formattedBalance.slice(-3);
 
-  // Handle purchase
   const handlePurchase = (rec: Recommendation) => {
     if (!hasPriorDataPurchase) {
-      console.log('User must have prior data purchase to use auto-purchase.');
+      console.log('User must have prior data purchase.');
       return;
     }
 
     if (balance < rec.price) {
-      console.log('Insufficient balance for purchase.');
+      console.log('Insufficient balance.');
       return;
     }
 
-    // Simulate payment processing (replace with actual API call)
-    console.log(`Processing purchase: ${rec.text} for ₦${rec.price}`);
-
-    // Navigate to success page with purchase details
+    console.log(`Purchasing: ${rec.text} for ₦${rec.price}`);
     router.push({
       pathname: '/success',
       params: { plan: rec.text, amount: rec.price.toString() },
@@ -101,122 +91,243 @@ export default function WalletScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-black px-4 pt-12">
-      {/* Title */}
-      <Text className="text-3xl font-bold text-white mb-1">Wallet 💼</Text>
-      <Text className="text-base text-gray-400 mb-6">Manage your balance and transactions</Text>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
+        {/* Title */}
+        <Text style={styles.title}>Wallet 💼</Text>
+        <Text style={styles.subtitle}>Manage your balance and transactions</Text>
 
-      {/* Balance Card */}
-      <View className="bg-gradient-to-br from-blue-600 to-purple-800 p-6 rounded-2xl mb-6 shadow-lg">
-        <View className="flex-row justify-between items-center">
-          <Text className="text-white/70 text-sm">Current Balance</Text>
-          <Pressable onPress={() => setShowBalance(!showBalance)}>
-            <Ionicons
-              name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-              size={20}
-              color="white"
-            />
-          </Pressable>
+        {/* Balance Card */}
+        <View style={styles.balanceCard}>
+          <View style={styles.balanceHeader}>
+            <Text style={styles.balanceTextLabel}>Current Balance</Text>
+            <Pressable onPress={() => setShowBalance(!showBalance)}>
+              <Ionicons
+                name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+                size={20}
+                color="white"
+              />
+            </Pressable>
+          </View>
+          <Text style={styles.balanceAmount}>
+            {showBalance ? formattedBalance : hiddenBalance}
+          </Text>
         </View>
-        <Text className="text-white text-3xl font-bold mt-2">
-          {showBalance ? formattedBalance : hiddenBalance}
-        </Text>
-      </View>
 
-      {/* Fund Wallet Pulse Button */}
-      <MotiView
-        from={{ scale: 1 }}
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{ loop: true, type: 'timing', duration: 1500 }}
-        className="mb-6"
-      >
-        <Pressable
-          onPress={() => router.push('/(app)/(protected)/fund')}
-          className="flex-row items-center justify-center bg-blue-700 py-4 rounded-xl"
+        {/* Fund Wallet Button */}
+        <MotiView
+          from={{ scale: 1 }}
+          animate={{ scale: [1, 1.05, 1] }}
+          transition={{ loop: true, type: 'timing', duration: 1500 }}
+          style={styles.fundButtonContainer}
         >
-          <Ionicons name="add-circle-outline" size={20} color="white" />
-          <Text className="text-white ml-2 font-semibold">Fund Wallet</Text>
+          <Pressable
+            onPress={() => router.push('/(app)/(protected)/fund')}
+            style={styles.fundButton}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="white" />
+            <Text style={styles.fundButtonText}>Fund Wallet</Text>
+          </Pressable>
+        </MotiView>
+
+        {/* Transactions Toggle */}
+        <Pressable
+          onPress={() => setShowTransactions(!showTransactions)}
+          style={styles.transactionToggle}
+        >
+          <Text style={styles.transactionTitle}>🧾 Recent Transactions</Text>
+          <Ionicons
+            name={showTransactions ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={22}
+            color="white"
+          />
         </Pressable>
-      </MotiView>
 
-      {/* Transactions Toggle */}
-      <Pressable
-        onPress={() => setShowTransactions(!showTransactions)}
-        className="flex-row items-center justify-between mb-3"
-      >
-        <Text className="text-lg font-semibold text-white">🧾 Recent Transactions</Text>
-        <Ionicons
-          name={showTransactions ? 'chevron-up-outline' : 'chevron-down-outline'}
-          size={22}
-          color="white"
-        />
-      </Pressable>
-
-      {/* Transaction List */}
-      {showTransactions && (
-        <View className="space-y-4 mb-6">
-          {transactions.map((tx, index) => (
-            <View
-              key={index}
-              className="bg-neutral-900 rounded-xl p-4 flex-row justify-between items-center border border-white/10"
-            >
-              <View>
-                <Text className="text-white font-medium">{tx.type}</Text>
-                <Text className="text-xs text-gray-400">
-                  {tx.network || tx.method || tx.service} • {tx.date}
+        {/* Transactions List */}
+        {showTransactions && (
+          <View style={styles.transactionList}>
+            {transactions.map((tx, index) => (
+              <View key={index} style={styles.transactionItem}>
+                <View>
+                  <Text style={styles.transactionType}>{tx.type}</Text>
+                  <Text style={styles.transactionDetails}>
+                    {tx.network || tx.method || tx.service} • {tx.date}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.transactionAmount,
+                    { color: tx.amount < 0 ? '#f87171' : '#34d399' },
+                  ]}
+                >
+                  {tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount)}
                 </Text>
               </View>
-              <Text
-                className={`text-base font-bold ${
-                  tx.amount < 0 ? 'text-red-400' : 'text-green-400'
-                }`}
-              >
-                {tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Recommended Purchases (Chat-like) */}
-      {balance > 0 && !showTransactions && (
-        <View className="mb-6">
-          <Text className="text-lg font-semibold text-white mb-4">💡 Recommended Purchases</Text>
-          <View className="space-y-2">
-            {currentRecommendations.map((rec, index) => (
-              <MotiView
-                key={`${rec.id}-${index}`} // Unique key for re-renders
-                from={{
-                  translateX: index % 2 === 0 ? -100 : 100,
-                  opacity: 0,
-                }}
-                animate={{
-                  translateX: 0,
-                  opacity: 1,
-                }}
-                transition={{
-                  type: 'timing',
-                  duration: 800,
-                  delay: index * 500, // Staggered delay
-                }}
-                className={`flex-row ${
-                  index % 2 === 0 ? 'justify-start' : 'justify-end'
-                }`}
-              >
-                <Pressable
-                  onPress={() => handlePurchase(rec)}
-                  accessibilityLabel={rec.text}
-                  className={`max-w-[70%] p-3 rounded-xl border border-white/10 ${
-                    index % 2 === 0 ? 'bg-blue-900' : 'bg-purple-900'
-                  }`}
-                >
-                  <Text className="text-white text-sm">{rec.text}</Text>
-                </Pressable>
-              </MotiView>
             ))}
           </View>
-        </View>
-      )}
-    </ScrollView>
+        )}
+
+        {/* Recommended Purchases */}
+        {balance > 0 && !showTransactions && (
+          <View style={styles.recommendationsSection}>
+            <Text style={styles.recommendationsTitle}>💡 Recommended Purchases</Text>
+            <View style={styles.recommendationsList}>
+              {currentRecommendations.map((rec, index) => (
+                <MotiView
+                  key={`${rec.id}-${index}`}
+                  from={{
+                    translateX: index % 2 === 0 ? -100 : 100,
+                    opacity: 0,
+                  }}
+                  animate={{
+                    translateX: 0,
+                    opacity: 1,
+                  }}
+                  transition={{
+                    type: 'timing',
+                    duration: 800,
+                    delay: index * 500,
+                  }}
+                  style={[
+                    styles.recommendationContainer,
+                    index % 2 === 0
+                      ? { alignSelf: 'flex-start', backgroundColor: '#1e3a8a' }
+                      : { alignSelf: 'flex-end', backgroundColor: '#6d28d9' },
+                  ]}
+                >
+                  <Pressable onPress={() => handlePurchase(rec)}>
+                    <Text style={styles.recommendationText}>{rec.text}</Text>
+                  </Pressable>
+                </MotiView>
+              ))}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  inner: {
+    paddingHorizontal: 16,
+    paddingBottom: 120, // Increased bottom padding to avoid overlap
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 24,
+  },
+  balanceCard: {
+    backgroundColor: '#1e40af',
+    padding: 24,
+    borderRadius: 20,
+    marginBottom: 24,
+    shadowColor: '#fff',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceTextLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+  },
+  balanceAmount: {
+    color: 'white',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  fundButtonContainer: {
+    marginBottom: 24,
+  },
+  fundButton: {
+    backgroundColor: '#1d4ed8',
+    paddingVertical: 16,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fundButtonText: {
+    color: 'white',
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  transactionToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  transactionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  transactionList: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  transactionItem: {
+    backgroundColor: '#171717',
+    padding: 16,
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  transactionType: {
+    color: 'white',
+    fontWeight: '500',
+  },
+  transactionDetails: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  recommendationsSection: {
+    marginBottom: 24,
+  },
+  recommendationsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 16,
+  },
+  recommendationsList: {
+    gap: 8,
+  },
+  recommendationContainer: {
+    maxWidth: '70%',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  recommendationText: {
+    color: 'white',
+    fontSize: 14,
+  },
+});
