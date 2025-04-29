@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function ProtectedLayout() {
   return (
     <Tabs
-      initialRouteName="wallet" // Sets wallet as the first route to load in tabs
+      initialRouteName="wallet"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           let iconName: any;
@@ -35,6 +35,12 @@ export default function ProtectedLayout() {
         tabBarInactiveTintColor: 'gray',
         tabBarLabelStyle: {
           fontSize: 12,
+        },
+        tabBarStyle: {
+          backgroundColor: 'transparent',
+          position: 'absolute',
+          borderTopWidth: 0,
+          elevation: 0, // for Android
         },
         headerShown: false,
       })}

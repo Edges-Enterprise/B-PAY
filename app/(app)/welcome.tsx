@@ -26,16 +26,16 @@ const { width, height } = Dimensions.get('window');
 
 const rotatingTexts = [
   {
-    text: "Buy Data, Cable and Internet Subscription 💰💰",
-    icon: "access-point-network",
+    text: 'Buy Data, Cable and Internet Subscription 💰💰',
+    icon: 'access-point-network',
   },
   {
-    text: "Seamlessly and Instantly 💨💨💨",
-    icon: "flash",
+    text: 'Seamlessly and Instantly 💨💨💨',
+    icon: 'flash',
   },
   {
-    text: "Get Free 15GB 🎉🎉🎉",
-    icon: "gift",
+    text: 'Get Free 15GB 🎉🎉🎉',
+    icon: 'gift',
   },
 ];
 
@@ -45,12 +45,13 @@ export default function WelcomeScreen() {
   const [showStatusBar, setShowStatusBar] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
   const [typewriterText, setTypewriterText] = useState('');
+  const [navigationError, setNavigationError] = useState(null);
 
-  const fullWelcomeText = "Welcome to";
+  const fullWelcomeText = 'Welcome to';
   const scale = useSharedValue(1);
   const buttonScale = useSharedValue(1);
 
-  // Typewriter effect — slow, and triggers button after last character
+  // Typewriter effect — optimized for smoothness
   useEffect(() => {
     let currentIndex = 0;
     const interval = setInterval(() => {
@@ -64,6 +65,7 @@ export default function WelcomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  // Pulse animations for brand text and button
   useEffect(() => {
     scale.value = withRepeat(
       withSequence(
@@ -84,6 +86,7 @@ export default function WelcomeScreen() {
     );
   }, []);
 
+  // Rotating text effect
   useEffect(() => {
     const interval = setInterval(() => {
       setTextIndex((prev) => (prev + 1) % rotatingTexts.length);
@@ -91,8 +94,9 @@ export default function WelcomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const onDoubleTap = (event) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
+  // Double-tap to show status bar
+  const onDoubleTap = ({ nativeEvent }) => {
+    if (nativeEvent.state === State.ACTIVE) {
       setShowStatusBar(true);
     }
   };
@@ -105,12 +109,28 @@ export default function WelcomeScreen() {
     transform: [{ scale: buttonScale.value }],
   }));
 
+  // Handle navigation with error checking
+  const handleNavigation = (route) => {
+    Vibration.vibrate(40);
+    try {
+      router.replace(route);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      setNavigationError('Failed to navigate. Please try again.');
+    }
+  };
+
   const current = rotatingTexts[textIndex];
 
   return (
     <TapGestureHandler onHandlerStateChange={onDoubleTap} numberOfTaps={2}>
       <View style={styles.container}>
-        <StatusBar hidden={!showStatusBar} translucent backgroundColor="transparent" barStyle="light-content" />
+        <StatusBar
+          hidden={!showStatusBar}
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+        />
 
         <ImageBackground
           source={require('../../assets/images/welcome.png')}
@@ -144,19 +164,31 @@ export default function WelcomeScreen() {
               </Animated.View>
             </View>
 
-            {/* Get Started Button */}
+            {/* Buttons */}
             {showButton && (
               <Animated.View entering={SlideInRight.duration(1000)} style={[styles.buttonWrapper, buttonPulseStyle]}>
                 <Pressable
-                  onPress={() => {
-                    Vibration.vibrate(40);
-                    router.replace('/(app)/(protected)/wallet');
-                  }}
+                  onPress={() => handleNavigation('/(Auth)/sign-up')}
                   style={styles.button}
                 >
-                  <Text style={styles.buttonText3D}>Get Started</Text>
+                  <Text style={styles.buttonText3D}>Sign Up</Text>
                 </Pressable>
+
+                {/* Optional Sign-In Button (uncomment if sign-in route exists) */}
+                {
+                <Pressable
+                  onPress={() => handleNavigation('/(Auth)/sign-in')}
+                  style={[styles.button, styles.secondaryButton]}
+                >
+                  <Text style={styles.buttonText3D}>Sign In</Text>
+                </Pressable>
+                }
               </Animated.View>
+            )}
+
+            {/* Navigation Error Message */}
+            {navigationError && (
+              <Text style={styles.errorText}>{navigationError}</Text>
             )}
           </View>
         </ImageBackground>
@@ -203,6 +235,7 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     marginBottom: 40,
+    gap: 16, // Space between buttons if sign-in is added
   },
   button: {
     backgroundColor: 'transparent',
@@ -212,6 +245,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#2563EB',
   },
+  secondaryButton: {
+    borderColor: '#60A5FA', // Different border color for sign-in button
+  },
   buttonText3D: {
     color: '#a6bce0',
     fontSize: 18,
@@ -220,5 +256,11 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1.5, height: 2 },
     textShadowRadius: 3,
     transform: [{ translateY: -1 }, { translateX: -0.5 }],
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
   },
 });
