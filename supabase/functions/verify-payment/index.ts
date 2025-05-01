@@ -7,7 +7,7 @@ serve(async (req) => {
     
     // Verify with Paystack
     const paystackResponse = await fetch(
-      `https://api.paystack.co/transaction/verify/${reference}`,
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
       {
         headers: {
           'Authorization': `Bearer ${Deno.env.get('PAYSTACK_SECRET_KEY')}`
@@ -18,31 +18,32 @@ serve(async (req) => {
     const paystackData = await paystackResponse.json()
     
     if (paystackData.data.status !== 'success') {
-      return new Response(
-        JSON.stringify({ status: 'failed', message: 'Payment not successful' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({
+        status: 'failed', 
+        message: 'Payment not successful'
+      }, 200)
     }
 
     const amount = paystackData.data.amount / 100
-    const creditedAmount = amount * 0.9 // Deduct 10% fee
+    const creditedAmount = amount * 0.9 // 10% fee
     
-    // Update user balance
+    // Initialize Supabase with SERVICE ROLE
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')! // Critical change
     )
 
-    // Get user from auth table using email
-    const { data: { users } } = await supabaseClient.auth.admin.listUsers({
-      filter: `email = '${paystackData.data.customer.email}'`
-    })
+    // Find user by email from Paystack response
+    const { data: { users }, error: userError } = 
+      await supabaseClient.auth.admin.listUsers({
+        filter: `email = '${paystackData.data.customer.email}'`
+      })
 
-    if (!users?.length) {
-      return new Response(
-        JSON.stringify({ status: 'failed', message: 'User not found' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (!users?.length || userError) {
+      return jsonResponse({
+        status: 'failed',
+        message: 'User account not found'
+      }, 200)
     }
 
     const userId = users[0].id
@@ -74,20 +75,24 @@ serve(async (req) => {
 
     if (txError) throw txError
 
-    return new Response(
-      JSON.stringify({
-        status: 'success',
-        amount: creditedAmount,
-        message: 'Wallet credited successfully'
-      }),
-      { headers: { 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({
+      status: 'success',
+      amount: creditedAmount,
+      message: 'Wallet credited successfully'
+    }, 200)
 
   } catch (err) {
     console.error('Verification error:', err)
-    return new Response(
-      JSON.stringify({ status: 'error', message: 'Verification failed' }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({
+      status: 'error',
+      message: 'Payment verification failed'
+    }, 200)
   }
 })
+
+function jsonResponse(data: any, status: number) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  })
+}

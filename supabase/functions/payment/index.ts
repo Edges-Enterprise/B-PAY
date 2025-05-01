@@ -7,13 +7,11 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    // Validate request method
     if (req.method !== 'POST') {
       return jsonResponse({
         status: 'error',
@@ -21,7 +19,7 @@ serve(async (req) => {
       }, 200, corsHeaders)
     }
 
-    // Parse and validate request body
+    // No auth check needed for payment initiation
     const { amount, email, name } = await req.json()
     
     if (!amount || !email) {
@@ -31,14 +29,14 @@ serve(async (req) => {
       }, 200, corsHeaders)
     }
 
-    if (isNaN(amount) || amount < 500) {
+    const numericAmount = Number(amount)
+    if (isNaN(numericAmount) {
       return jsonResponse({
         status: 'error',
-        message: 'Amount must be at least ₦500'
+        message: 'Invalid amount format'
       }, 200, corsHeaders)
     }
 
-    // Initialize Paystack payment
     const paystackResponse = await fetch(
       'https://api.paystack.co/transaction/initialize',
       {
@@ -49,11 +47,11 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           email,
-          amount: Math.round(amount * 100), // Convert to kobo
+          amount: Math.round(numericAmount * 100),
           currency: 'NGN',
           metadata: {
-            customer_name: name || 'Customer',
-            service_fee: amount * 0.1 // 10% fee
+            customer_name: name || email.split('@')[0],
+            service_fee: numericAmount * 0.1
           },
           callback_url: Deno.env.get('PAYSTACK_CALLBACK_URL') || ''
         })
@@ -65,29 +63,25 @@ serve(async (req) => {
     if (!paystackResponse.ok) {
       return jsonResponse({
         status: 'failed',
-        message: paystackData.message || 'Payment initialization failed',
-        code: paystackData.status
+        message: paystackData.message || 'Payment initialization failed'
       }, 200, corsHeaders)
     }
 
-    // Successful response
     return jsonResponse({
       status: 'success',
       authorization_url: paystackData.data.authorization_url,
-      access_code: paystackData.data.access_code,
       reference: paystackData.data.reference
     }, 200, corsHeaders)
 
   } catch (err) {
-    console.error('Processing error:', err)
+    console.error('Error:', err)
     return jsonResponse({
       status: 'error',
-      message: 'Payment processing failed'
+      message: 'Internal server error'
     }, 200, corsHeaders)
   }
 })
 
-// Helper function for JSON responses
 function jsonResponse(data: any, status: number, headers: Record<string, string>) {
   return new Response(JSON.stringify(data), {
     status,
