@@ -1,4 +1,3 @@
-// app/(app)/fund.tsx
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,29 +12,21 @@ export default function FundScreen() {
   const [error, setError] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
-  const [userPhone, setUserPhone] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        
         if (user) {
           setUserEmail(user.email || '');
-          
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, phone')
-            .eq('id', user.id)
-            .single();
-          
-          if (profile) {
-            setUserName(profile.full_name);
-            setUserPhone(profile.phone);
-          }
+          setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'User');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
+        Alert.alert('Error', 'Failed to load user data');
       }
     };
     
@@ -43,41 +34,57 @@ export default function FundScreen() {
   }, []);
 
   const handleFundWallet = async () => {
-    const parsedAmount = parseFloat(amount);
-    if (!amount || isNaN(parsedAmount)) {
-      setError('Please enter a valid amount');
-      return;
-    }
-    if (parsedAmount < 500) {
-      setError('Minimum funding amount is ₦500');
-      return;
-    }
-    
-    setIsProcessing(true);
-    setError('');
-
     try {
-      const { data, error } = await supabase.functions.invoke('initiate-payment', {
+      const parsedAmount = parseFloat(amount);
+      
+      // Validation
+      if (!amount || isNaN(parsedAmount)) {
+        setError('Please enter a valid amount');
+        return;
+      }
+      if (parsedAmount < 500) {
+        setError('Minimum funding amount is ₦500');
+        return;
+      }
+      
+      setIsProcessing(true);
+      setError('');
+
+      // Initiate payment with only available user data
+      const { data, error: paymentError } = await supabase.functions.invoke('initiate-payment', {
         body: {
           amount: parsedAmount,
           email: userEmail,
-          name: userName,
-          phone: userPhone
+          name: userName
+          // Removed phone since it's not in your schema
         }
       });
 
-      if (error) throw error;
+      if (paymentError) {
+        console.error('Payment initiation error:', paymentError);
+        throw new Error(paymentError.message || 'Failed to initiate payment');
+      }
 
+      if (!data?.authorization_url) {
+        throw new Error('No payment URL received');
+      }
+
+      // Navigate to payment webview
       router.push({
         pathname: '/payment-webview',
         params: {
           paymentUrl: data.authorization_url,
-          callbackUrl: 'edgesnetwork://payment-callback'
+          callbackUrl: 'edgesnetwork://payment-callback',
+          amount: parsedAmount.toString()
         }
       });
+
     } catch (err) {
       console.error('Payment error:', err);
-      Alert.alert('Payment Error', 'Failed to initiate payment. Please try again.');
+      Alert.alert(
+        'Payment Error', 
+        err.message || 'Failed to initiate payment. Please try again.'
+      );
     } finally {
       setIsProcessing(false);
     }
