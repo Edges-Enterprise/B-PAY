@@ -1,130 +1,93 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 serve(async (req) => {
   try {
-    const { reference } = await req.json();
+    const { reference } = await req.json()
     
-    if (!reference) {
-      return new Response(
-        JSON.stringify({ error: 'Reference is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Verify with Paystack
     const paystackResponse = await fetch(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
-        method: 'GET',
         headers: {
           'Authorization': `Bearer ${Deno.env.get('PAYSTACK_SECRET_KEY')}`
         }
       }
-    );
+    )
 
-    const paystackData = await paystackResponse.json();
+    const paystackData = await paystackResponse.json()
     
-    if (!paystackResponse.ok) {
-      return new Response(
-        JSON.stringify({
-          status: 'failed',
-          message: paystackData.message || 'Payment verification failed'
-        }),
-        { status: paystackResponse.status, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     if (paystackData.data.status !== 'success') {
       return new Response(
-        JSON.stringify({
-          status: 'failed',
-          message: 'Payment not successful'
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+        JSON.stringify({ status: 'failed', message: 'Payment not successful' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
-    const amount = paystackData.data.amount / 100; // Convert back to Naira
-    const creditedAmount = amount * 0.9; // Deduct 10% fee
+    const amount = paystackData.data.amount / 100
+    const creditedAmount = amount * 0.9 // Deduct 10% fee
     
-    // Update user balance in database
+    // Update user balance
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! }
-        }
-      }
-    );
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
 
-    // Get user email from Paystack response
-    const userEmail = paystackData.data.customer.email;
-    
-    // Get user ID from Supabase
-    const { data: user } = await supabaseClient
-      .from('profiles')
-      .select('id')
-      .eq('email', userEmail)
-      .single();
+    // Get user from auth table using email
+    const { data: { users } } = await supabaseClient.auth.admin.listUsers({
+      filter: `email = '${paystackData.data.customer.email}'`
+    })
 
-    if (!user) {
+    if (!users?.length) {
       return new Response(
-        JSON.stringify({
-          status: 'failed',
-          message: 'User not found'
-        }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
-      );
+        JSON.stringify({ status: 'failed', message: 'User not found' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Update balance
-    const { data: currentBalance } = await supabaseClient
-      .from('wallets')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single();
+    const userId = users[0].id
 
-    const newBalance = (currentBalance?.balance || 0) + creditedAmount;
-    
-    await supabaseClient
+    // Update wallet balance
+    const { error: walletError } = await supabaseClient
       .from('wallets')
       .upsert({
-        user_id: user.id,
-        balance: newBalance
-      });
+        user_id: userId,
+        balance: creditedAmount
+      }, {
+        onConflict: 'user_id'
+      })
+
+    if (walletError) throw walletError
 
     // Record transaction
-    await supabaseClient
+    const { error: txError } = await supabaseClient
       .from('transactions')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         type: 'deposit',
         amount: creditedAmount,
-        fee: amount * 0.1, // 10% fee
+        fee: amount * 0.1,
         reference,
         status: 'completed',
         method: 'Paystack'
-      });
+      })
+
+    if (txError) throw txError
 
     return new Response(
       JSON.stringify({
         status: 'success',
         amount: creditedAmount,
-        message: 'Payment verified and wallet credited'
+        message: 'Wallet credited successfully'
       }),
       { headers: { 'Content-Type': 'application/json' } }
-    );
+    )
 
   } catch (err) {
-    console.error('Verification error:', err);
+    console.error('Verification error:', err)
     return new Response(
-      JSON.stringify({
-        status: 'error',
-        message: 'Internal server error'
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+      JSON.stringify({ status: 'error', message: 'Verification failed' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
   }
-});
+})

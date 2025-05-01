@@ -56,8 +56,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "3de0f8e6-20f6-4c16-b2ee-636e4ef84b8f"
+        "projectId": "c3303360-7e01-48dd-9c1d-a9dff8b12e97"
       }
-    }
+    },
+    "owner": "phoenix-boss"
   }
 }
