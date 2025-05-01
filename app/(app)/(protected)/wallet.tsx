@@ -123,7 +123,7 @@ export default function WalletScreen() {
           style={styles.fundButtonContainer}
         >
           <Pressable
-            onPress={() => router.push('/(app)/(protected)/fund')}
+            onPress={() => router.push('/(app)/fund')} // Changed to route to funds.tsx
             style={styles.fundButton}
           >
             <Ionicons name="add-circle-outline" size={20} color="white" />

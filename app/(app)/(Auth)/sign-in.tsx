@@ -1,17 +1,24 @@
+// @/app/(auth)/sign-in.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, Switch, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from "expo-router"; 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { supabase } from "@/config/supabase";
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { signIn, user } = useAuth();
 
-  // Load saved credentials if Remember Me was on
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)');
+    }
+  }, [user]);
+
   useEffect(() => {
     const loadSavedCredentials = async () => {
       try {
@@ -30,45 +37,35 @@ export default function SignInScreen() {
     loadSavedCredentials();
   }, []);
 
-  const handleSignIn = async (inputEmail?: string, inputPassword?: string, fromAutoLogin = false) => {
-    try {
-      const userEmail = inputEmail || email;
-      const userPassword = inputPassword || password;
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: userPassword,
-      });
+    setLoading(true);
+    try {
+      const { user, error } = await signIn(email, password);
 
       if (error) {
-        // Check if the error is "Email not confirmed"
         if (error.message.includes('Email not confirmed')) {
-          console.warn('Email not confirmed, but proceeding to login...');
-          // ⚡ continue to login manually if session exists
-          if (data?.session) {
-            router.push('/(tabs)');
-            return;
-          }
-        }
-
-        if (!fromAutoLogin) {
-          throw error;
-        } else {
-          console.error('Auto-login error:', error.message);
+          Alert.alert('Email Not Verified', 'Please check your email for verification instructions.');
           return;
         }
+        throw error;
       }
 
       if (rememberMe) {
-        await AsyncStorage.setItem('userCredentials', JSON.stringify({ email: userEmail, password: userPassword }));
+        await AsyncStorage.setItem('userCredentials', JSON.stringify({ email, password }));
       } else {
         await AsyncStorage.removeItem('userCredentials');
       }
 
-      router.push('/(tabs)');
+      router.replace('/(app)/(protected)');
     } catch (error) {
-      console.error('Sign-in error:', error);
       Alert.alert('Login Error', error.message || 'An error occurred during login.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,6 +107,7 @@ export default function SignInScreen() {
               autoCapitalize="none"
               value={password}
               onChangeText={setPassword}
+              onSubmitEditing={handleSignIn}
             />
           </View>
 
@@ -123,13 +121,19 @@ export default function SignInScreen() {
             <Text style={styles.rememberMeText}>Remember me</Text>
           </View>
 
-          <TouchableOpacity style={styles.signInButton} onPress={() => handleSignIn()}>
-            <Text style={styles.signInButtonText}>Sign In</Text>
+          <TouchableOpacity 
+            style={styles.signInButton} 
+            onPress={handleSignIn}
+            disabled={loading}
+          >
+            <Text style={styles.signInButtonText}>
+              {loading ? 'Signing In...' : 'Sign In'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(Auth)/sign-up')}>
+            <TouchableOpacity onPress={() => router.push('/(app)/(Auth)/sign-up')}>
               <Text style={styles.signupLink}>Sign up</Text>
             </TouchableOpacity>
           </View>
@@ -138,6 +142,7 @@ export default function SignInScreen() {
     </View>
   );
 }
+
 
 // --- STYLES ---
 const styles = StyleSheet.create({
