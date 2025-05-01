@@ -49,36 +49,48 @@ export default function FundScreen() {
       
       setIsProcessing(true);
       setError('');
-
-      // Initiate payment with only available user data
-      const { data, error: paymentError } = await supabase.functions.invoke('initiate-payment', {
-        body: {
-          amount: parsedAmount,
-          email: userEmail,
-          name: userName
-          // Removed phone since it's not in your schema
+  
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Please sign in to continue');
+      }
+  
+      // Initiate payment with auth header
+      const { data, error: paymentError } = await supabase.functions.invoke(
+        'initiate-payment',
+        {
+          body: {
+            amount: parsedAmount,
+            email: userEmail,
+            name: userName
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         }
-      });
-
+      );
+  
       if (paymentError) {
         console.error('Payment initiation error:', paymentError);
         throw new Error(paymentError.message || 'Failed to initiate payment');
       }
-
+  
       if (!data?.authorization_url) {
         throw new Error('No payment URL received');
       }
-
+  
       // Navigate to payment webview
       router.push({
         pathname: '/payment-webview',
         params: {
           paymentUrl: data.authorization_url,
           callbackUrl: 'edgesnetwork://payment-callback',
-          amount: parsedAmount.toString()
+          amount: parsedAmount.toString(),
+          reference: data.reference
         }
       });
-
+  
     } catch (err) {
       console.error('Payment error:', err);
       Alert.alert(
@@ -90,6 +102,7 @@ export default function FundScreen() {
     }
   };
 
+  
   const presetAmounts: number[] = [500, 1000, 5000, 10000];
 
   return (
