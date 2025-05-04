@@ -1,10 +1,10 @@
 import { View, Text } from 'react-native'
 import React from 'react'
 
-export default function PaymentView() {
+export default function EULA() {
   return (
     <View>
-      <Text>PaymentView</Text>
+      <Text>EULA</Text>
     </View>
   )
 }

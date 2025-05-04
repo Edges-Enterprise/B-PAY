@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Pressable, StyleSheet, StatusBar } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/providers/AuthProvider';
 
 const actions = [
   { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB' },
@@ -31,6 +32,10 @@ const initialQuickActions = actions.filter(action =>
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+
+  // Use the user's username if available, otherwise fall back to a generic greeting
+  const welcomeMessage = user?.username ? `Welcome back, ${user.username} 👋` : 'Welcome back 👋';
 
   return (
     <View style={styles.container}>
@@ -38,7 +43,7 @@ export default function HomeScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       {/* Welcome Text */}
-      <Text style={styles.welcomeTitle}>Welcome back 👋</Text>
+      <Text style={styles.welcomeTitle}>{welcomeMessage}</Text>
       <Text style={styles.welcomeSubtitle}>Your business dashboard is here 🔥</Text>
 
       {/* Neon Stats Cards */}
@@ -191,7 +196,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingTop: 12,
-    height: 300, // 👈 Fixed height for the card (scroll inside it)
+    height: 300, // Fixed height for the card (scroll inside it)
     marginBottom: 24,
   },
   quickActionsScroll: {

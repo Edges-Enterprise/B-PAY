@@ -1,17 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Image, 
-  Alert, 
-  Switch, 
-  ScrollView, 
-  StatusBar,
-  ActivityIndicator
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, Switch, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from "expo-router"; 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from '@/providers/AuthProvider';
@@ -22,7 +10,10 @@ export default function SignInScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { signIn, user, profile } = useAuth();
+  const { signIn, user } = useAuth();
+
+  // Check if both email and password are filled
+  const isSignInEnabled = email.trim() !== '' && password.trim() !== '';
 
   useEffect(() => {
     if (user) {
@@ -60,19 +51,7 @@ export default function SignInScreen() {
 
       if (error) {
         if (error.message.includes('Email not confirmed')) {
-          Alert.alert(
-            'Email Not Verified', 
-            'Please check your email for verification instructions.',
-            [
-              {
-                text: 'Resend Verification',
-                onPress: () => resendVerificationEmail(email)
-              },
-              {
-                text: 'OK'
-              }
-            ]
-          );
+          Alert.alert('Email Not Verified', 'Please check your email for verification instructions.');
           return;
         }
         throw error;
@@ -84,11 +63,6 @@ export default function SignInScreen() {
         await AsyncStorage.removeItem('userCredentials');
       }
 
-      // Verify profile exists
-      if (!profile) {
-        throw new Error('User profile not found');
-      }
-
       router.replace('/(app)/(protected)');
     } catch (error) {
       Alert.alert('Login Error', error.message || 'An error occurred during login.');
@@ -97,35 +71,33 @@ export default function SignInScreen() {
     }
   };
 
-  const resendVerificationEmail = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email,
-      });
-      
-      if (error) throw error;
-      Alert.alert('Success', 'Verification email resent. Please check your inbox.');
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to resend verification email');
-    }
-  };
-
   return (
-    <View style={{ flex: 1, backgroundColor: 'black' }}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+    <View style={{ flex: 1, backgroundColor: "black" }}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
       <ScrollView
-        style={{ flex: 1, paddingHorizontal: 20, paddingTop: StatusBar.currentHeight || 40 }}
-        contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingBottom: 40 }}
+        style={{
+          flex: 1,
+          paddingHorizontal: 20,
+          paddingTop: StatusBar.currentHeight || 40,
+        }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          paddingBottom: 40,
+        }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('@/assets/images/playstore.jpg')}
+              source={require("@/assets/images/playstore.jpg")}
               style={styles.logo}
             />
-            <Text style={styles.welcomeText}>Welcome Back</Text>
+            <Text style={styles.welcomeText}>Edges Network</Text>
           </View>
 
           <View style={styles.inputContainer}>
@@ -137,8 +109,6 @@ export default function SignInScreen() {
               autoCapitalize="none"
               value={email}
               onChangeText={setEmail}
-              autoComplete="email"
-              textContentType="emailAddress"
             />
           </View>
 
@@ -152,8 +122,6 @@ export default function SignInScreen() {
               value={password}
               onChangeText={setPassword}
               onSubmitEditing={handleSignIn}
-              autoComplete="password"
-              textContentType="password"
             />
           </View>
 
@@ -161,34 +129,27 @@ export default function SignInScreen() {
             <Switch
               value={rememberMe}
               onValueChange={setRememberMe}
-              thumbColor={rememberMe ? '#FE2C55' : '#666'}
-              trackColor={{ false: '#444', true: '#ff99aa' }}
+              thumbColor={rememberMe ? "#523721" : "#666"}
+              trackColor={{ false: "#444", true: "#D7A77F" }}
             />
             <Text style={styles.rememberMeText}>Remember me</Text>
           </View>
 
-          <TouchableOpacity 
-            style={[styles.signInButton, loading && { opacity: 0.7 }]} 
+          <TouchableOpacity
+            style={[styles.signInButton, isSignInEnabled ? styles.signInButtonActive : styles.signInButtonDisabled]}
             onPress={handleSignIn}
-            disabled={loading}
+            disabled={loading || !isSignInEnabled}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.signInButtonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.forgotPasswordButton}
-            onPress={() => router.push('/(app)/(Auth)/forgot-password')}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            <Text style={[styles.signInButtonText, isSignInEnabled ? styles.signInButtonTextActive : styles.signInButtonTextDisabled]}>
+              {loading ? "Signing In..." : "Sign In"}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(app)/(Auth)/sign-up')}>
+            <TouchableOpacity
+              onPress={() => router.push("/sign-up")}
+            >
               <Text style={styles.signupLink}>Sign up</Text>
             </TouchableOpacity>
           </View>
@@ -202,13 +163,13 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   logoContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 30,
   },
   logo: {
@@ -218,59 +179,72 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   welcomeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   inputContainer: {
-    width: '100%',
-    backgroundColor: '#333',
+    width: "100%",
+    backgroundColor: "#333",
     borderRadius: 8,
     marginBottom: 20,
   },
   input: {
     height: 50,
     paddingHorizontal: 10,
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
   },
   rememberMeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
     marginBottom: 20,
   },
   rememberMeText: {
     marginLeft: 10,
-    color: '#aaa',
+    color: "#aaa",
     fontSize: 14,
   },
   signInButton: {
-    width: '100%',
+    width: "100%",
     height: 50,
-    backgroundColor: '#FE2C55',
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
+  signInButtonDisabled: {
+    backgroundColor: "#666",
+    borderWidth: 0,
+  },
+  signInButtonActive: {
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: "#D7A77F",
+  },
   signInButtonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
+  },
+  signInButtonTextDisabled: {
+    color: "#aaa",
+  },
+  signInButtonTextActive: {
+    color: "#fff",
   },
   signupContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 30,
   },
   signupText: {
-    color: '#aaa',
+    color: "#aaa",
     fontSize: 14,
   },
   signupLink: {
-    color: '#FE2C55',
+    color: "#D7A77F",
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });
