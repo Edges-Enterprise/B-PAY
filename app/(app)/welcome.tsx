@@ -322,13 +322,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import Animated, {
-	SlideInRight,
-	SlideOutLeft,
 	useSharedValue,
 	useAnimatedStyle,
 	withRepeat,
 	withSequence,
 	withTiming,
+	SlideInRight,
+	SlideOutLeft,
 } from "react-native-reanimated";
 import { TapGestureHandler, State } from "react-native-gesture-handler";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -356,6 +356,7 @@ export default function WelcomeScreen() {
 	const [showStatusBar, setShowStatusBar] = useState(false);
 	const [textIndex, setTextIndex] = useState(0);
 	const [typewriterText, setTypewriterText] = useState("");
+	const [navigationError, setNavigationError] = useState(null);
 
 	const fullWelcomeText = "Welcome";
 	const scale = useSharedValue(1);
@@ -379,34 +380,25 @@ export default function WelcomeScreen() {
 	// Pulse animations
 	useEffect(() => {
 		scale.value = withRepeat(
-			withSequence(
-				withTiming(1.05, { duration: 1000 }),
-				withTiming(1, { duration: 1000 })
-			),
+			withSequence(withTiming(1.05, { duration: 1000 }), withTiming(1, { duration: 1000 })),
 			-1,
 			true
 		);
 
 		buttonScale.value = withRepeat(
-			withSequence(
-				withTiming(1.01, { duration: 2000 }),
-				withTiming(1, { duration: 2000 })
-			),
+			withSequence(withTiming(1.01, { duration: 2000 }), withTiming(1, { duration: 2000 })),
 			-1,
 			true
 		);
 
 		logoScale.value = withRepeat(
-			withSequence(
-				withTiming(1.03, { duration: 1500 }),
-				withTiming(1, { duration: 1500 })
-			),
+			withSequence(withTiming(1.03, { duration: 1500 }), withTiming(1, { duration: 1500 })),
 			-1,
 			true
 		);
 	}, []);
 
-	// Rotating text effect
+	// Rotating text
 	useEffect(() => {
 		const interval = setInterval(() => {
 			setTextIndex((prev) => (prev + 1) % rotatingTexts.length);
@@ -438,6 +430,7 @@ export default function WelcomeScreen() {
 			router.push(route);
 		} catch (error) {
 			console.error("Navigation error:", error);
+			setNavigationError("Failed to navigate. Please try again.");
 		}
 	};
 
@@ -486,13 +479,10 @@ export default function WelcomeScreen() {
 						</View>
 
 						{showButton && (
-							<Animated.View
-								entering={SlideInRight.duration(1000)}
-								style={[styles.buttonWrapper, buttonPulseStyle]}
-							>
+							<View style={[styles.buttonWrapper]}>
 								<Pressable
-									onPress={() => handleNavigation("/(Auth)/sign-up")}
-									style={styles.button}
+									onPress={() => handleNavigation("/sign-up")}
+									style={[styles.button]}
 								>
 									<Text style={[styles.buttonText3D, styles.signUpText]}>
 										Sign Up
@@ -500,14 +490,18 @@ export default function WelcomeScreen() {
 								</Pressable>
 
 								<Pressable
-									onPress={() => handleNavigation("/(Auth)/sign-in")}
+									onPress={() => handleNavigation("/sign-in")}
 									style={[styles.button, styles.secondaryButton]}
 								>
 									<Text style={[styles.buttonText3D, styles.signInText]}>
 										Sign In
 									</Text>
 								</Pressable>
-							</Animated.View>
+							</View>
+						)}
+
+						{navigationError && (
+							<Text style={styles.errorText}>{navigationError}</Text>
 						)}
 					</View>
 				</ImageBackground>
@@ -570,6 +564,7 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		borderWidth: 2,
 		borderColor: "#D7A77F",
+		zIndex: 10,
 	},
 	secondaryButton: {
 		backgroundColor: "transparent",
@@ -588,5 +583,11 @@ const styles = StyleSheet.create({
 	},
 	signInText: {
 		color: "#ffffff",
+	},
+	errorText: {
+		color: "#EF4444",
+		fontSize: 14,
+		textAlign: "center",
+		marginTop: 10,
 	},
 });
