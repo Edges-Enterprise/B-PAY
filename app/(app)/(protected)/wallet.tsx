@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet, StatusBar, Platform, SafeAreaView, S
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
+import { colors } from '@/constants/colors';
+import { useColorScheme } from '@/lib/useColorScheme';
 
 // Define types
 interface Transaction {
@@ -22,12 +24,13 @@ interface Recommendation {
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
   const [showBalance, setShowBalance] = useState<boolean>(false);
   const [showTransactions, setShowTransactions] = useState<boolean>(false);
   const [currentRecommendations, setCurrentRecommendations] = useState<Recommendation[]>([]);
 
   const balance: number = 12300;
-  const hasPriorDataPurchase: boolean = true; // Simulate prior data purchase
+  const hasPriorDataPurchase: boolean = true;
 
   const transactions: Transaction[] = [
     { type: 'Data Purchase', amount: -300, network: 'MTN', date: 'Apr 18, 2025' },
@@ -91,17 +94,15 @@ export default function WalletScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colorScheme === 'dark' ? colors.dark.background : colors.light.background }]}>
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
       <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
-        {/* Title */}
-        <Text style={styles.title}>Wallet 💼</Text>
-        <Text style={styles.subtitle}>Manage your balance and transactions</Text>
+        <Text style={[styles.title, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>Wallet 💼</Text>
+        <Text style={[styles.subtitle, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>Manage your balance and transactions</Text>
 
-        {/* Balance Card */}
-        <View style={styles.balanceCard}>
+        <View style={[styles.balanceCard, { backgroundColor: colorScheme === 'dark' ? '#1e40af' : '#3b82f6' }]}>
           <View style={styles.balanceHeader}>
-            <Text style={styles.balanceTextLabel}>Current Balance</Text>
+            <Text style={[styles.balanceTextLabel, { color: 'rgba(255,255,255,0.7)' }]}>Current Balance</Text>
             <Pressable onPress={() => setShowBalance(!showBalance)}>
               <Ionicons
                 name={showBalance ? 'eye-outline' : 'eye-off-outline'}
@@ -110,12 +111,11 @@ export default function WalletScreen() {
               />
             </Pressable>
           </View>
-          <Text style={styles.balanceAmount}>
+          <Text style={[styles.balanceAmount, { color: 'white' }]}>
             {showBalance ? formattedBalance : hiddenBalance}
           </Text>
         </View>
 
-        {/* Fund Wallet Button */}
         <MotiView
           from={{ scale: 1 }}
           animate={{ scale: [1, 1.05, 1] }}
@@ -123,81 +123,54 @@ export default function WalletScreen() {
           style={styles.fundButtonContainer}
         >
           <Pressable
-            onPress={() => router.push('/(app)/fund')} // Changed to route to funds.tsx
-            style={styles.fundButton}
+            onPress={() => router.push('/(app)/fund')}
+            style={[styles.fundButton, { backgroundColor: colorScheme === 'dark' ? '#1d4ed8' : '#2563eb' }]}
           >
             <Ionicons name="add-circle-outline" size={20} color="white" />
-            <Text style={styles.fundButtonText}>Fund Wallet</Text>
+            <Text style={[styles.fundButtonText, { color: 'white' }]}>Fund Wallet</Text>
           </Pressable>
         </MotiView>
 
-        {/* Transactions Toggle */}
         <Pressable
           onPress={() => setShowTransactions(!showTransactions)}
           style={styles.transactionToggle}
         >
-          <Text style={styles.transactionTitle}>🧾 Recent Transactions</Text>
+          <Text style={[styles.transactionTitle, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>🧾 Recent Transactions</Text>
           <Ionicons
             name={showTransactions ? 'chevron-up-outline' : 'chevron-down-outline'}
             size={22}
-            color="white"
+            color={colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground}
           />
         </Pressable>
 
-        {/* Transactions List */}
         {showTransactions && (
           <View style={styles.transactionList}>
             {transactions.map((tx, index) => (
-              <View key={index} style={styles.transactionItem}>
+              <View key={index} style={[styles.transactionItem, { backgroundColor: colorScheme === 'dark' ? '#171717' : '#f5f5f5', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
                 <View>
-                  <Text style={styles.transactionType}>{tx.type}</Text>
-                  <Text style={styles.transactionDetails}>
-                    {tx.network || tx.method || tx.service} • {tx.date}
-                  </Text>
+                  <Text style={[styles.transactionType, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>{tx.type}</Text>
+                  <Text style={[styles.transactionDetails, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>{tx.network || tx.method || tx.service} • {tx.date}</Text>
                 </View>
-                <Text
-                  style={[
-                    styles.transactionAmount,
-                    { color: tx.amount < 0 ? '#f87171' : '#34d399' },
-                  ]}
-                >
-                  {tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount)}
-                </Text>
+                <Text style={[styles.transactionAmount, { color: tx.amount < 0 ? '#f87171' : '#34d399' }]}>{tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount)}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {/* Recommended Purchases */}
         {balance > 0 && !showTransactions && (
           <View style={styles.recommendationsSection}>
-            <Text style={styles.recommendationsTitle}>💡 Recommended Purchases</Text>
+            <Text style={[styles.recommendationsTitle, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>💡 Recommended Purchases</Text>
             <View style={styles.recommendationsList}>
               {currentRecommendations.map((rec, index) => (
                 <MotiView
                   key={`${rec.id}-${index}`}
-                  from={{
-                    translateX: index % 2 === 0 ? -100 : 100,
-                    opacity: 0,
-                  }}
-                  animate={{
-                    translateX: 0,
-                    opacity: 1,
-                  }}
-                  transition={{
-                    type: 'timing',
-                    duration: 800,
-                    delay: index * 500,
-                  }}
-                  style={[
-                    styles.recommendationContainer,
-                    index % 2 === 0
-                      ? { alignSelf: 'flex-start', backgroundColor: '#1e3a8a' }
-                      : { alignSelf: 'flex-end', backgroundColor: '#6d28d9' },
-                  ]}
+                  from={{ translateX: index % 2 === 0 ? -100 : 100, opacity: 0 }}
+                  animate={{ translateX: 0, opacity: 1 }}
+                  transition={{ type: 'timing', duration: 800, delay: index * 500 }}
+                  style={[styles.recommendationContainer, index % 2 === 0 ? { alignSelf: 'flex-start', backgroundColor: colorScheme === 'dark' ? '#1e3a8a' : '#3b82f6' } : { alignSelf: 'flex-end', backgroundColor: colorScheme === 'dark' ? '#6d28d9' : '#8b5cf6' }]}
                 >
                   <Pressable onPress={() => handlePurchase(rec)}>
-                    <Text style={styles.recommendationText}>{rec.text}</Text>
+                    <Text style={[styles.recommendationText, { color: 'white' }]}>{rec.text}</Text>
                   </Pressable>
                 </MotiView>
               ))}
@@ -212,26 +185,22 @@ export default function WalletScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   inner: {
     paddingHorizontal: 16,
-    paddingBottom: 120, // Increased bottom padding to avoid overlap
+    paddingBottom: 120,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#9ca3af',
     marginBottom: 24,
   },
   balanceCard: {
-    backgroundColor: '#1e40af',
     padding: 24,
     borderRadius: 20,
     marginBottom: 24,
@@ -245,11 +214,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceTextLabel: {
-    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
   },
   balanceAmount: {
-    color: 'white',
     fontSize: 32,
     fontWeight: 'bold',
     marginTop: 8,
@@ -258,7 +225,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   fundButton: {
-    backgroundColor: '#1d4ed8',
     paddingVertical: 16,
     borderRadius: 14,
     flexDirection: 'row',
@@ -266,7 +232,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fundButtonText: {
-    color: 'white',
     marginLeft: 8,
     fontWeight: '600',
   },
@@ -279,29 +244,24 @@ const styles = StyleSheet.create({
   transactionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: 'white',
   },
   transactionList: {
     gap: 16,
     marginBottom: 24,
   },
   transactionItem: {
-    backgroundColor: '#171717',
     padding: 16,
     borderRadius: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   transactionType: {
-    color: 'white',
     fontWeight: '500',
   },
   transactionDetails: {
     fontSize: 12,
-    color: '#9ca3af',
   },
   transactionAmount: {
     fontSize: 16,
@@ -313,7 +273,6 @@ const styles = StyleSheet.create({
   recommendationsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: 'white',
     marginBottom: 16,
   },
   recommendationsList: {
@@ -327,7 +286,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   recommendationText: {
-    color: 'white',
     fontSize: 14,
   },
 });

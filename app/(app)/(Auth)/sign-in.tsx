@@ -1,6 +1,17 @@
-// @/app/(auth)/sign-in.tsx
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, Switch, ScrollView, StatusBar } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Image, 
+  Alert, 
+  Switch, 
+  ScrollView, 
+  StatusBar,
+  ActivityIndicator
+} from 'react-native';
 import { useRouter } from "expo-router"; 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from '@/providers/AuthProvider';
@@ -11,11 +22,11 @@ export default function SignInScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { signIn, user } = useAuth();
+  const { signIn, user, profile } = useAuth();
 
   useEffect(() => {
     if (user) {
-      router.replace('/(tabs)');
+      router.replace('/(app)/(protected)');
     }
   }, [user]);
 
@@ -49,7 +60,19 @@ export default function SignInScreen() {
 
       if (error) {
         if (error.message.includes('Email not confirmed')) {
-          Alert.alert('Email Not Verified', 'Please check your email for verification instructions.');
+          Alert.alert(
+            'Email Not Verified', 
+            'Please check your email for verification instructions.',
+            [
+              {
+                text: 'Resend Verification',
+                onPress: () => resendVerificationEmail(email)
+              },
+              {
+                text: 'OK'
+              }
+            ]
+          );
           return;
         }
         throw error;
@@ -61,11 +84,30 @@ export default function SignInScreen() {
         await AsyncStorage.removeItem('userCredentials');
       }
 
+      // Verify profile exists
+      if (!profile) {
+        throw new Error('User profile not found');
+      }
+
       router.replace('/(app)/(protected)');
     } catch (error) {
       Alert.alert('Login Error', error.message || 'An error occurred during login.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resendVerificationEmail = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+      
+      if (error) throw error;
+      Alert.alert('Success', 'Verification email resent. Please check your inbox.');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to resend verification email');
     }
   };
 
@@ -83,7 +125,7 @@ export default function SignInScreen() {
               source={require('@/assets/images/playstore.jpg')}
               style={styles.logo}
             />
-            <Text style={styles.welcomeText}>Edges Network</Text>
+            <Text style={styles.welcomeText}>Welcome Back</Text>
           </View>
 
           <View style={styles.inputContainer}>
@@ -95,6 +137,8 @@ export default function SignInScreen() {
               autoCapitalize="none"
               value={email}
               onChangeText={setEmail}
+              autoComplete="email"
+              textContentType="emailAddress"
             />
           </View>
 
@@ -108,6 +152,8 @@ export default function SignInScreen() {
               value={password}
               onChangeText={setPassword}
               onSubmitEditing={handleSignIn}
+              autoComplete="password"
+              textContentType="password"
             />
           </View>
 
@@ -122,13 +168,22 @@ export default function SignInScreen() {
           </View>
 
           <TouchableOpacity 
-            style={styles.signInButton} 
+            style={[styles.signInButton, loading && { opacity: 0.7 }]} 
             onPress={handleSignIn}
             disabled={loading}
           >
-            <Text style={styles.signInButtonText}>
-              {loading ? 'Signing In...' : 'Sign In'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.forgotPasswordButton}
+            onPress={() => router.push('/(app)/(Auth)/forgot-password')}
+          >
+            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
           <View style={styles.signupContainer}>
@@ -142,7 +197,6 @@ export default function SignInScreen() {
     </View>
   );
 }
-
 
 // --- STYLES ---
 const styles = StyleSheet.create({
