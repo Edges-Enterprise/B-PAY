@@ -1,103 +1,155 @@
-import { View, Text, ScrollView, Pressable, StyleSheet, StatusBar } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet, StatusBar } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/providers/AuthProvider';
+import { useAuth } from '@/context/supabase-provider';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import PlanItemWithSwipe from '@/components/homescreen/PlanItemWithSwipe';
+import PurchaseModal from '@/components/homescreen/PurchaseModal';
+import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
+import CreatePinModal from '@/components/homescreen/CreatePinModal';
+import { supabase } from '@/config/supabase';
 
 const actions = [
-  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB' },
-  { title: 'Buy Data', icon: 'cellular-outline', color: '#22C55E' },
-  { title: 'Airtime to Cash', icon: 'cash-outline', color: '#F59E0B' },
-  { title: 'Swap Wallet', icon: 'swap-horizontal-outline', color: '#8B5CF6' },
-  { title: 'Pay Bills', icon: 'document-text-outline', color: '#EF4444' },
-  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308' },
-  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6' },
-  { title: 'Internet', icon: 'wifi-outline', color: '#06B6D4' },
-  { title: 'Education', icon: 'school-outline', color: '#F472B6' },
-  { title: 'Transportation', icon: 'bus-outline', color: '#10B981' },
-  { title: 'Insurance', icon: 'shield-checkmark-outline', color: '#F97316' },
-  { title: 'Savings', icon: 'wallet-outline', color: '#7C3AED' },
-  { title: 'Investments', icon: 'trending-up-outline', color: '#60A5FA' },
-  { title: 'Health', icon: 'heart-outline', color: '#EF4444' },
-  { title: 'Loan', icon: 'card-outline', color: '#14B8A6' },
-  { title: 'Send Money', icon: 'paper-plane-outline', color: '#4ADE80' },
-  { title: 'Receive Money', icon: 'download-outline', color: '#A78BFA' },
-  { title: 'Withdraw', icon: 'cash-outline', color: '#F43F5E' },
-  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B' },
-  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6' },
+  { title: 'Buy Data', icon: 'cellular-outline', color: '#22C55E', route: '/(app)/(protected)/buy' },
+  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '/(app)/(protected)/buy-airtime' },
+  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '/(app)/(protected)/electricity' },
+  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '/(app)/(protected)/cable-tv' },
+  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '/(app)/(protected)/customer-care' },
+  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '/(app)/(protected)/referral' },
 ];
-
-const initialQuickActions = actions.filter(action =>
-  ['Buy Airtime', 'Buy Data', 'Electricity', 'Cable TV', 'Customer Care', 'Referral'].includes(action.title)
-);
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
+  const welcomeMessage = user?.user_metadata?.username
+    ? `Welcome back, ${user.user_metadata.username} 👋`
+    : `Welcome back, Guest 👋`;
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [transactionPin, setTransactionPin] = useState('');
+  const [networkProvider, setNetworkProvider] = useState('');
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
+  const [transactionModalVisible, setTransactionModalVisible] = useState(false);
+  const [transactionStatus, setTransactionStatus] = useState('processing');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showTransactionPin, setShowTransactionPin] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
-  // Use the user's username if available, otherwise fall back to a generic greeting
-  const welcomeMessage = user?.username ? `Welcome back, ${user.username} 👋` : 'Welcome back 👋';
+  const handlePurchase = () => {
+    if (phoneNumber.length !== 11) {
+      alert('Please enter a valid 11-digit phone number');
+      return;
+    }
+    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
+      alert('Please enter a transaction PIN between 4 and 6 digits');
+      return;
+    }
+    setModalVisible(false);
+    setTransactionModalVisible(true);
+    setTransactionStatus('processing');
+    setTimeout(() => {
+      const isSuccess = Math.random() > 0.3;
+      setTransactionStatus(isSuccess ? 'success' : 'failed');
+    }, 2000);
+  };
+
+  const closeTransactionModal = () => {
+    setTransactionModalVisible(false);
+    setPhoneNumber('');
+    setTransactionPin('');
+    setSelectedPlan(null);
+    setNetworkProvider('');
+    setTransactionStatus('processing');
+  };
+
+  const closePurchaseModal = () => {
+    setModalVisible(false);
+    setPhoneNumber('');
+    setTransactionPin('');
+    setSelectedPlan(null);
+    setNetworkProvider('');
+  };
+
+  const closeCreatePinModal = () => {
+    setCreatePinModalVisible(false);
+    setNewPin('');
+    setConfirmPin('');
+  };
+
+  const handleCreatePin = async () => {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+      alert('PIN must be between 4 and 6 digits.');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      alert('PINs do not match.');
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          ...user.user_metadata,
+          transaction_pin_created: true,
+          transaction_pin: newPin,
+        },
+      });
+      if (error) throw error;
+
+      console.log('Transaction PIN set:', newPin);
+      setTransactionPin(newPin);
+      setCreatePinModalVisible(false);
+      setNewPin('');
+      setConfirmPin('');
+    } catch (error) {
+      console.error('Error updating user metadata:', error.message);
+      alert('Failed to save PIN. Please try again.');
+    }
+  };
+
+  const getProviderFromPhone = (phone) => {
+    const prefix = phone.slice(0, 4);
+    const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
+    const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
+    const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
+    const etisalat = ['0809', '0817', '0818', '0909', '0908'];
+    if (mtn.includes(prefix)) return 'MTN';
+    if (glo.includes(prefix)) return 'GLO';
+    if (airtel.includes(prefix)) return 'AIRTEL';
+    if (etisalat.includes(prefix)) return '9MOBILE';
+    return '';
+  };
+
+  useEffect(() => {
+    if (phoneNumber.length === 11) {
+      setNetworkProvider(getProviderFromPhone(phoneNumber));
+    } else {
+      setNetworkProvider('');
+    }
+  }, [phoneNumber]);
 
   return (
-    <View style={styles.container}>
-      {/* Transparent Status Bar */}
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-
-      {/* Welcome Text */}
-      <Text style={styles.welcomeTitle}>{welcomeMessage}</Text>
-      <Text style={styles.welcomeSubtitle}>Your business dashboard is here 🔥</Text>
-
-      {/* Neon Stats Cards */}
-      <View style={styles.statsRow}>
-        {[
-          { title: 'Wallet', value: '₦12,300', colors: ['#3B82F6', '#1E40AF'] },
-          { title: 'Sales', value: '₦54,000', colors: ['#EF4444', '#991B1B'] },
-          { title: 'Commission', value: '₦7,500', colors: ['#8B5CF6', '#6B21A8'] },
-        ].map((item, index) => (
-          <View
-            key={index}
-            style={[
-              styles.statCard,
-              { backgroundColor: item.colors[0] },
-            ]}
-          >
-            <Text style={styles.statTitle}>{item.title}</Text>
-            <Text style={styles.statValue}>{item.value}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Popular Plans */}
-      <Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
-      {['MTN 1.5GB – ₦300', 'Glo 2GB – ₦500', 'Airtel 1GB – ₦250'].map((plan, index) => (
-        <View
-          key={plan}
-          style={styles.planItem}
-        >
-          <Text style={styles.planText}>{plan}</Text>
-          <MaterialIcons name="arrow-forward-ios" size={16} color="gray" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <Text style={styles.welcomeTitle}>{welcomeMessage}</Text>
+        <Text style={styles.welcomeSubtitle}>Your business dashboard is here 🔥</Text>
+        <View style={styles.quickActionsHeader}>
+          <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
+          <Pressable onPress={() => router.push('/(app)/(protected)/all-actions')}>
+            <Text style={styles.moreButtonText}>More ... ></Text>
+          </Pressable>
         </View>
-      ))}
-
-      {/* Quick Actions Title Row */}
-      <View style={styles.quickActionsHeader}>
-        <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-        <Pressable onPress={() => router.push('/(app)/all-actions')}>
-          <Text style={styles.moreButtonText}>More ... ></Text>
-        </Pressable>
-      </View>
-
-      {/* Quick Actions Card */}
-      <View style={styles.quickActionsCard}>
-        <ScrollView
-          style={styles.quickActionsScroll}
-          contentContainerStyle={{ paddingVertical: 8 }}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.quickActionsCard}>
           <View style={styles.quickActionsGrid}>
-            {initialQuickActions.map((action, index) => (
+            {actions.map((action, index) => (
               <Pressable
                 key={index}
-                onPress={() => console.log(action.title)}
+                onPress={() => router.push(action.route)}
                 style={styles.quickActionCard}
               >
                 <Ionicons name={action.icon} size={24} color={action.color} />
@@ -107,10 +159,58 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </View>
-        </ScrollView>
+        </View>
+        <Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
+        {['MTN 1.5GB – ₦300', 'Glo 2GB – ₦500', 'Airtel 1GB – ₦250'].map((plan, index) => (
+          <PlanItemWithSwipe
+            key={plan}
+            plan={plan}
+            index={index}
+            setSelectedPlan={setSelectedPlan}
+            setModalVisible={setModalVisible}
+          />
+        ))}
       </View>
 
-    </View>
+      <PurchaseModal
+        visible={isModalVisible}
+        onClose={closePurchaseModal}
+        selectedPlan={selectedPlan}
+        phoneNumber={phoneNumber}
+        setPhoneNumber={setPhoneNumber}
+        transactionPin={transactionPin}
+        setTransactionPin={setTransactionPin}
+        networkProvider={networkProvider}
+        hasTransactionPin={hasTransactionPin}
+        showTransactionPin={showTransactionPin}
+        setShowTransactionPin={setShowTransactionPin}
+        onCreatePin={() => setCreatePinModalVisible(true)}
+        onContinue={handlePurchase}
+      />
+
+      <TransactionStatusModal
+        visible={transactionModalVisible}
+        onClose={closeTransactionModal}
+        transactionStatus={transactionStatus}
+        selectedPlan={selectedPlan}
+        phoneNumber={phoneNumber}
+        networkProvider={networkProvider}
+      />
+
+      <CreatePinModal
+        visible={createPinModalVisible}
+        onClose={closeCreatePinModal}
+        newPin={newPin}
+        setNewPin={setNewPin}
+        confirmPin={confirmPin}
+        setConfirmPin={setConfirmPin}
+        showNewPin={showNewPin}
+        setShowNewPin={setShowNewPin}
+        showConfirmPin={showConfirmPin}
+        setShowConfirmPin={setShowConfirmPin}
+        onSave={handleCreatePin}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -132,52 +232,10 @@ const styles = StyleSheet.create({
     color: 'gray',
     marginBottom: 24,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  statTitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginTop: 4,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: 'white',
-  },
-  planItem: {
-    backgroundColor: '#171717',
-    marginBottom: 12,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  planText: {
-    color: 'white',
-    fontWeight: '500',
   },
   quickActionsHeader: {
     marginTop: 24,
@@ -196,16 +254,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingTop: 12,
-    height: 300, // Fixed height for the card (scroll inside it)
     marginBottom: 24,
-  },
-  quickActionsScroll: {
-    flex: 1,
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    paddingVertical: 8,
   },
   quickActionCard: {
     width: '30%',

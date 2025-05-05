@@ -43,6 +43,7 @@ const sections = [
 			"Biometric Login",
 			"Two-Factor Authentication",
 			"Device Management",
+			"Change PIN",
 		],
 	},
 	{
@@ -63,6 +64,14 @@ export default function Settings() {
 	const [logoutVisible, setLogoutVisible] = useState(false);
 	const [sectionOrder, setSectionOrder] = useState(sections);
 	const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+
+	// Ensure sectionOrder is reset to sections on mount
+	useEffect(() => {
+		setSectionOrder(sections);
+	}, []);
+
+	// Debug log to verify sections data
+	console.log('Sections data:', sectionOrder);
 
 	// Animation values
 	const slideAnim = useSharedValue(width);

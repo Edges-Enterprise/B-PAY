@@ -10,6 +10,9 @@ import {
 	Text,
 	Animated,
 	Alert,
+	KeyboardAvoidingView,
+	Platform,
+	Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ScrollView } from "react-native-gesture-handler";
@@ -20,6 +23,7 @@ export default function SignUpScreen() {
 	const [username, setUsername] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
 
 	const router = useRouter();
@@ -50,28 +54,23 @@ export default function SignUpScreen() {
 		if (!isFormValid) {
 			Alert.alert(
 				"Invalid Input",
-				"Please ensure username is at least 3 characters, email is valid, and password is at least 6 characters.",
+				"Please ensure username is at least 3 characters, email is valid, and password is at least 6 characters."
 			);
 			return;
 		}
 
 		setLoading(true);
 		try {
-			console.log("SignUp started with:", { username, email });
+			console.log("SignUp started with:", { username, email, rememberMe });
 
-			// Call the signUp function from the Supabase provider
 			await signUp(username, email, password);
 
-			// Clear form fields after successful sign-up
 			setUsername("");
 			setEmail("");
 			setPassword("");
-
-			// The Supabase provider handles navigation and success alert
+			setRememberMe(false);
 		} catch (error) {
-			// The Supabase provider already shows an error alert
 			console.error("SignUp error:", error);
-			// Only show additional alert if needed for specific cases
 			if (error.message.includes("User already registered")) {
 				Alert.alert("Sign Up Error", "This email is already registered.");
 			}
@@ -81,7 +80,10 @@ export default function SignUpScreen() {
 	};
 
 	return (
-		<View style={{ flex: 1, backgroundColor: "#000" }}>
+		<KeyboardAvoidingView
+			style={{ flex: 1, backgroundColor: "#000" }}
+			behavior={Platform.OS === "ios" ? "padding" : undefined}
+		>
 			<StatusBar
 				translucent
 				backgroundColor="transparent"
@@ -144,6 +146,16 @@ export default function SignUpScreen() {
 						/>
 					</View>
 
+					<View style={styles.rememberMeContainer}>
+						<Switch
+							value={rememberMe}
+							onValueChange={setRememberMe}
+							trackColor={{ false: "#444", true: "#D4AF37" }}
+							thumbColor={rememberMe ? "#D4AF37" : "#ccc"}
+						/>
+						<Text style={styles.rememberMeText}>Remember Me</Text>
+					</View>
+
 					<TouchableOpacity
 						style={[
 							styles.signUpButton,
@@ -174,7 +186,7 @@ export default function SignUpScreen() {
 					</View>
 				</Animated.View>
 			</ScrollView>
-		</View>
+		</KeyboardAvoidingView>
 	);
 }
 
@@ -211,6 +223,17 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 10,
 		fontSize: 16,
 		color: "#fff",
+	},
+	rememberMeContainer: {
+		width: "100%",
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 10,
+		marginBottom: 20,
+	},
+	rememberMeText: {
+		color: "#aaa",
+		fontSize: 16,
 	},
 	signUpButton: {
 		width: "100%",
