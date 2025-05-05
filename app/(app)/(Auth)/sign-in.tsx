@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, Switch, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from "expo-router"; 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAuth } from '@/providers/AuthProvider';
+import { useAuth } from '@/context/supabase-provider';
+
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -10,7 +11,7 @@ export default function SignInScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { signIn, user } = useAuth();
+  const { user, signInWithPassword } = useAuth();
 
   // Check if both email and password are filled
   const isSignInEnabled = email.trim() !== '' && password.trim() !== '';
@@ -47,7 +48,7 @@ export default function SignInScreen() {
 
     setLoading(true);
     try {
-      const { user, error } = await signIn(email, password);
+      const { user, error } = await signInWithPassword(email, password);
 
       if (error) {
         if (error.message.includes('Email not confirmed')) {

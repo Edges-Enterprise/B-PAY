@@ -13,7 +13,7 @@ type SupabaseContextProps = {
 	user: User | null;
 	session: Session | null;
 	initialized?: boolean;
-	signUp: (email: string, password: string, username: string) => Promise<void>;
+	signUp: (username: string, email: string, password: string) => Promise<any>;
 	signInWithPassword: (email: string, password: string) => Promise<void>;
 	signOut: () => Promise<void>;
 	deleteOwnAccount: () => Promise<void>;
@@ -57,60 +57,158 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	});
 
 	const signUp = async (username: string, email: string, password: string) => {
-		const { data, error } = await supabase.auth.signUp({
-			email: email.trim(),
-			password,
-			options: {
-				data: {
-					username: username.trim(),
-				},
-			},
-		});
-		if (error) {
-			throw error;
-		}
+		try {
+			console.log("Signing up with:", { username, email });
 
-		if (data.user) {
-			const { error: insertError } = await supabase.from("users").insert([
-				{
-					id: data.user.id,
-					username: username.trim(),
-					email: email.trim(),
+			// Step 1: Create the authentication user
+			const { data, error } = await supabase.auth.signUp({
+				email: email.trim(),
+				password,
+				options: {
+					data: {
+						username: username.trim(),
+					},
 				},
-			]);
+			});
 
-			if (insertError) {
-				throw insertError;
-			} else {
-				Alert.alert("Success", "Account created successfully!");
+			if (error) {
+				console.error("Auth signUp error:", error);
+				throw error;
 			}
+
+			if (!data.user) {
+				console.error("No user returned from auth signUp");
+				throw new Error("Failed to create user account");
+			}
+
+			console.log("Auth user created:", data.user.id);
+
+			// Step 2: Check if a profile already exists for this user ID and email
+			const { data: existingProfile, error: fetchError } = await supabase
+				.from("profiles")
+				.select("id, email")
+				.eq("id", data.user.id)
+				.single();
+
+			if (fetchError && fetchError.code !== "PGRST116") {
+				// PGRST116 means "no rows found", which is expected if the profile doesn't exist
+				console.error("Error checking existing profile:", fetchError);
+				throw fetchError;
+			}
+
+			if (existingProfile) {
+				// If a profile exists, check if the email matches
+				if (existingProfile.email === email.trim()) {
+					// Email matches, proceed with sign-up using existing profile
+					console.log(
+						"Profile exists with matching email, proceeding with sign-up",
+					);
+				} else {
+					// Email differs, update the existing profile or handle conflict
+					const { error: updateError } = await supabase
+						.from("profiles")
+						.update({
+							username: username.trim(),
+							email: email.trim(),
+							created_at: new Date().toISOString(),
+						})
+						.eq("id", data.user.id);
+
+					if (updateError) {
+						console.error("Error updating existing profile:", updateError);
+						try {
+							await supabase.auth.admin.deleteUser(data.user.id);
+							console.log("Cleaned up auth user after failed profile update");
+						} catch (cleanupError) {
+							console.error("Failed to clean up auth user:", cleanupError);
+						}
+						throw updateError;
+					}
+					console.log("Updated existing profile with new email and username");
+				}
+			} else {
+				// Step 3: Create the user profile in the profiles table if no profile exists
+				const { error: insertError } = await supabase.from("profiles").insert([
+					{
+						id: data.user.id,
+						username: username.trim(),
+						email: email.trim(),
+						created_at: new Date().toISOString(),
+					},
+				]);
+
+				if (insertError) {
+					console.error("Database insert error:", insertError);
+
+					// If database insert fails, clean up the auth user
+					try {
+						await supabase.auth.admin.deleteUser(data.user.id);
+						console.log("Cleaned up auth user after failed profile creation");
+					} catch (cleanupError) {
+						console.error("Failed to clean up auth user:", cleanupError);
+					}
+
+					if (insertError.code === "23505") {
+						throw new Error(
+							"A profile with this user ID already exists. Please try signing in or use a different email.",
+						);
+					}
+
+					throw insertError;
+				}
+
+				console.log("User profile created in database");
+			}
+
+			// Set the user and session
+			setUser(data.user);
+			setSession(data.session);
+
+			Alert.alert("Success", "Account created successfully!");
+			return data;
+		} catch (error) {
+			console.error("SignUp process failed:", error);
+			Alert.alert("Sign Up Error", error.message || "Failed to create account");
+			throw error;
 		}
 	};
 
 	const signInWithPassword = async (email: string, password: string) => {
-		const { data, error } = await supabase.auth.signInWithPassword({
-			email,
-			password,
-		});
-		if (error) {
-			throw error;
-		}
+		try {
+			const { data, error } = await supabase.auth.signInWithPassword({
+				email,
+				password,
+			});
 
-		if (data.user) {
-			setUser(data.user);
-			setSession(data.session);
-			router.replace("/(app)/(protected)");
+			if (error) {
+				console.error("SignIn error:", error);
+				throw error;
+			}
+
+			if (data.user) {
+				setUser(data.user);
+				setSession(data.session);
+				router.replace("/(app)/(protected)");
+			}
+		} catch (error) {
+			Alert.alert("Sign In Error", error.message || "Failed to sign in");
+			throw error;
 		}
 	};
 
 	const signOut = async () => {
-		const { error } = await supabase.auth.signOut();
-		if (error) {
+		try {
+			const { error } = await supabase.auth.signOut();
+			if (error) {
+				throw error;
+			}
+			setUser(null);
+			setSession(null);
+			router.push("/(app)/(auth)/sign-in");
+		} catch (error) {
+			Alert.alert("Sign Out Error", error.message || "Failed to sign out");
 			throw error;
 		}
-		setUser(null);
-		setSession(null);
-		router.push("/(app)/(auth)/sign-in");
 	};
 
 	const deleteOwnAccount = async () => {
@@ -121,12 +219,12 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 		try {
 			const response = await fetch(
-				"https://masswgndvgtpdabpknsx.supabase.co/functions/v1/deleteaccount",
+				"https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/deleteaccount",
 				{
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
-						Authorization: `Bearer ${session?.access_token}`, // User authentication
+						Authorization: `Bearer ${session?.access_token}`,
 					},
 					body: JSON.stringify({ user_id: user.id }),
 				},
@@ -138,7 +236,6 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 				throw new Error(result.error || "Failed to delete account");
 			}
 
-			// Logout user locally
 			setUser(null);
 			setSession(null);
 
@@ -184,7 +281,6 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 		);
 
 		return () => {
-			// For Supabase v2, unsubscribe correctly
 			authListener.subscription?.unsubscribe();
 		};
 	}, []);
@@ -196,7 +292,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 		}
 		const fetchProfile = async () => {
 			const { data, error } = await supabase
-				.from("users")
+				.from("profiles")
 				.select("*")
 				.eq("id", user.id)
 				.single();
@@ -212,7 +308,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	return (
 		<SupabaseContext.Provider
 			value={{
-				auth: supabase.auth, // Added auth property
+				auth: supabase.auth,
 				user,
 				profile,
 				session,
