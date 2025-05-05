@@ -1,21 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   Pressable,
   ScrollView,
-  Alert,
   Image,
   Animated,
   PanResponder,
-  Modal,
-  TextInput,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 
+// Import modals
+import PurchaseModal from '@/components/homescreen/PurchaseModal';
+import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
+import CreatePinModal from '@/components/homescreen/CreatePinModal';
+
+// Define types
 interface DataBundle {
   id: number;
   data: string;
@@ -32,6 +36,7 @@ interface Provider {
   bundles: DataBundle[];
 }
 
+// Sample data
 const providers: Provider[] = [
   {
     id: 1,
@@ -54,12 +59,11 @@ const providers: Provider[] = [
         category: 'Daily',
         description: 'Basic browsing and messaging',
       },
-      // ... other bundles ...
     ],
   },
 ];
 
-const categories = [
+const categories: string[] = [
   'Daily',
   'Weekly',
   'Monthly',
@@ -71,47 +75,126 @@ const categories = [
   'Edge Network',
 ];
 
-export default function BuyDataScreen() {
+const BuyDataScreen: React.FC = () => {
   const router = useRouter();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [lastPurchasedNumber, setLastPurchasedNumber] = useState<string>('08012345678');
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
+  const [createPinModalVisible, setCreatePinModalVisible] = useState<boolean>(false);
   const [selectedBundle, setSelectedBundle] = useState<DataBundle | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [transactionPin, setTransactionPin] = useState<string>('');
+  const [networkProvider, setNetworkProvider] = useState<string>('');
+  const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
+  const [showTransactionPin, setShowTransactionPin] = useState<boolean>(false);
+  const [newPin, setNewPin] = useState<string>('');
+  const [confirmPin, setConfirmPin] = useState<string>('');
+  const [showNewPin, setShowNewPin] = useState<boolean>(false);
+  const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const balance: number = 12300;
+  const hasTransactionPin: boolean = true;
 
-  const balance: number = 12300; // From WalletScreen
-  const hasPriorDataPurchase: boolean = true; // Simulate prior purchase; replace with actual check
+  const getProviderFromPhone = (phone: string): string => {
+    const prefix = phone.slice(0, 4);
+    const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
+    const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
+    const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
+    const etisalat = ['0809', '0817', '0818', '0909', '0908'];
 
-  const handlePurchase = (bundle: DataBundle | null, useLastNumber: boolean = false) => {
-    if (!bundle || !selectedProvider) return;
-    const numberToUse = useLastNumber ? lastPurchasedNumber : phoneNumber;
-    if (!numberToUse) {
-      Alert.alert('Error', 'Please enter a phone number');
+    if (mtn.includes(prefix)) return 'MTN';
+    if (glo.includes(prefix)) return 'GLO';
+    if (airtel.includes(prefix)) return 'AIRTEL';
+    if (etisalat.includes(prefix)) return '9MOBILE';
+    return '';
+  };
+
+  useEffect(() => {
+    if (phoneNumber.length === 11) {
+      setNetworkProvider(getProviderFromPhone(phoneNumber));
+    } else {
+      setNetworkProvider('');
+    }
+  }, [phoneNumber]);
+
+  const handlePurchase = () => {
+    if (!selectedBundle || !selectedProvider) {
+      alert('No bundle or provider selected');
       return;
     }
-    if (balance < bundle.price) {
-      Alert.alert('Error', 'Insufficient balance');
+
+    if (phoneNumber.length !== 11) {
+      alert('Please enter a valid 11-digit phone number');
       return;
     }
-    if (!hasPriorDataPurchase && !password) {
-      Alert.alert('Error', 'Please enter a password');
+
+    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
+      alert('Please enter a transaction PIN between 4 and 6 digits');
       return;
     }
-    console.log(`Processing purchase: ${bundle.data} on ${selectedProvider.name} for ₦${bundle.price}`);
-    if (!useLastNumber) {
-      setLastPurchasedNumber(numberToUse);
+
+    if (balance < selectedBundle.price) {
+      alert('Insufficient balance');
+      return;
     }
-    router.push({
-      pathname: '/success',
-      params: { plan: `${bundle.data} on ${selectedProvider.name}`, amount: bundle.price.toString() },
-    });
+
+    setModalVisible(false);
+    setTransactionModalVisible(true);
+    setTransactionStatus('processing');
+
+    setTimeout(() => {
+      const isSuccess = Math.random() > 0.3;
+      setTransactionStatus(isSuccess ? 'success' : 'failed');
+      if (isSuccess) {
+        setLastPurchasedNumber(phoneNumber);
+        router.push({
+          pathname: '/success',
+          params: { plan: `${selectedBundle.data} on ${selectedProvider.name}`, amount: selectedBundle.price.toString() },
+        });
+      }
+    }, 2000);
+  };
+
+  const closeTransactionModal = () => {
+    setTransactionModalVisible(false);
+    setPhoneNumber('');
+    setTransactionPin('');
+    setSelectedBundle(null);
+    setNetworkProvider('');
+    setTransactionStatus('processing');
+  };
+
+  const closePurchaseModal = () => {
     setModalVisible(false);
     setPhoneNumber('');
-    setPassword('');
+    setTransactionPin('');
     setSelectedBundle(null);
+    setNetworkProvider('');
+  };
+
+  const closeCreatePinModal = () => {
+    setCreatePinModalVisible(false);
+    setNewPin('');
+    setConfirmPin('');
+  };
+
+  const handleCreatePin = () => {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+      alert('PIN must be between 4 and 6 digits.');
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      alert('PINs do not match.');
+      return;
+    }
+
+    setTransactionPin(newPin);
+    setCreatePinModalVisible(false);
+    setNewPin('');
+    setConfirmPin('');
   };
 
   const selectProvider = (provider: Provider) => {
@@ -141,8 +224,9 @@ export default function BuyDataScreen() {
     }
   };
 
-  const BundleCard = ({ bundle }: { bundle: DataBundle }) => {
+  const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
     const slideAnim = useRef(new Animated.Value(0)).current;
+
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -153,7 +237,8 @@ export default function BuyDataScreen() {
         },
         onPanResponderRelease: (_, gestureState) => {
           if (gestureState.dx > 100) {
-            handlePurchase(bundle, true); // Use last purchased number
+            setSelectedBundle(bundle);
+            setModalVisible(true);
           }
           Animated.spring(slideAnim, {
             toValue: 0,
@@ -182,7 +267,7 @@ export default function BuyDataScreen() {
             <MotiView
               from={{ scale: 1 }}
               animate={{ scale: [1, 1.05, 1] }}
-              transition={{ loop: true, type: 'timing', duration: 1500 }}
+              transition={{ type: 'timing', duration: 1500 }}
             >
               <Pressable
                 onPress={() => {
@@ -208,7 +293,6 @@ export default function BuyDataScreen() {
     return (
       <>
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollViewContent}>
-          {/* Back button and provider header */}
           <View style={styles.providerHeader}>
             <Pressable onPress={goBackToProviders} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color="white" />
@@ -220,13 +304,14 @@ export default function BuyDataScreen() {
             />
             <Text style={styles.providerName}>{selectedProvider.name} Data Bundles</Text>
           </View>
-          {/* Categorized bundles */}
+
           {categories.map((category) => {
             const bundlesInCategory = selectedProvider.bundles.filter(
               (bundle) => bundle.category === category
             );
             if (bundlesInCategory.length === 0) return null;
             const isExpanded = expandedCategory === category;
+
             return (
               <Animated.View
                 key={category}
@@ -262,61 +347,48 @@ export default function BuyDataScreen() {
             );
           })}
         </ScrollView>
-        {/* Modal for phone number and authentication */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Complete Purchase</Text>
-              <Text style={styles.modalLabel}>Phone Number (+234)</Text>
-              <TextInput
-                style={styles.modalInput}
-                keyboardType="phone-pad"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="8012345678"
-                placeholderTextColor="#9CA3AF"
-                maxLength={10}
-              />
-              {!hasPriorDataPurchase && (
-                <>
-                  <Text style={styles.modalLabel}>Password</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Enter password"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </>
-              )}
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => {
-                    setModalVisible(false);
-                    setPhoneNumber('');
-                    setPassword('');
-                    setSelectedBundle(null);
-                  }}
-                  style={styles.cancelButton}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handlePurchase(selectedBundle)}
-                  style={styles.confirmButton}
-                >
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
+
+        {/* Modals */}
+        <View style={{ zIndex: 1000 }}>
+          <PurchaseModal
+            visible={modalVisible}
+            onClose={closePurchaseModal}
+            selectedPlan={selectedBundle?.data || ''}
+            phoneNumber={phoneNumber}
+            setPhoneNumber={setPhoneNumber}
+            transactionPin={transactionPin}
+            setTransactionPin={setTransactionPin}
+            networkProvider={networkProvider}
+            hasTransactionPin={hasTransactionPin}
+            showTransactionPin={showTransactionPin}
+            setShowTransactionPin={setShowTransactionPin}
+            onCreatePin={() => setCreatePinModalVisible(true)}
+            onContinue={handlePurchase}
+          />
+
+          <TransactionStatusModal
+            visible={transactionModalVisible}
+            onClose={closeTransactionModal}
+            transactionStatus={transactionStatus}
+            selectedPlan={selectedBundle}
+            phoneNumber={phoneNumber}
+            networkProvider={networkProvider}
+          />
+
+          <CreatePinModal
+            visible={createPinModalVisible}
+            onClose={closeCreatePinModal}
+            newPin={newPin}
+            setNewPin={setNewPin}
+            confirmPin={confirmPin}
+            setConfirmPin={setConfirmPin}
+            showNewPin={showNewPin}
+            setShowNewPin={setShowNewPin}
+            showConfirmPin={showConfirmPin}
+            setShowConfirmPin={setShowConfirmPin}
+            onSave={handleCreatePin}
+          />
+        </View>
       </>
     );
   }
@@ -344,7 +416,7 @@ export default function BuyDataScreen() {
       </View>
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -463,72 +535,6 @@ const styles = StyleSheet.create({
     color: '#A1A1AA',
     marginBottom: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: 16,
-    padding: 24,
-    width: '85%',
-    maxWidth: 400,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 16,
-  },
-  modalLabel: {
-    fontSize: 14,
-    color: 'white',
-    marginBottom: 8,
-  },
-  modalInput: {
-    backgroundColor: '#2D2D2D',
-    color: 'white',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelButton: {
-    backgroundColor: '#4B5563',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-  },
-  confirmButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-  },
-  confirmButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-  },
   selectProviderTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -563,3 +569,5 @@ const styles = StyleSheet.create({
     color: 'white',
   },
 });
+
+export default BuyDataScreen;

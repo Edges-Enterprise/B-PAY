@@ -42,7 +42,7 @@ const TransactionStatusModal = ({
             <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
             <Text style={sharedStyles.transactionText}>Transaction Successful!</Text>
             <Text style={sharedStyles.transactionDetails}>
-              {selectedPlan} purchased for {phoneNumber} on {networkProvider}
+              {selectedPlan?.data} purchased for {phoneNumber} on {networkProvider}
             </Text>
           </>
         )}
@@ -51,7 +51,7 @@ const TransactionStatusModal = ({
             <Ionicons name="close-circle" size={64} color="#EF4444" />
             <Text style={sharedStyles.transactionText}>Transaction Failed</Text>
             <Text style={sharedStyles.transactionDetails}>
-              Failed to purchase {selectedPlan} for {phoneNumber}
+              Failed to purchase {selectedPlan?.data} for {phoneNumber}
             </Text>
           </>
         )}
