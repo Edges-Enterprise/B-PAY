@@ -18,22 +18,31 @@ export default function FundScreen() {
     const fetchUserData = async () => {
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError) throw authError;
-        
-        if (user) {
-          setUserEmail(user.email || '');
-          setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'User');
+        if (authError || !user) {
+          throw new Error('User not authenticated');
         }
+        if (!user.email) {
+          throw new Error('User email not found');
+        }
+        if (!user.user_metadata?.username) {
+          throw new Error('User username not found');
+        }
+        setUserEmail(user.email);
+        setUserName(user.user_metadata.username);
+        console.log('Fetched user data:', {
+          email: user.email,
+          username: user.user_metadata.username,
+        });
       } catch (error) {
         console.error('Error fetching user data:', error);
-        Alert.alert('Error', 'Failed to load user data');
+        Alert.alert('Error', 'Failed to load user data. Please sign in again.');
+        router.replace('/login');
       }
     };
-    
     fetchUserData();
   }, []);
 
-  const handlePresetAmount = (value) => {
+  const handlePresetAmount = (value: number) => {
     const currentAmount = amount ? parseFloat(amount) : 0;
     const newAmount = currentAmount + value;
     setAmount(newAmount.toString());
@@ -44,7 +53,7 @@ export default function FundScreen() {
     try {
       const parsedAmount = parseFloat(amount);
 
-      // Validation
+      // Client-side validation
       if (!amount || isNaN(parsedAmount)) {
         setError('Please enter a valid amount');
         return;
@@ -53,62 +62,77 @@ export default function FundScreen() {
         setError('Minimum funding amount is ₦500');
         return;
       }
+      if (!userEmail) {
+        throw new Error('User email is required');
+      }
+      if (!userName) {
+        throw new Error('User username is required');
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userEmail)) {
+        throw new Error('Invalid email address');
+      }
 
       setIsProcessing(true);
       setError('');
 
-      // Get current session
+      // Refresh session to ensure valid JWT
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         throw new Error('Please sign in to continue');
       }
-
-      // Refresh session if token might be expired
       const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError) {
         console.error('Token refresh error:', refreshError);
         throw new Error('Session expired. Please sign in again.');
       }
-      const accessToken = refreshedSession?.session?.access_token || session.access_token;
+      const accessToken = refreshedSession.session?.access_token;
+      if (!accessToken) {
+        throw new Error('No valid session token available');
+      }
+      console.log('Access token:', accessToken);
 
-      console.log('Initiating payment with:', {
-        amount: parsedAmount,
+      const payload = {
+        amount: Number(parsedAmount),
         email: userEmail,
         name: userName,
-        token: accessToken ? 'exists' : 'missing'
+      };
+      console.log('Initiating payment with:', {
+        ...payload,
+        token: accessToken ? 'exists' : 'missing',
       });
 
-      // Call the payment function
+      // Invoke payment function
       const { data, error: paymentError } = await supabase.functions.invoke(
         'payment',
         {
-          body: {
-            amount: parsedAmount,
-            email: userEmail,
-            name: userName
-          },
+          body: payload,
           headers: {
-            Authorization: `Bearer ${accessToken}`
-          }
+            Authorization: `Bearer ${accessToken}`,
+          },
         }
       );
 
-      console.log('Payment function response:', { data, paymentError });
+      console.log('Payment function response:', { data, error: paymentError });
 
       if (paymentError) {
-        let errorMessage = 'Payment processing failed';
-        if (paymentError.status === 401) {
-          errorMessage = 'Authentication failed. Please sign in again.';
-        } else if (paymentError.status === 400) {
-          errorMessage = data?.message || 'Invalid payment details.';
-        }
+        const errorMessage = data?.message || paymentError.message || 'Payment processing failed';
+        const status = data?.httpStatus || paymentError.status;
         console.error('Payment error details:', {
-          status: paymentError.status,
+          status,
+          message: errorMessage,
           response: data,
-          message: paymentError.message,
           stack: paymentError.stack,
-          cause: paymentError.cause
+          cause: paymentError.cause,
         });
+        if (status === 401) {
+          router.replace('/login');
+          throw new Error(errorMessage || 'Authentication failed. Please sign in again.');
+        } else if (status === 400) {
+          throw new Error(errorMessage || 'Invalid payment details.');
+        } else if (status === 500) {
+          throw new Error(errorMessage || 'Server error. Please try again later.');
+        }
         throw new Error(errorMessage);
       }
 
@@ -124,16 +148,12 @@ export default function FundScreen() {
           paymentUrl: data.authorization_url,
           callbackUrl: 'edgesnetwork://payment-callback',
           amount: parsedAmount.toString(),
-          reference: data.reference || `ref-${Date.now()}`
-        }
+          reference: data.reference || `ref-${Date.now()}`,
+        },
       });
-
-    } catch (err) {
+    } catch (err: any) {
       console.error('Full payment error:', err);
-      Alert.alert(
-        'Payment Error',
-        err.message || 'Failed to initiate payment. Please try again later.'
-      );
+      Alert.alert('Payment Error', err.message || 'An unexpected error occurred');
     } finally {
       setIsProcessing(false);
     }
@@ -145,7 +165,6 @@ export default function FundScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
       <View style={styles.inner}>
-        {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()}>
             <Ionicons name="arrow-back-outline" size={24} color="white" />
@@ -155,8 +174,6 @@ export default function FundScreen() {
             <Ionicons name="help-circle-outline" size={24} color="white" />
           </Pressable>
         </View>
-
-        {/* Balance Display */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -169,8 +186,6 @@ export default function FundScreen() {
             maximumFractionDigits: 2
           }) : '0.00'}</Text>
         </MotiView>
-
-        {/* Amount Input */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -198,8 +213,6 @@ export default function FundScreen() {
           </View>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </MotiView>
-
-        {/* Preset Amount Buttons */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -219,8 +232,6 @@ export default function FundScreen() {
             </Pressable>
           ))}
         </MotiView>
-
-        {/* Fund Button */}
         <MotiView
           from={{ scale: 1 }}
           animate={{ scale: [1, 1.02, 1] }}
@@ -239,8 +250,6 @@ export default function FundScreen() {
             )}
           </Pressable>
         </MotiView>
-
-        {/* Payment Steps */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
