@@ -13,8 +13,14 @@ export default function FundScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
+
+  // State for bank details
   const [showBankDetails, setShowBankDetails] = useState(false);
-  const [bankDetails, setBankDetails] = useState<{ account_number: string; bank_name: string } | null>(null);
+  const [bankDetails, setBankDetails] = useState<{
+    account_number: string;
+    bank_name: string;
+    reference: string;
+  } | null>(null);
 
   // Listen for real-time transaction update
   useEffect(() => {
