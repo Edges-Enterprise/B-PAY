@@ -21,10 +21,10 @@ serve(async (req) => {
       }, 405, corsHeaders);
     }
 
-    // Validate authentication (optional, if required)
+    // Validate authentication
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL'),
-      Deno.env.get('SUPABASE_ANON_KEY')
+      Deno.env.get('SUPABASE_URL') || '',
+      Deno.env.get('SUPABASE_ANON_KEY') || ''
     );
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
@@ -35,6 +35,7 @@ serve(async (req) => {
     }
     const { user, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (authError || !user) {
+      console.error('Authentication error:', authError?.message || 'No user found');
       return jsonResponse({
         status: 'error',
         message: 'Invalid or expired token',
@@ -67,9 +68,22 @@ serve(async (req) => {
       }, 400, corsHeaders);
     }
 
-    // Log Paystack key presence for debugging
+    // Log environment variables for debugging
     const paystackKey = Deno.env.get('PAYSTACK_SECRET_KEY');
-    console.log('PAYSTACK_SECRET_KEY:', paystackKey ? 'Key present' : 'Key missing');
+    console.log('Environment variables:', {
+      PAYSTACK_SECRET_KEY: paystackKey ? 'Key present' : 'Key missing',
+      SUPABASE_URL: Deno.env.get('SUPABASE_URL') ? 'Present' : 'Missing',
+      SUPABASE_ANON_KEY: Deno.env.get('SUPABASE_ANON_KEY') ? 'Present' : 'Missing',
+      PAYSTACK_CALLBACK_URL: Deno.env.get('PAYSTACK_CALLBACK_URL') || 'Not set',
+      SITE_URL: Deno.env.get('SITE_URL') || 'Not set'
+    });
+
+    if (!paystackKey) {
+      return jsonResponse({
+        status: 'error',
+        message: 'Server configuration error: Missing Paystack key',
+      }, 500, corsHeaders);
+    }
 
     // Initialize Paystack payment
     const reference = `ref-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
@@ -108,7 +122,8 @@ serve(async (req) => {
         status: 'failed',
         message: paystackData.message || 'Payment initialization failed',
         code: paystackData.status || 'unknown_error',
-      }, 400, corsHeaders);
+        httpStatus: paystackResponse.status
+      }, paystackResponse.status ||kaart 400, corsHeaders);
     }
 
     // Success response

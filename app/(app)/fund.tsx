@@ -8,11 +8,11 @@ import { supabase } from '@/config/supabase';
 
 export default function FundScreen() {
   const router = useRouter();
-  const [amount, setAmount] = useState<string>('');
-  const [error, setError] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [userEmail, setUserEmail] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
+  const [amount, setAmount] = useState('');
+  const [error, setError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -33,7 +33,7 @@ export default function FundScreen() {
     fetchUserData();
   }, []);
 
-  const handlePresetAmount = (value: number) => {
+  const handlePresetAmount = (value) => {
     const currentAmount = amount ? parseFloat(amount) : 0;
     const newAmount = currentAmount + value;
     setAmount(newAmount.toString());
@@ -43,7 +43,7 @@ export default function FundScreen() {
   const handleFundWallet = async () => {
     try {
       const parsedAmount = parseFloat(amount);
-      
+
       // Validation
       if (!amount || isNaN(parsedAmount)) {
         setError('Please enter a valid amount');
@@ -53,26 +53,34 @@ export default function FundScreen() {
         setError('Minimum funding amount is ₦500');
         return;
       }
-      
+
       setIsProcessing(true);
       setError('');
-  
+
       // Get current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         throw new Error('Please sign in to continue');
       }
 
+      // Refresh session if token might be expired
+      const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error('Token refresh error:', refreshError);
+        throw new Error('Session expired. Please sign in again.');
+      }
+      const accessToken = refreshedSession?.session?.access_token || session.access_token;
+
       console.log('Initiating payment with:', {
         amount: parsedAmount,
         email: userEmail,
         name: userName,
-        token: session.access_token ? 'exists' : 'missing'
+        token: accessToken ? 'exists' : 'missing'
       });
 
-      // Call the actual deployed 'payment' function
+      // Call the payment function
       const { data, error: paymentError } = await supabase.functions.invoke(
-        'payment', // Using your deployed function name
+        'payment',
         {
           body: {
             amount: parsedAmount,
@@ -80,7 +88,7 @@ export default function FundScreen() {
             name: userName
           },
           headers: {
-            Authorization: `Bearer ${session.access_token}`
+            Authorization: `Bearer ${accessToken}`
           }
         }
       );
@@ -88,17 +96,25 @@ export default function FundScreen() {
       console.log('Payment function response:', { data, paymentError });
 
       if (paymentError) {
+        let errorMessage = 'Payment processing failed';
+        if (paymentError.status === 401) {
+          errorMessage = 'Authentication failed. Please sign in again.';
+        } else if (paymentError.status === 400) {
+          errorMessage = data?.message || 'Invalid payment details.';
+        }
         console.error('Payment error details:', {
-          name: paymentError.name,
+          status: paymentError.status,
+          response: data,
           message: paymentError.message,
           stack: paymentError.stack,
           cause: paymentError.cause
         });
-        throw new Error(paymentError.message || 'Payment processing failed');
+        throw new Error(errorMessage);
       }
 
       if (!data?.authorization_url) {
-        throw new Error('No payment URL received from the server');
+        console.error('Payment response:', data);
+        throw new Error(data?.message || 'No payment URL received from the server');
       }
 
       // Navigate to payment webview
@@ -111,11 +127,11 @@ export default function FundScreen() {
           reference: data.reference || `ref-${Date.now()}`
         }
       });
-  
+
     } catch (err) {
       console.error('Full payment error:', err);
       Alert.alert(
-        'Payment Error', 
+        'Payment Error',
         err.message || 'Failed to initiate payment. Please try again later.'
       );
     } finally {
@@ -123,7 +139,7 @@ export default function FundScreen() {
     }
   };
 
-  const presetAmounts: number[] = [500, 1000, 5000, 10000];
+  const presetAmounts = [500, 1000, 5000, 10000];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -255,8 +271,6 @@ export default function FundScreen() {
     </SafeAreaView>
   );
 }
-
-
 
 const styles = StyleSheet.create({
   container: {
