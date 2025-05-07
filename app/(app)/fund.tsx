@@ -33,6 +33,13 @@ export default function FundScreen() {
     fetchUserData();
   }, []);
 
+  const handlePresetAmount = (value: number) => {
+    const currentAmount = amount ? parseFloat(amount) : 0;
+    const newAmount = currentAmount + value;
+    setAmount(newAmount.toString());
+    setError('');
+  };
+
   const handleFundWallet = async () => {
     try {
       const parsedAmount = parseFloat(amount);
@@ -55,10 +62,17 @@ export default function FundScreen() {
       if (sessionError || !session) {
         throw new Error('Please sign in to continue');
       }
-  
-      // Initiate payment with auth header
+
+      console.log('Initiating payment with:', {
+        amount: parsedAmount,
+        email: userEmail,
+        name: userName,
+        token: session.access_token ? 'exists' : 'missing'
+      });
+
+      // Call the actual deployed 'payment' function
       const { data, error: paymentError } = await supabase.functions.invoke(
-        'initiate-payment',
+        'payment', // Using your deployed function name
         {
           body: {
             amount: parsedAmount,
@@ -70,16 +84,23 @@ export default function FundScreen() {
           }
         }
       );
-  
+
+      console.log('Payment function response:', { data, paymentError });
+
       if (paymentError) {
-        console.error('Payment initiation error:', paymentError);
-        throw new Error(paymentError.message || 'Failed to initiate payment');
+        console.error('Payment error details:', {
+          name: paymentError.name,
+          message: paymentError.message,
+          stack: paymentError.stack,
+          cause: paymentError.cause
+        });
+        throw new Error(paymentError.message || 'Payment processing failed');
       }
-  
+
       if (!data?.authorization_url) {
-        throw new Error('No payment URL received');
+        throw new Error('No payment URL received from the server');
       }
-  
+
       // Navigate to payment webview
       router.push({
         pathname: '/payment-webview',
@@ -87,22 +108,21 @@ export default function FundScreen() {
           paymentUrl: data.authorization_url,
           callbackUrl: 'edgesnetwork://payment-callback',
           amount: parsedAmount.toString(),
-          reference: data.reference
+          reference: data.reference || `ref-${Date.now()}`
         }
       });
   
     } catch (err) {
-      console.error('Payment error:', err);
+      console.error('Full payment error:', err);
       Alert.alert(
         'Payment Error', 
-        err.message || 'Failed to initiate payment. Please try again.'
+        err.message || 'Failed to initiate payment. Please try again later.'
       );
     } finally {
       setIsProcessing(false);
     }
   };
 
-  
   const presetAmounts: number[] = [500, 1000, 5000, 10000];
 
   return (
@@ -173,7 +193,7 @@ export default function FundScreen() {
           {presetAmounts.map((value) => (
             <Pressable
               key={value}
-              onPress={() => setAmount(value.toString())}
+              onPress={() => handlePresetAmount(value)}
               style={({ pressed }) => [
                 styles.presetButton,
                 { transform: [{ scale: pressed ? 0.95 : 1 }] },
@@ -227,7 +247,7 @@ export default function FundScreen() {
           <View style={styles.step}>
             <Text style={styles.stepNumber}>3</Text>
             <Text style={styles.stepText}>
-              Wallet will be credited automatically (10% fee applies)
+              Wallet will be credited automatically
             </Text>
           </View>
         </MotiView>
@@ -235,6 +255,8 @@ export default function FundScreen() {
     </SafeAreaView>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   container: {
