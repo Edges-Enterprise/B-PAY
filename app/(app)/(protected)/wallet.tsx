@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, StatusBar, Platform, SafeAreaView, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MotiView } from 'moti';
 import { colors } from '@/constants/colors';
 import { useColorScheme } from '@/lib/useColorScheme';
@@ -10,9 +10,7 @@ import { useColorScheme } from '@/lib/useColorScheme';
 interface Transaction {
   type: string;
   amount: number;
-  network?: string;
   method?: string;
-  service?: string;
   date: string;
 }
 
@@ -25,19 +23,37 @@ interface Recommendation {
 export default function WalletScreen() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
+  const { amount } = useLocalSearchParams<{ amount: string }>(); // Amount passed from FundScreen
   const [showBalance, setShowBalance] = useState<boolean>(false);
   const [showTransactions, setShowTransactions] = useState<boolean>(false);
   const [currentRecommendations, setCurrentRecommendations] = useState<Recommendation[]>([]);
 
-  const balance: number = 12300;
+  // Debug amount param
+  useEffect(() => {
+    console.log('Received amount param:', amount);
+  }, [amount]);
+
+  // Set balance based on deposited amount, default to 0
+  const balance: number = amount ? parseFloat(amount) : 0;
   const hasPriorDataPurchase: boolean = true;
 
-  const transactions: Transaction[] = [
-    { type: 'Data Purchase', amount: -300, network: 'MTN', date: 'Apr 18, 2025' },
-    { type: 'Wallet Funding', amount: 5000, method: 'Flutterwave', date: 'Apr 17, 2025' },
-    { type: 'Cable TV Payment', amount: -2500, service: 'DSTV', date: 'Apr 16, 2025' },
-  ];
+  // Set transactions based on deposited amount
+  const transactions: Transaction[] = amount
+    ? [
+        {
+          type: 'Wallet Funding',
+          amount: parseFloat(amount),
+          method: 'Paystack',
+          date: new Date().toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          }),
+        },
+      ]
+    : [];
 
+  // Recommendations data
   const recommendations: Recommendation[] = [
     { id: 1, text: '1GB MTN data for just ₦200!', price: 200 },
     { id: 2, text: 'Airtel 500MB daily plan for ₦100.', price: 100 },
@@ -51,6 +67,7 @@ export default function WalletScreen() {
     { id: 10, text: 'MTN ₦100 airtime voucher.', price: 100 },
   ];
 
+  // Shuffle recommendations for display
   const shuffleRecommendations = (): Recommendation[] => {
     const array = [...recommendations];
     for (let i = array.length - 1; i > 0; i--) {
@@ -60,6 +77,7 @@ export default function WalletScreen() {
     return array.slice(0, 5);
   };
 
+  // Initialize and periodically update recommendations
   useEffect(() => {
     setCurrentRecommendations(shuffleRecommendations());
     const interval = setInterval(() => {
@@ -69,12 +87,14 @@ export default function WalletScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const formattedBalance: string = `₦${balance.toLocaleString(undefined, {
+  // Format balance for display
+  const formattedBalance: string = `₦${balance.toLocaleString('en-NG', {
     minimumFractionDigits: 2,
   })}`;
 
   const hiddenBalance: string = '₦****' + formattedBalance.slice(-3);
 
+  // Handle purchase of recommended items
   const handlePurchase = (rec: Recommendation) => {
     if (!hasPriorDataPurchase) {
       console.log('User must have prior data purchase.');
@@ -100,6 +120,7 @@ export default function WalletScreen() {
         <Text style={[styles.title, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>Wallet 💼</Text>
         <Text style={[styles.subtitle, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>Manage your balance and transactions</Text>
 
+        {/* Balance Card */}
         <View style={[styles.balanceCard, { backgroundColor: colorScheme === 'dark' ? '#1e40af' : '#3b82f6' }]}>
           <View style={styles.balanceHeader}>
             <Text style={[styles.balanceTextLabel, { color: 'rgba(255,255,255,0.7)' }]}>Current Balance</Text>
@@ -116,6 +137,7 @@ export default function WalletScreen() {
           </Text>
         </View>
 
+        {/* Fund Wallet Button with Animation */}
         <MotiView
           from={{ scale: 1 }}
           animate={{ scale: [1, 1.05, 1] }}
@@ -131,6 +153,7 @@ export default function WalletScreen() {
           </Pressable>
         </MotiView>
 
+        {/* Transaction Toggle */}
         <Pressable
           onPress={() => setShowTransactions(!showTransactions)}
           style={styles.transactionToggle}
@@ -143,38 +166,50 @@ export default function WalletScreen() {
           />
         </Pressable>
 
+        {/* Transaction List */}
         {showTransactions && (
           <View style={styles.transactionList}>
-            {transactions.map((tx, index) => (
-              <View key={index} style={[styles.transactionItem, { backgroundColor: colorScheme === 'dark' ? '#171717' : '#f5f5f5', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
-                <View>
-                  <Text style={[styles.transactionType, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>{tx.type}</Text>
-                  <Text style={[styles.transactionDetails, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>{tx.network || tx.method || tx.service} • {tx.date}</Text>
+            {transactions.length > 0 ? (
+              transactions.map((tx, index) => (
+                <View key={index} style={[styles.transactionItem, { backgroundColor: colorScheme === 'dark' ? '#171717' : '#f5f5f5', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+                  <View>
+                    <Text style={[styles.transactionType, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>{tx.type}</Text>
+                    <Text style={[styles.transactionDetails, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>{tx.method} • {tx.date}</Text>
+                  </View>
+                  <Text style={[styles.transactionAmount, { color: tx.amount < 0 ? '#f87171' : '#34d399' }]}>{tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount).toLocaleString('en-NG', { minimumFractionDigits: 0 })}</Text>
                 </View>
-                <Text style={[styles.transactionAmount, { color: tx.amount < 0 ? '#f87171' : '#34d399' }]}>{tx.amount < 0 ? '-' : '+'}₦{Math.abs(tx.amount)}</Text>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={[styles.transactionDetails, { color: colorScheme === 'dark' ? '#9ca3af' : '#666' }]}>No transactions yet</Text>
+            )}
           </View>
         )}
 
-        {balance > 0 && !showTransactions && (
+        {/* Recommendations or Fallback */}
+        {!showTransactions && (
           <View style={styles.recommendationsSection}>
-            <Text style={[styles.recommendationsTitle, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>💡 Recommended Purchases</Text>
-            <View style={styles.recommendationsList}>
-              {currentRecommendations.map((rec, index) => (
-                <MotiView
-                  key={`${rec.id}-${index}`}
-                  from={{ translateX: index % 2 === 0 ? -100 : 100, opacity: 0 }}
-                  animate={{ translateX: 0, opacity: 1 }}
-                  transition={{ type: 'timing', duration: 800, delay: index * 500 }}
-                  style={[styles.recommendationContainer, index % 2 === 0 ? { alignSelf: 'flex-start', backgroundColor: colorScheme === 'dark' ? '#1e3a8a' : '#3b82f6' } : { alignSelf: 'flex-end', backgroundColor: colorScheme === 'dark' ? '#6d28d9' : '#8b5cf6' }]}
-                >
-                  <Pressable onPress={() => handlePurchase(rec)}>
-                    <Text style={[styles.recommendationText, { color: 'white' }]}>{rec.text}</Text>
-                  </Pressable>
-                </MotiView>
-              ))}
-            </View>
+            {balance > 0 ? (
+              <>
+                <Text style={[styles.recommendationsTitle, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>💡 Recommended Purchases</Text>
+                <View style={styles.recommendationsList}>
+                  {currentRecommendations.map((rec, index) => (
+                    <MotiView
+                      key={`${rec.id}-${index}`}
+                      from={{ translateX: index % 2 === 0 ? -100 : 100, opacity: 0 }}
+                      animate={{ translateX: 0, opacity: 1 }}
+                      transition={{ type: 'timing', duration: 800, delay: index * 500 }}
+                      style={[styles.recommendationContainer, index % 2 === 0 ? { alignSelf: 'flex-start', backgroundColor: colorScheme === 'dark' ? '#1e3a8a' : '#3b82f6' } : { alignSelf: 'flex-end', backgroundColor: colorScheme === 'dark' ? '#6d28d9' : '#8b5cf6' }]}
+                    >
+                      <Pressable onPress={() => handlePurchase(rec)}>
+                        <Text style={[styles.recommendationText, { color: 'white' }]}>{rec.text}</Text>
+                      </Pressable>
+                    </MotiView>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <Text style={[styles.recommendationsTitle, { color: colorScheme === 'dark' ? colors.dark.foreground : colors.light.foreground }]}>Fund your wallet to see recommended purchases!</Text>
+            )}
           </View>
         )}
       </ScrollView>

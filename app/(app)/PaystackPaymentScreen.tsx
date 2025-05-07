@@ -1,384 +1,307 @@
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   StyleSheet,
-  Platform,
   SafeAreaView,
-  Alert,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { supabase } from '@/config/supabase';
 
-const PaystackPaymentScreen = () => {
+type PaymentMethod = 'card' | 'bank_transfer';
+
+const PaystackPaymentScreen: React.FC = () => {
   const router = useRouter();
-  const { amount, email } = useLocalSearchParams();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'bank'
+  const { amount = '0', email = '' } = useLocalSearchParams<{
+    amount: string;
+    email: string;
+  }>();
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [showWebView, setShowWebView] = useState<boolean>(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
 
-  // Card payment state
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
+  // Replace with your Paystack test public key
+  const PAYSTACK_PUBLIC_KEY = 'pk_test_766ebb286cc861a4807dd2e5b81e265e4778388f';
 
-  // Bank transfer state
-  const [bankDetails, setBankDetails] = useState(null);
-
-  const handlePayment = async () => {
-    setIsProcessing(true);
-    setPaymentStatus(null);
-
+  const sendTestReceipt = async (reference: string, amount: string, email: string) => {
     try {
-      const reference = `TXN_${Date.now()}`;
-      if (paymentMethod === 'card') {
-        if (!cardNumber || !expiryDate || !cvv) {
-          throw new Error('Please fill in all card details');
-        }
-
-        // Call Supabase function to initialize Paystack transaction
-        const { data, error: functionError } = await supabase.functions.invoke('payment', {
-          body: {
-            amount: parseFloat(amount),
-            email,
-            reference,
-            channels: ['card'],
-          },
-        });
-
-        if (functionError || !data || !data.authorization_url) {
-          throw new Error(functionError?.message || data?.error || 'Failed to initialize payment');
-        }
-
-        // Simulate success for card payment
-        setTimeout(() => {
-          setPaymentStatus('success');
-          setIsProcessing(false);
-        }, 2000);
-      } else if (paymentMethod === 'bank') {
-        // Set bank details with your Paystack account information
-        setBankDetails({
-          bank_name: 'OPay Digital Services Limited (OPay)',
-          account_number: '8063156574',
-          account_holder: 'OGECHI BIANCA UCHE',
-          reference,
-        });
-
-        // Initialize bank transfer with Paystack
-        const { data, error: initError } = await supabase.functions.invoke('payment', {
-          body: {
-            amount: parseFloat(amount),
-            email,
-            reference,
-            channels: ['bank_transfer'],
-          },
-        });
-
-        if (initError || !data || data.error) {
-          throw new Error(initError?.message || data?.error || 'Failed to initialize bank transfer');
-        }
-
-        // Simulate bank transfer completion in test mode
-        setTimeout(async () => {
-          try {
-            const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-payment', {
-              body: {
-                reference,
-              },
-            });
-
-            if (verifyError || !verifyData || verifyData.status !== 'success') {
-              throw new Error(verifyError?.message || verifyData?.message || 'Bank transfer simulation failed');
-            }
-
-            setPaymentStatus('success');
-            setIsProcessing(false);
-          } catch (verifyErr) {
-            console.error('Verification error:', verifyErr);
-            Alert.alert('Verification Error', verifyErr.message || 'Failed to verify bank transfer');
-            setIsProcessing(false);
-          }
-        }, 3000); // Simulate network delay
-      }
-    } catch (err) {
-      console.error('Payment error:', err);
-      Alert.alert('Payment Error', err.message || 'An unexpected error occurred');
-      setIsProcessing(false);
+      // Mock email sending (in real app, integrate with your backend or email service)
+      const receiptDetails = {
+        to: email,
+        subject: 'Payment Receipt',
+        body: `
+          Payment Receipt
+          ----------------
+          Reference: ${reference}
+          Amount: ₦${parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Date: ${new Date().toLocaleString()}
+          Status: Successful
+          ----------------
+          Thank you for your payment!
+        `,
+      };
+      console.log('Sending receipt:', receiptDetails);
+      // In production, replace with actual email sending logic (e.g., using a backend API)
+    } catch (error) {
+      console.error('Error sending receipt:', error);
     }
   };
 
-  useEffect(() => {
-    if (paymentStatus === 'success') {
-      Alert.alert('Success', 'Payment completed successfully!');
-      router.push('/buy');
-    } else if (paymentStatus === 'cancelled') {
-      Alert.alert('Cancelled', 'Payment was cancelled.');
+  const handlePayment = (method: PaymentMethod): void => {
+    setPaymentMethod(method);
+    setShowWebView(true);
+    setIsProcessing(true);
+  };
+
+  const handleWebViewMessage = (event: any): void => {
+    const data = event.nativeEvent.data;
+    if (data.startsWith('payment-success:')) {
+      const reference = data.split(':')[1];
+      sendTestReceipt(reference, amount, email);
+      router.push('/success');
+    } else if (data === 'payment-cancelled') {
+      Alert.alert('Cancelled', 'Payment was cancelled');
     }
-  }, [paymentStatus]);
+    setShowWebView(false);
+    setIsProcessing(false);
+  };
+
+  const generatePaystackHTML = (): string => {
+    const reference = `PS_${Date.now()}`;
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Paystack Payment</title>
+        <script src="https://js.paystack.co/v1/inline.js"></script>
+      </head>
+      <body>
+        <script>
+          const paymentMethod = '${paymentMethod}';
+          const handler = PaystackPop.setup({
+            key: '${PAYSTACK_PUBLIC_KEY}',
+            email: '${email}',
+            amount: ${parseFloat(amount) * 100},
+            currency: 'NGN',
+            channels: [paymentMethod],
+            ref: '${reference}',
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: "Mobile Payment",
+                  variable_name: "mobile_payment",
+                  value: "react-native-app"
+                }
+              ]
+            },
+            onClose: function() {
+              window.ReactNativeWebView.postMessage('payment-cancelled');
+            },
+            callback: function(response) {
+              if ('${PAYSTACK_PUBLIC_KEY}'.includes('test')) {
+                fetch('https://api.paystack.co/transaction/verify/' + response.reference, {
+                  method: 'GET',
+                  headers: {
+                    Authorization: 'Bearer ${PAYSTACK_PUBLIC_KEY}'
+                  }
+                }).then(r => r.json())
+                  .then(verification => {
+                    if (verification.status) {
+                      window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
+                    }
+                  });
+              } else {
+                window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
+              }
+            }
+          });
+          handler.openIframe();
+        </script>
+      </body>
+      </html>
+    `;
+  };
+
+  if (showWebView) {
+    return (
+      <WebView
+        source={{ html: generatePaystackHTML() }}
+        onMessage={handleWebViewMessage}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        style={{ flex: 1 }}
+        startInLoadingState={true}
+        renderLoading={() => (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#000" />
+          </View>
+        )}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {typeof StatusBar !== 'undefined' && <StatusBar style="light" translucent backgroundColor="transparent" />}
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+      
       <View style={styles.inner}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <Ionicons name="arrow-back-outline" size={24} color="white" />
-          </Pressable>
-          <Text style={styles.title}>Paystack Payment</Text>
-          <Pressable>
-            <Ionicons name="help-circle-outline" size={24} color="white" />
-          </Pressable>
-        </View>
-
         <ScrollView contentContainerStyle={styles.paymentContainer}>
-          <Text style={styles.amountText}>Amount to Pay: ₦{parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</Text>
-          <Text style={styles.emailText}>Email: {email}</Text>
-          <Text style={styles.infoText}>Select a payment method below to proceed.</Text>
+          <Text style={styles.emailText}>{email}</Text>
+          <Text style={styles.amountText}>Pay ₦{parseFloat(amount).toLocaleString('en-NG', { 
+              minimumFractionDigits: 2 
+            })}</Text>
 
-          {/* Payment Method Selection */}
-          <View style={styles.methodContainer}>
-            <Pressable
-              style={[styles.methodButton, paymentMethod === 'card' && styles.methodButtonActive]}
-              onPress={() => setPaymentMethod('card')}
-            >
-              <Text style={[styles.methodText, paymentMethod === 'card' && styles.methodTextActive]}>Card</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.methodButton, paymentMethod === 'bank' && styles.methodButtonActive]}
-              onPress={() => setPaymentMethod('bank')}
-            >
-              <Text style={[styles.methodText, paymentMethod === 'bank' && styles.methodTextActive]}>Bank Transfer</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.instructionText}>
+            USE ANY OF THE OPTIONS BELOW TO TEST THE PAYMENT FLOW
+          </Text>
 
-          {/* Payment Details */}
-          {paymentMethod === 'card' ? (
-            <View style={styles.detailsContainer}>
-              <Text style={styles.label}>Card Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1234 5678 9012 3456"
-                placeholderTextColor="#666"
-                keyboardType="numeric"
-                value={cardNumber}
-                onChangeText={(text) => setCardNumber(text.replace(/[^0-9]/g, ''))}
-              />
-              <View style={styles.row}>
-                <View style={styles.halfInputContainer}>
-                  <Text style={styles.label}>Expiry Date (MM/YY)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="MM/YY"
-                    placeholderTextColor="#666"
-                    value={expiryDate}
-                    onChangeText={(text) => setExpiryDate(text)}
-                  />
-                </View>
-                <View style={styles.halfInputContainer}>
-                  <Text style={styles.label}>CVV</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="123"
-                    placeholderTextColor="#666"
-                    keyboardType="numeric"
-                    value={cvv}
-                    onChangeText={(text) => setCvv(text.replace(/[^0-9]/g, ''))}
-                  />
-                </View>
-              </View>
-            </View>
-          ) : bankDetails ? (
-            <View style={styles.detailsContainer}>
-              <Text style={styles.infoText}>Make a bank transfer to the following account:</Text>
-              <View style={styles.bankDetailRow}>
-                <Text style={styles.bankLabel}>Bank:</Text>
-                <Text style={styles.bankValue}>{bankDetails.bank_name}</Text>
-              </View>
-              <View style={styles.bankDetailRow}>
-                <Text style={styles.bankLabel}>Account Holder:</Text>
-                <Text style={styles.bankValue}>{bankDetails.account_holder}</Text>
-              </View>
-              <View style={styles.bankDetailRow}>
-                <Text style={styles.bankLabel}>Account No:</Text>
-                <Text style={styles.bankValue}>{bankDetails.account_number}</Text>
-              </View>
-              <View style={styles.bankDetailRow}>
-                <Text style={styles.bankLabel}>Reference:</Text>
-                <Text style={styles.bankValue}>{bankDetails.reference}</Text>
-              </View>
-              <Text style={styles.warningText}>
-                Note: The transfer amount must exactly match ₦{parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}. Any deviation will result in payment failure.
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.infoText}>Click "Proceed" to get bank transfer details.</Text>
-          )}
+          <Pressable
+            style={styles.optionButton}
+            onPress={() => {
+              sendTestReceipt(`PS_${Date.now()}`, amount, email);
+              router.push('/success');
+            }}
+            disabled={isProcessing}
+          >
+            <Text style={styles.optionButtonText}>Success</Text>
+          </Pressable>
 
-          {/* Proceed Button */}
-          {!bankDetails && (
-            <Pressable
-              onPress={handlePayment}
-              style={styles.proceedButton}
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <Text style={styles.proceedButtonText}>Proceed</Text>
-              )}
-            </Pressable>
-          )}
+          <Pressable
+            style={[styles.optionButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#000' }]}
+            onPress={() => handlePayment('bank_transfer')}
+            disabled={isProcessing}
+          >
+            <Text style={[styles.optionButtonText, { color: '#000' }]}>Bank Authentication</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.optionButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#000' }]}
+            onPress={() => Alert.alert('Declined', 'Payment was declined')}
+            disabled={isProcessing}
+          >
+            <Text style={[styles.optionButtonText, { color: '#000' }]}>Declined</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.payButton}
+            onPress={() => handlePayment('card')}
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.payButtonText}>Pay ₦{parseFloat(amount).toLocaleString('en-NG', { 
+                minimumFractionDigits: 2 
+              })}</Text>
+            )}
+          </Pressable>
+
+          <Pressable>
+            <Text style={styles.useAnotherCardText}>USE ANOTHER CARD</Text>
+          </Pressable>
+
+          <Text style={styles.levyText}>
+            An additional E-levy fee of 1.5% may apply to this payment.{' '}
+            <Text style={styles.learnMoreText}>Learn more</Text>
+          </Text>
         </ScrollView>
-
-        {isProcessing && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#00FF00" />
-          </View>
-        )}
       </View>
     </SafeAreaView>
   );
 };
 
-export default PaystackPaymentScreen;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A2526',
-    paddingTop: Platform.OS === 'android' ? 30 : 0,
+    backgroundColor: '#fff',
   },
   inner: {
     flex: 1,
     paddingHorizontal: 16,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
   paymentContainer: {
     flexGrow: 1,
-    backgroundColor: '#2A3A3B',
-    borderRadius: 8,
-    padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emailText: {
+    fontSize: 16,
+    color: '#000',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   amountText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  emailText: {
-    fontSize: 16,
-    color: '#888',
-    marginBottom: 16,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#fff',
+    color: '#000',
     marginBottom: 16,
     textAlign: 'center',
   },
-  methodContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
+  instructionText: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 20,
+    textTransform: 'uppercase',
   },
-  methodButton: {
+  optionButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#000',
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: '#3A4A4B',
-    marginHorizontal: 8,
+    borderRadius: 25,
+    marginBottom: 16,
+    width: 200,
+    alignItems: 'center',
   },
-  methodButtonActive: {
-    backgroundColor: '#00FF00',
-  },
-  methodText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  methodTextActive: {
+  optionButtonText: {
     color: '#000',
-    fontWeight: 'bold',
-  },
-  detailsContainer: {
-    width: '100%',
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  input: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
     fontSize: 16,
-    marginBottom: 16,
+    fontWeight: '500',
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  halfInputContainer: {
-    width: '48%',
-  },
-  bankDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  bankLabel: {
-    color: '#888',
-    fontSize: 14,
-  },
-  bankValue: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  warningText: {
-    color: '#ff4444',
-    fontSize: 12,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  proceedButton: {
+  payButton: {
     backgroundColor: '#00FF00',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    width: '100%',
+    width: 200,
+    marginVertical: 16,
   },
-  proceedButtonText: {
+  payButtonText: {
     color: '#000',
     fontWeight: 'bold',
     fontSize: 16,
-    textTransform: 'uppercase',
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  useAnotherCardText: {
+    color: '#000',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+    marginBottom: 16,
+  },
+  levyText: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+  },
+  learnMoreText: {
+    color: '#000',
+    textDecorationLine: 'underline',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
 });
+
+export default PaystackPaymentScreen;

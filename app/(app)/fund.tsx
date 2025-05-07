@@ -9,13 +9,15 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
-  Clipboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/config/supabase';
+import { WebView } from 'react-native-webview';
+
+type PaymentMethod = 'card' | 'bank_transfer';
 
 const FundScreen = () => {
   const router = useRouter();
@@ -24,14 +26,17 @@ const FundScreen = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
-
-  // Bank transfer state
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [bankDetails, setBankDetails] = useState<{
     account_number: string;
     bank_name: string;
     reference: string;
   } | null>(null);
+  const [showWebView, setShowWebView] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+
+  // Paystack test public key
+  const PAYSTACK_PUBLIC_KEY = 'pk_test_766ebb286cc861a4807dd2e5b81e265e4778388f';
 
   // Listen for real-time transaction updates
   useEffect(() => {
@@ -50,7 +55,7 @@ const FundScreen = () => {
           },
           (payload) => {
             if (payload.new.status === 'success') {
-              router.push('/buy');
+              router.push({ pathname: '/wallet', params: { amount } });
             }
           }
         )
@@ -62,7 +67,7 @@ const FundScreen = () => {
         supabase.removeChannel(subscription);
       }
     };
-  }, [bankDetails]);
+  }, [bankDetails, amount]);
 
   // Fetch user data on load
   useEffect(() => {
@@ -97,6 +102,28 @@ const FundScreen = () => {
     setError('');
   };
 
+  const sendTestReceipt = async (reference: string, amount: string, email: string) => {
+    try {
+      const receiptDetails = {
+        to: email,
+        subject: 'Payment Receipt',
+        body: `
+          Payment Receipt
+          ----------------
+          Reference: ${reference}
+          Amount: ₦${parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Date: ${new Date().toLocaleString()}
+          Status: Successful
+          ----------------
+          Thank you for your payment!
+        `,
+      };
+      console.log('Sending receipt:', receiptDetails);
+    } catch (error) {
+      console.error('Error sending receipt:', error);
+    }
+  };
+
   const handleFundWallet = async () => {
     try {
       const parsedAmount = parseFloat(amount);
@@ -117,14 +144,8 @@ const FundScreen = () => {
 
       setIsProcessing(true);
       setError('');
-
-      // Navigate to Paystack payment screen with the selected amount
-      router.push({
-        pathname: '/PaystackPaymentScreen',
-        params: { amount: parsedAmount.toString(), email: userEmail },
-      });
-
-      setIsProcessing(false);
+      setPaymentMethod('card'); // Default to card payment
+      setShowWebView(true);
     } catch (err) {
       console.error('Error:', err);
       Alert.alert('Error', err.message || 'An unexpected error occurred');
@@ -132,14 +153,91 @@ const FundScreen = () => {
     }
   };
 
+  const handleWebViewMessage = (event: any): void => {
+    const data = event.nativeEvent.data;
+    if (data.startsWith('payment-success:')) {
+      const reference = data.split(':')[1];
+      sendTestReceipt(reference, amount, userEmail);
+      router.push({ pathname: '/wallet', params: { amount } }); // Navigate to /wallet with amount
+    } else if (data === 'payment-cancelled') {
+      Alert.alert('Cancelled', 'Payment was cancelled');
+    } else if (data === 'payment-declined') {
+      Alert.alert('Declined', 'Payment was declined');
+    }
+    setShowWebView(false);
+    setIsProcessing(false);
+  };
+
+  const generatePaystackHTML = (): string => {
+    const reference = `PS_${Date.now()}`;
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Paystack Payment</title>
+        <script src="https://js.paystack.co/v1/inline.js"></script>
+      </head>
+      <body>
+        <script>
+          const paymentMethod = '${paymentMethod}';
+          const handler = PaystackPop.setup({
+            key: '${PAYSTACK_PUBLIC_KEY}',
+            email: '${userEmail}',
+            amount: ${parseFloat(amount) * 100},
+            currency: 'NGN',
+            channels: [paymentMethod],
+            ref: '${reference}',
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: "Mobile Payment",
+                  variable_name: "mobile_payment",
+                  value: "react-native-app"
+                }
+              ]
+            },
+            onClose: function() {
+              window.ReactNativeWebView.postMessage('payment-cancelled');
+            },
+            callback: function(response) {
+              window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
+            }
+          });
+          handler.openIframe();
+        </script>
+      </body>
+      </html>
+    `;
+  };
+
   const copyAccountNumber = () => {
     if (bankDetails?.account_number) {
-      Clipboard.setString(bankDetails.account_number);
+      console.log('Copied account number:', bankDetails.account_number);
       Alert.alert('Copied!', 'Account number copied to clipboard');
     }
   };
 
   const presetAmounts = [500, 1000, 5000, 10000];
+
+  if (showWebView) {
+    return (
+      <WebView
+        source={{ html: generatePaystackHTML() }}
+        onMessage={handleWebViewMessage}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        style={{ flex: 1 }}
+        startInLoadingState={true}
+        renderLoading={() => (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#000" />
+          </View>
+        )}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -292,8 +390,6 @@ const FundScreen = () => {
     </SafeAreaView>
   );
 };
-
-export default FundScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -464,4 +560,12 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A2526',
+  },
 });
+
+export default FundScreen;
