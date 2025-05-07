@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Platform, SafeAreaView, Alert, ActivityIndicator, Clipboard } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Platform,
+  SafeAreaView,
+  Alert,
+  ActivityIndicator,
+  Clipboard,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/config/supabase';
+import * as WebBrowser from 'expo-web-browser';
 
-export default function FundScreen() {
+const FundScreen = () => {
   const router = useRouter();
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
@@ -14,7 +26,7 @@ export default function FundScreen() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
 
-  // State for bank details
+  // Bank transfer state
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [bankDetails, setBankDetails] = useState<{
     account_number: string;
@@ -22,7 +34,7 @@ export default function FundScreen() {
     reference: string;
   } | null>(null);
 
-  // Listen for real-time transaction update
+  // Listen for real-time transaction updates
   useEffect(() => {
     let subscription;
 
@@ -53,6 +65,7 @@ export default function FundScreen() {
     };
   }, [bankDetails]);
 
+  // Fetch user data on load
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -74,6 +87,7 @@ export default function FundScreen() {
         router.replace('/login');
       }
     };
+
     fetchUserData();
   }, []);
 
@@ -105,67 +119,35 @@ export default function FundScreen() {
       setIsProcessing(true);
       setError('');
 
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('Please sign in to continue');
-      }
-
-      const accessToken = session.access_token;
-      if (!accessToken) {
-        throw new Error('No valid session token available');
-      }
-
-      const payload = {
-        amount: Number(parsedAmount),
-        email: userEmail,
-        name: userName,
-      };
-
-      const { data, error: paymentError } = await supabase.functions.invoke('payment', {
-        body: payload,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
+      // Call Supabase function to initialize Paystack transaction
+      const reference = `TXN_${Date.now()}`;
+      const { data, error: functionError } = await supabase.functions.invoke('payment', {
+        body: {
+          amount: parsedAmount,
+          email: userEmail,
+          reference,
         },
       });
 
-      if (paymentError) {
-        const errorMessage = data?.message || paymentError.message || 'Payment processing failed';
-        const status = data?.httpStatus || paymentError.status;
-        if (status === 401) {
-          router.replace('/login');
-          throw new Error(errorMessage || 'Authentication failed. Please sign in again.');
-        } else if (status === 400) {
-          throw new Error(errorMessage || 'Invalid payment details.');
-        } else if (status === 500) {
-          throw new Error(errorMessage || 'Server error. Please try again later.');
-        }
-        throw new Error(errorMessage);
+      if (functionError || !data || !data.authorization_url) {
+        throw new Error(functionError?.message || 'Failed to initialize payment');
       }
 
-      if (data.is_bank_transfer && data.account_number && data.bank_name) {
-        setBankDetails({
-          account_number: data.account_number,
-          bank_name: data.bank_name,
-          reference: data.reference,
-        });
-        setShowBankDetails(true);
-      } else if (data.authorization_url) {
-        router.push({
-          pathname: '/payment-webview',
-          params: {
-            paymentUrl: data.authorization_url,
-            callbackUrl: 'edgesnetwork://payment-callback',
-            amount: parsedAmount.toString(),
-            reference: data.reference || `ref-${Date.now()}`,
-          },
-        });
-      } else {
-        throw new Error('Unexpected payment response');
-      }
-    } catch (err: any) {
-      console.error('Full payment error:', err);
+      // Open the Paystack authorization URL in the system browser
+      const result = await WebBrowser.openBrowserAsync(data.authorization_url);
+      console.log("WebBrowser Result:", result);
+
+      // After the browser closes, you should ideally verify the payment status
+      Alert.alert(
+        'Payment Initiated',
+        'Please complete the payment in the browser. Check your wallet balance after completion.'
+      );
+
+      setIsProcessing(false);
+
+    } catch (err) {
+      console.error('Payment error:', err);
       Alert.alert('Payment Error', err.message || 'An unexpected error occurred');
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -195,6 +177,7 @@ export default function FundScreen() {
 
         {!showBankDetails ? (
           <>
+            {/* Balance Section */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -203,10 +186,11 @@ export default function FundScreen() {
             >
               <Text style={styles.balanceLabel}>Balance (NGN)</Text>
               <Text style={styles.balanceText}>
-                ₦{amount ? parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                ₦{amount ? parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 }) : '0.00'}
               </Text>
             </MotiView>
 
+            {/* Amount Input */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -235,10 +219,11 @@ export default function FundScreen() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </MotiView>
 
+            {/* Preset Amounts */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 300, delay: 200 }}
+              transition={{ type: 'timing', duration: 300, delay: 200}}
               style={styles.presetContainer}
             >
               {presetAmounts.map((value) => (
@@ -255,6 +240,7 @@ export default function FundScreen() {
               ))}
             </MotiView>
 
+            {/* Top Up Button */}
             <MotiView
               from={{ scale: 1 }}
               animate={{ scale: [1, 1.02, 1] }}
@@ -274,6 +260,7 @@ export default function FundScreen() {
               </Pressable>
             </MotiView>
 
+            {/* Payment Steps */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -304,11 +291,11 @@ export default function FundScreen() {
             <Text style={styles.bankTitle}>Bank Transfer Details</Text>
             <View style={styles.bankDetailRow}>
               <Text style={styles.bankLabel}>Bank:</Text>
-              <Text style={styles.bankValue}>{bankDetails.bank_name}</Text>
+              <Text style={styles.bankValue}>{bankDetails?.bank_name}</Text>
             </View>
             <View style={styles.bankDetailRow}>
               <Text style={styles.bankLabel}>Account No:</Text>
-              <Text style={styles.bankValue}>{bankDetails.account_number}</Text>
+              <Text style={styles.bankValue}>{bankDetails?.account_number}</Text>
             </View>
             <Pressable
               onPress={copyAccountNumber}
@@ -324,7 +311,9 @@ export default function FundScreen() {
       </View>
     </SafeAreaView>
   );
-}
+};
+
+export default FundScreen;
 
 const styles = StyleSheet.create({
   container: {
