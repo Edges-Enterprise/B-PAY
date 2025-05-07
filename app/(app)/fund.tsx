@@ -16,7 +16,6 @@ import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/config/supabase';
-import * as WebBrowser from 'expo-web-browser';
 
 const FundScreen = () => {
   const router = useRouter();
@@ -119,35 +118,16 @@ const FundScreen = () => {
       setIsProcessing(true);
       setError('');
 
-      // Call Supabase function to initialize Paystack transaction
-      const reference = `TXN_${Date.now()}`;
-      const { data, error: functionError } = await supabase.functions.invoke('payment', {
-        body: {
-          amount: parsedAmount,
-          email: userEmail,
-          reference,
-        },
+      // Navigate to Paystack payment screen with the selected amount
+      router.push({
+        pathname: '/PaystackPaymentScreen',
+        params: { amount: parsedAmount.toString(), email: userEmail },
       });
 
-      if (functionError || !data || !data.authorization_url) {
-        throw new Error(functionError?.message || 'Failed to initialize payment');
-      }
-
-      // Open the Paystack authorization URL in the system browser
-      const result = await WebBrowser.openBrowserAsync(data.authorization_url);
-      console.log("WebBrowser Result:", result);
-
-      // After the browser closes, you should ideally verify the payment status
-      Alert.alert(
-        'Payment Initiated',
-        'Please complete the payment in the browser. Check your wallet balance after completion.'
-      );
-
       setIsProcessing(false);
-
     } catch (err) {
-      console.error('Payment error:', err);
-      Alert.alert('Payment Error', err.message || 'An unexpected error occurred');
+      console.error('Error:', err);
+      Alert.alert('Error', err.message || 'An unexpected error occurred');
       setIsProcessing(false);
     }
   };
@@ -223,7 +203,7 @@ const FundScreen = () => {
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 300, delay: 200}}
+              transition={{ type: 'timing', duration: 300, delay: 200 }}
               style={styles.presetContainer}
             >
               {presetAmounts.map((value) => (
@@ -274,7 +254,7 @@ const FundScreen = () => {
               </View>
               <View style={styles.step}>
                 <Text style={styles.stepNumber}>2</Text>
-                <Text style={styles.stepText}>Complete payment via Paystack</Text>
+                <Text style={styles.stepText}>Select payment method and complete payment</Text>
               </View>
               <View style={styles.step}>
                 <Text style={styles.stepNumber}>3</Text>
