@@ -153,12 +153,47 @@ const FundScreen = () => {
     }
   };
 
-  const handleWebViewMessage = (event: any): void => {
+  const handleWebViewMessage = async (event: any): Promise<void> => {
     const data = event.nativeEvent.data;
     if (data.startsWith('payment-success:')) {
       const reference = data.split(':')[1];
+      
+      // Send metadata to Supabase transactions table
+      try {
+        const { error } = await supabase
+          .from('transactions')
+          .insert({
+            user_email: userEmail,
+            amount: parseFloat(amount),
+            reference: reference,
+            status: 'success',
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: 'Mobile Payment',
+                  variable_name: 'mobile_payment',
+                  value: 'react-native-app',
+                },
+              ],
+              payment_method: paymentMethod,
+              payment_date: new Date().toISOString(),
+            },
+          });
+
+        if (error) {
+          console.error('Error inserting transaction to Supabase:', error);
+          Alert.alert('Error', 'Failed to save transaction data.');
+        } else {
+          console.log('Transaction saved to Supabase:', { user_email: userEmail, amount: parseFloat(amount), reference });
+        }
+      } catch (err) {
+        console.error('Unexpected error saving transaction:', err);
+        Alert.alert('Error', 'An unexpected error occurred while saving transaction.');
+      }
+
+      // Send receipt and navigate
       sendTestReceipt(reference, amount, userEmail);
-      router.push({ pathname: '/wallet', params: { amount } }); // Navigate to /wallet with amount
+      router.push({ pathname: '/wallet', params: { amount } });
     } else if (data === 'payment-cancelled') {
       Alert.alert('Cancelled', 'Payment was cancelled');
     } else if (data === 'payment-declined') {
