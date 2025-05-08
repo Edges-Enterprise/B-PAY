@@ -1,6 +1,4 @@
-// app/receipt.tsx
-
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +7,7 @@ import {
   Alert,
   Platform,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -28,6 +27,9 @@ export default function ReceiptScreen() {
   const params = useLocalSearchParams();
   const viewShotRef = useRef<ViewShot>(null);
 
+  // State for media library permission
+  const [mediaPermission, setMediaPermission] = useState<boolean | null>(null);
+
   const {
     id,
     provider,
@@ -42,15 +44,24 @@ export default function ReceiptScreen() {
 
   const metadata = metadataString ? JSON.parse(metadataString as string) : {};
 
+  // Request media library permission on mount
+  useEffect(() => {
+    (async () => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      setMediaPermission(status === 'granted');
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Media library access is needed to save or share the receipt.'
+        );
+      }
+    })();
+  }, []);
+
   const handleSaveScreenshot = async () => {
     try {
       if (!viewShotRef.current?.capture) throw new Error('ViewShot not ready');
-
-      const { status: permissionStatus } = await MediaLibrary.requestPermissionsAsync();
-      if (permissionStatus !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant storage access to save screenshot.');
-        return;
-      }
 
       const uri = await viewShotRef.current.capture();
       const asset = await MediaLibrary.createAssetAsync(uri);
@@ -83,6 +94,16 @@ export default function ReceiptScreen() {
     }
   };
 
+  // Conditional rendering based on permissions
+  if (mediaPermission === null) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Checking Permissions...</Text>
+      </View>
+    );
+  }
+
+  // Main UI (shown even if permissions are denied, since displaying the receipt doesn't require permissions)
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -144,11 +165,23 @@ export default function ReceiptScreen() {
         </ViewShot>
 
         <View style={styles.actionButtons}>
-          <Pressable onPress={handleSaveScreenshot} style={styles.actionButton}>
+          <Pressable
+            onPress={mediaPermission ? handleSaveScreenshot : () => Alert.alert(
+              'Permission Required',
+              'Media library access is needed to save the receipt. Please grant permissions in your device settings.'
+            )}
+            style={styles.actionButton}
+          >
             <Ionicons name="download-outline" size={20} color="white" />
             <Text style={styles.actionButtonText}>Save</Text>
           </Pressable>
-          <Pressable onPress={handleShare} style={styles.actionButton}>
+          <Pressable
+            onPress={mediaPermission ? handleShare : () => Alert.alert(
+              'Permission Required',
+              'Media library access is needed to share the receipt. Please grant permissions in your device settings.'
+            )}
+            style={styles.actionButton}
+          >
             <Ionicons name="share-outline" size={20} color="white" />
             <Text style={styles.actionButtonText}>Share</Text>
           </Pressable>

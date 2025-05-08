@@ -38,12 +38,9 @@ export default function HistoryScreen() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [userEmail, setUserEmail] = useState<string>('');
 
-  // Fetch user and transaction history
   const fetchHistory = useCallback(async () => {
     try {
       setRefreshing(true);
-
-      // Get authenticated user
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user || !user.email) {
         console.error('User not authenticated or email missing:', authError?.message);
@@ -55,7 +52,6 @@ export default function HistoryScreen() {
       console.log('Authenticated user email:', user.email);
       setUserEmail(user.email);
 
-      // Fetch transactions
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select('id, amount, status, metadata, created_at, reference')
@@ -70,10 +66,9 @@ export default function HistoryScreen() {
       console.log('Fetched transactions:', JSON.stringify(txData, null, 2));
 
       if (txData.length === 0) {
-        Alert.alert('No Transactions', 'No transactions found for this account. Try making a purchase or check if you’re logged in with the correct email.');
+        Alert.alert('No Transactions', 'No transactions found for this account.');
       }
 
-      // Map transactions to HistoryItem
       const formattedHistory: HistoryItem[] = txData.map((tx) => {
         let provider = 'Unknown';
         let data = 'Unknown';
@@ -116,7 +111,6 @@ export default function HistoryScreen() {
     }
   }, []);
 
-  // Fetch history on mount
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
@@ -130,7 +124,7 @@ export default function HistoryScreen() {
   const handleTransactionPress = (item: HistoryItem) => {
     try {
       router.push({
-        pathname: '/(app)/receipt',
+        pathname: '/receipt', // Corrected route
         params: {
           id: item.id,
           provider: item.provider,
@@ -164,8 +158,6 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Purchase History</Text>
-
-      {/* Filter Tabs */}
       <View style={styles.filterTabs}>
         {['All', 'Success', 'Failed', 'Pending'].map((item) => (
           <Pressable
@@ -187,8 +179,6 @@ export default function HistoryScreen() {
           </Pressable>
         ))}
       </View>
-
-      {/* History List */}
       {filteredHistory.length > 0 ? (
         <FlatList
           data={filteredHistory}

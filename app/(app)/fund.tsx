@@ -104,6 +104,11 @@ const FundScreen = () => {
 
   const sendTestReceipt = async (reference: string, amount: string, email: string) => {
     try {
+      const parsedAmount = parseFloat(amount);
+      const feePercentage = 0.10; // 10% total fee (2% transfer + 4% wallet management + 4% API/network)
+      const feeAmount = parsedAmount * feePercentage;
+      const netAmount = parsedAmount - feeAmount;
+
       const receiptDetails = {
         to: email,
         subject: 'Payment Receipt',
@@ -111,7 +116,13 @@ const FundScreen = () => {
           Payment Receipt
           ----------------
           Reference: ${reference}
-          Amount: ₦${parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Amount Paid: ₦${parsedAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Fees:
+            - Transfer Fee (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - Wallet Management Fee (4%): ₦${(parsedAmount * 0.04).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - API & Network Protocols Fee (4%): ₦${(parsedAmount * 0.04).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Total Fees (10%): ₦${feeAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Amount Credited to Wallet: ₦${netAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
           Date: ${new Date().toLocaleString()}
           Status: Successful
           ----------------
@@ -126,6 +137,11 @@ const FundScreen = () => {
 
   const updateWalletBalance = async (userEmail: string, amount: number) => {
     try {
+      // Calculate net amount after 10% deduction (2% transfer fee + 4% wallet management + 4% API/network)
+      const feePercentage = 0.10; // 10% total fee
+      const netAmount = amount * (1 - feePercentage);
+      console.log(`Deducting 10% fee (₦${(amount * feePercentage).toFixed(2)}) from deposit of ₦${amount}. Crediting ₦${netAmount.toFixed(2)}`);
+
       // Fetch current wallet
       const { data: wallet, error: fetchError } = await supabase
         .from('wallets')
@@ -137,9 +153,9 @@ const FundScreen = () => {
         throw fetchError;
       }
 
-      let newBalance = amount;
+      let newBalance = netAmount;
       if (wallet) {
-        newBalance = wallet.balance + amount;
+        newBalance = wallet.balance + netAmount;
         // Update existing wallet
         const { error: updateError } = await supabase
           .from('wallets')
@@ -156,7 +172,7 @@ const FundScreen = () => {
         if (insertError) throw insertError;
       }
 
-      console.log(`Wallet balance updated for ${userEmail}: ₦${newBalance}`);
+      console.log(`Wallet balance updated for ${userEmail}: ₦${newBalance.toFixed(2)}`);
     } catch (error) {
       console.error('Error updating wallet balance:', error);
       throw new Error('Failed to update wallet balance');
@@ -181,7 +197,12 @@ const FundScreen = () => {
         throw new Error('User username is required');
       }
 
-      // Record pending transaction
+      // Calculate fees
+      const feePercentage = 0.10; // 10% total fee
+      const feeAmount = parsedAmount * feePercentage;
+      const netAmount = parsedAmount - feeAmount;
+
+      // Record pending transaction with fee details in metadata
       const transactionData = {
         user_email: userEmail,
         amount: parsedAmount,
@@ -197,6 +218,13 @@ const FundScreen = () => {
           ],
           payment_method: 'card',
           payment_date: new Date().toISOString(),
+          fees: {
+            transfer_fee: parsedAmount * 0.02, // 2%
+            wallet_management_fee: parsedAmount * 0.04, // 4%
+            api_network_fee: parsedAmount * 0.04, // 4%
+            total_fee: feeAmount,
+            net_amount: netAmount,
+          },
         },
       };
 
@@ -209,7 +237,7 @@ const FundScreen = () => {
         .single();
 
       if (pendingTxError) {
-        console.error('Pending transaction insert error:', pendingTxError.message);
+        console.error('Pending TRANSACTION insert error:', pendingTxError.message);
         throw new Error('Failed to record pending transaction');
       }
 
