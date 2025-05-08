@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, StatusBar, Platform, SafeAreaView, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { colors } from '@/constants/colors';
 import { useColorScheme } from '@/lib/useColorScheme';
+import { supabase } from '@/config/supabase';
 
 // Define types
 interface Transaction {
@@ -23,35 +24,69 @@ interface Recommendation {
 export default function WalletScreen() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
-  const { amount } = useLocalSearchParams<{ amount: string }>(); // Amount passed from FundScreen
   const [showBalance, setShowBalance] = useState<boolean>(false);
   const [showTransactions, setShowTransactions] = useState<boolean>(false);
   const [currentRecommendations, setCurrentRecommendations] = useState<Recommendation[]>([]);
+  const [balance, setBalance] = useState<number>(0);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Debug amount param
+  // Fetch user data and wallet balance
   useEffect(() => {
-    console.log('Received amount param:', amount);
-  }, [amount]);
+    const fetchUserAndWallet = async () => {
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user || !user.email) {
+          console.error('User not authenticated or email missing');
+          router.replace('/login');
+          return;
+        }
 
-  // Set balance based on deposited amount, default to 0
-  const balance: number = amount ? parseFloat(amount) : 0;
-  const hasPriorDataPurchase: boolean = true;
+        setUserEmail(user.email);
 
-  // Set transactions based on deposited amount
-  const transactions: Transaction[] = amount
-    ? [
-        {
+        // Fetch wallet balance
+        const { data: wallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_email', user.email)
+          .single();
+
+        if (walletError && walletError.code !== 'PGRST116') {
+          throw walletError;
+        }
+
+        setBalance(wallet?.balance || 0);
+
+        // Fetch recent transactions
+        const { data: txData, error: txError } = await supabase
+          .from('transactions')
+          .select('amount, status, metadata, created_at')
+          .eq('user_email', user.email)
+          .eq('status', 'success')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (txError) throw txError;
+
+        const formattedTransactions: Transaction[] = txData.map((tx) => ({
           type: 'Wallet Funding',
-          amount: parseFloat(amount),
-          method: 'Paystack',
-          date: new Date().toLocaleDateString('en-US', {
+          amount: tx.amount,
+          method: tx.metadata?.payment_method || 'Unknown',
+          date: new Date(tx.created_at).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
           }),
-        },
-      ]
-    : [];
+        }));
+
+        setTransactions(formattedTransactions);
+      } catch (error) {
+        console.error('Error fetching wallet data:', error);
+      }
+    };
+
+    fetchUserAndWallet();
+  }, []);
 
   // Recommendations data
   const recommendations: Recommendation[] = [
@@ -95,7 +130,9 @@ export default function WalletScreen() {
   const hiddenBalance: string = '₦****' + formattedBalance.slice(-3);
 
   // Handle purchase of recommended items
-  const handlePurchase = (rec: Recommendation) => {
+  const handlePurchase = async (rec: Recommendation) => {
+    const hasPriorDataPurchase: boolean = transactions.length > 0;
+
     if (!hasPriorDataPurchase) {
       console.log('User must have prior data purchase.');
       return;
@@ -106,11 +143,42 @@ export default function WalletScreen() {
       return;
     }
 
-    console.log(`Purchasing: ${rec.text} for ₦${rec.price}`);
-    router.push({
-      pathname: '/success',
-      params: { plan: rec.text, amount: rec.price.toString() },
-    });
+    try {
+      // Update wallet balance
+      const newBalance = balance - rec.price;
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({ balance: newBalance })
+        .eq('user_email', userEmail);
+
+      if (updateError) throw updateError;
+
+      // Record purchase as a transaction
+      const { error: txError } = await supabase
+        .from('transactions')
+        .insert({
+          user_email: userEmail,
+          amount: -rec.price,
+          reference: `PURCHASE_${Date.now()}`,
+          status: 'success',
+          metadata: {
+            purchase: rec.text,
+            payment_date: new Date().toISOString(),
+          },
+        });
+
+      if (txError) throw txError;
+
+      setBalance(newBalance);
+
+      console.log(`Purchasing: ${rec.text} for ₦${rec.price}`);
+      router.push({
+        pathname: '/success',
+        params: { plan: rec.text, amount: rec.price.toString() },
+      });
+    } catch (error) {
+      console.error('Error processing purchase:', error);
+    }
   };
 
   return (

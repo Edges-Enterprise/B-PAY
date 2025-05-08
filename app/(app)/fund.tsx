@@ -55,7 +55,7 @@ const FundScreen = () => {
           },
           (payload) => {
             if (payload.new.status === 'success') {
-              router.push({ pathname: '/wallet', params: { amount } });
+              router.push('/wallet');
             }
           }
         )
@@ -67,7 +67,7 @@ const FundScreen = () => {
         supabase.removeChannel(subscription);
       }
     };
-  }, [bankDetails, amount]);
+  }, [bankDetails]);
 
   // Fetch user data on load
   useEffect(() => {
@@ -124,6 +124,45 @@ const FundScreen = () => {
     }
   };
 
+  const updateWalletBalance = async (userEmail: string, amount: number) => {
+    try {
+      // Fetch current wallet
+      const { data: wallet, error: fetchError } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_email', userEmail)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      let newBalance = amount;
+      if (wallet) {
+        newBalance = wallet.balance + amount;
+        // Update existing wallet
+        const { error: updateError } = await supabase
+          .from('wallets')
+          .update({ balance: newBalance })
+          .eq('user_email', userEmail);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new wallet
+        const { error: insertError } = await supabase
+          .from('wallets')
+          .insert({ user_email: userEmail, balance: newBalance });
+
+        if (insertError) throw insertError;
+      }
+
+      console.log(`Wallet balance updated for ${userEmail}: ₦${newBalance}`);
+    } catch (error) {
+      console.error('Error updating wallet balance:', error);
+      throw new Error('Failed to update wallet balance');
+    }
+  };
+
   const handleFundWallet = async () => {
     try {
       const parsedAmount = parseFloat(amount);
@@ -157,10 +196,10 @@ const FundScreen = () => {
     const data = event.nativeEvent.data;
     if (data.startsWith('payment-success:')) {
       const reference = data.split(':')[1];
-      
-      // Send metadata to Supabase transactions table
+
       try {
-        const { error } = await supabase
+        // Insert transaction
+        const { error: transactionError } = await supabase
           .from('transactions')
           .insert({
             user_email: userEmail,
@@ -180,20 +219,22 @@ const FundScreen = () => {
             },
           });
 
-        if (error) {
-          console.error('Error inserting transaction to Supabase:', error);
-          Alert.alert('Error', 'Failed to save transaction data.');
-        } else {
-          console.log('Transaction saved to Supabase:', { user_email: userEmail, amount: parseFloat(amount), reference });
+        if (transactionError) {
+          throw transactionError;
         }
-      } catch (err) {
-        console.error('Unexpected error saving transaction:', err);
-        Alert.alert('Error', 'An unexpected error occurred while saving transaction.');
-      }
 
-      // Send receipt and navigate
-      sendTestReceipt(reference, amount, userEmail);
-      router.push({ pathname: '/wallet', params: { amount } });
+        // Update wallet balance
+        await updateWalletBalance(userEmail, parseFloat(amount));
+
+        // Send receipt
+        await sendTestReceipt(reference, amount, userEmail);
+
+        // Navigate to wallet
+        router.push('/wallet');
+      } catch (err) {
+        console.error('Error processing transaction:', err);
+        Alert.alert('Error', 'Failed to process transaction.');
+      }
     } else if (data === 'payment-cancelled') {
       Alert.alert('Cancelled', 'Payment was cancelled');
     } else if (data === 'payment-declined') {
