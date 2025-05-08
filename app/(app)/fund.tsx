@@ -181,9 +181,41 @@ const FundScreen = () => {
         throw new Error('User username is required');
       }
 
+      // Record pending transaction
+      const transactionData = {
+        user_email: userEmail,
+        amount: parsedAmount,
+        reference: `PS_${Date.now()}`,
+        status: 'pending',
+        metadata: {
+          custom_fields: [
+            {
+              display_name: 'Mobile Payment',
+              variable_name: 'mobile_payment',
+              value: 'Edges Network',
+            },
+          ],
+          payment_method: 'card',
+          payment_date: new Date().toISOString(),
+        },
+      };
+
+      console.log('Inserting pending transaction:', JSON.stringify(transactionData, null, 2));
+
+      const { data: pendingTx, error: pendingTxError } = await supabase
+        .from('transactions')
+        .insert(transactionData)
+        .select('id')
+        .single();
+
+      if (pendingTxError) {
+        console.error('Pending transaction insert error:', pendingTxError.message);
+        throw new Error('Failed to record pending transaction');
+      }
+
       setIsProcessing(true);
       setError('');
-      setPaymentMethod('card'); // Default to card payment
+      setPaymentMethod('card');
       setShowWebView(true);
     } catch (err) {
       console.error('Error:', err);
@@ -194,33 +226,19 @@ const FundScreen = () => {
 
   const handleWebViewMessage = async (event: any): Promise<void> => {
     const data = event.nativeEvent.data;
-    if (data.startsWith('payment-success:')) {
-      const reference = data.split(':')[1];
+    try {
+      if (data.startsWith('payment-success:')) {
+        const reference = data.split(':')[1];
 
-      try {
-        // Insert transaction
-        const { error: transactionError } = await supabase
+        // Update transaction to success
+        const { error: successError } = await supabase
           .from('transactions')
-          .insert({
-            user_email: userEmail,
-            amount: parseFloat(amount),
-            reference: reference,
-            status: 'success',
-            metadata: {
-              custom_fields: [
-                {
-                  display_name: 'Mobile Payment',
-                  variable_name: 'mobile_payment',
-                  value: 'react-native-app',
-                },
-              ],
-              payment_method: paymentMethod,
-              payment_date: new Date().toISOString(),
-            },
-          });
+          .update({ status: 'success' })
+          .eq('reference', reference);
 
-        if (transactionError) {
-          throw transactionError;
+        if (successError) {
+          console.error('Success transaction update error:', successError.message);
+          throw new Error('Failed to update transaction status');
         }
 
         // Update wallet balance
@@ -231,17 +249,29 @@ const FundScreen = () => {
 
         // Navigate to wallet
         router.push('/wallet');
-      } catch (err) {
-        console.error('Error processing transaction:', err);
-        Alert.alert('Error', 'Failed to process transaction.');
+      } else if (data === 'payment-cancelled' || data === 'payment-declined') {
+        // Update transaction to failed
+        const { error: failedError } = await supabase
+          .from('transactions')
+          .update({ status: 'failed' })
+          .eq('user_email', userEmail)
+          .eq('status', 'pending')
+          .eq('amount', parseFloat(amount));
+
+        if (failedError) {
+          console.error('Failed transaction update error:', failedError.message);
+          throw new Error('Failed to update transaction status');
+        }
+
+        Alert.alert(data === 'payment-cancelled' ? 'Cancelled' : 'Declined', 'Payment was not completed.');
       }
-    } else if (data === 'payment-cancelled') {
-      Alert.alert('Cancelled', 'Payment was cancelled');
-    } else if (data === 'payment-declined') {
-      Alert.alert('Declined', 'Payment was declined');
+    } catch (err) {
+      console.error('Error processing transaction:', err);
+      Alert.alert('Error', 'Failed to process transaction.');
+    } finally {
+      setShowWebView(false);
+      setIsProcessing(false);
     }
-    setShowWebView(false);
-    setIsProcessing(false);
   };
 
   const generatePaystackHTML = (): string => {
@@ -270,7 +300,7 @@ const FundScreen = () => {
                 {
                   display_name: "Mobile Payment",
                   variable_name: "mobile_payment",
-                  value: "react-native-app"
+                  value: "Edges Network"
                 }
               ]
             },

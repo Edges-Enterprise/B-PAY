@@ -9,10 +9,12 @@ import {
   PanResponder,
   StyleSheet,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
+import { supabase } from '@/config/supabase';
 
 // Import modals
 import PurchaseModal from '@/components/homescreen/PurchaseModal';
@@ -93,9 +95,44 @@ const BuyDataScreen: React.FC = () => {
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [showNewPin, setShowNewPin] = useState<boolean>(false);
   const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
+  const [balance, setBalance] = useState<number>(0);
+  const [userEmail, setUserEmail] = useState<string>('');
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const balance: number = 12300;
   const hasTransactionPin: boolean = true;
+
+  // Fetch user data and wallet balance
+  useEffect(() => {
+    const fetchUserAndWallet = async () => {
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user || !user.email) {
+          console.error('User not authenticated or email missing');
+          router.replace('/login');
+          return;
+        }
+
+        setUserEmail(user.email);
+
+        // Fetch wallet balance
+        const { data: wallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_email', user.email)
+          .single();
+
+        if (walletError && walletError.code !== 'PGRST116') {
+          throw walletError;
+        }
+
+        setBalance(wallet?.balance || 0);
+      } catch (error) {
+        console.error('Error fetching wallet data:', error);
+        Alert.alert('Error', 'Failed to load wallet data.');
+      }
+    };
+
+    fetchUserAndWallet();
+  }, []);
 
   const getProviderFromPhone = (phone: string): string => {
     const prefix = phone.slice(0, 4);
@@ -119,24 +156,24 @@ const BuyDataScreen: React.FC = () => {
     }
   }, [phoneNumber]);
 
-  const handlePurchase = () => {
+  const handlePurchase = async () => {
     if (!selectedBundle || !selectedProvider) {
-      alert('No bundle or provider selected');
+      Alert.alert('Error', 'No bundle or provider selected');
       return;
     }
 
     if (phoneNumber.length !== 11) {
-      alert('Please enter a valid 11-digit phone number');
+      Alert.alert('Error', 'Please enter a valid 11-digit phone number');
       return;
     }
 
     if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-      alert('Please enter a transaction PIN between 4 and 6 digits');
+      Alert.alert('Error', 'Please enter a transaction PIN between 4 and 6 digits');
       return;
     }
 
     if (balance < selectedBundle.price) {
-      alert('Insufficient balance');
+      Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
       return;
     }
 
@@ -144,17 +181,104 @@ const BuyDataScreen: React.FC = () => {
     setTransactionModalVisible(true);
     setTransactionStatus('processing');
 
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.3;
-      setTransactionStatus(isSuccess ? 'success' : 'failed');
-      if (isSuccess) {
-        setLastPurchasedNumber(phoneNumber);
-        router.push({
-          pathname: '/success',
-          params: { plan: `${selectedBundle.data} on ${selectedProvider.name}`, amount: selectedBundle.price.toString() },
-        });
+    try {
+      // Record pending transaction
+      const transactionData = {
+        user_email: userEmail,
+        amount: -selectedBundle.price,
+        reference: `DATA_PURCHASE_${Date.now()}`,
+        status: 'pending',
+        metadata: {
+          purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
+          phone_number: phoneNumber,
+          validity: selectedBundle.validity,
+          payment_date: new Date().toISOString(),
+          custom_fields: [
+            {
+              display_name: 'Mobile Payment',
+              variable_name: 'mobile_payment',
+              value: 'Edges Network',
+            },
+          ],
+        },
+      };
+
+      console.log('Inserting pending transaction:', JSON.stringify(transactionData, null, 2));
+
+      const { data: pendingTx, error: pendingTxError } = await supabase
+        .from('transactions')
+        .insert(transactionData)
+        .select('id')
+        .single();
+
+      if (pendingTxError) {
+        console.error('Pending transaction insert error:', pendingTxError.message);
+        throw new Error('Failed to record pending transaction');
       }
-    }, 2000);
+
+      // Simulate payment processing
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const isSuccess = Math.random() > 0.3;
+
+      if (!isSuccess) {
+        // Update transaction to failed
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({ status: 'failed' })
+          .eq('id', pendingTx.id);
+
+        if (updateError) {
+          console.error('Failed transaction update error:', updateError.message);
+          throw new Error('Failed to update transaction status');
+        }
+
+        setTransactionStatus('failed');
+        Alert.alert('Error', 'Transaction failed. Please try again.');
+        return;
+      }
+
+      // Deduct balance and update wallet
+      const newBalance = balance - selectedBundle.price;
+      const { error: walletUpdateError } = await supabase
+        .from('wallets')
+        .update({ balance: newBalance })
+        .eq('user_email', userEmail);
+
+      if (walletUpdateError) {
+        // Update transaction to failed
+        await supabase
+          .from('transactions')
+          .update({ status: 'failed' })
+          .eq('id', pendingTx.id);
+        throw new Error('Failed to update wallet balance');
+      }
+
+      // Update transaction to success
+      const { error: successUpdateError } = await supabase
+        .from('transactions')
+        .update({ status: 'success' })
+        .eq('id', pendingTx.id);
+
+      if (successUpdateError) {
+        console.error('Success transaction update error:', successUpdateError.message);
+        throw new Error('Failed to update transaction status');
+      }
+
+      // Update state
+      setBalance(newBalance);
+      setLastPurchasedNumber(phoneNumber);
+      setTransactionStatus('success');
+      Alert.alert('Success', `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${selectedBundle.price}.`);
+
+      router.push({
+        pathname: '/success',
+        params: { plan: `${selectedBundle.data} on ${selectedProvider.name}`, amount: selectedBundle.price.toString() },
+      });
+    } catch (error) {
+      console.error('Error processing purchase:', error);
+      setTransactionStatus('failed');
+      Alert.alert('Error', 'Failed to process purchase. Please try again.');
+    }
   };
 
   const closeTransactionModal = () => {
@@ -182,12 +306,12 @@ const BuyDataScreen: React.FC = () => {
 
   const handleCreatePin = () => {
     if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
-      alert('PIN must be between 4 and 6 digits.');
+      Alert.alert('Error', 'PIN must be between 4 and 6 digits.');
       return;
     }
 
     if (newPin !== confirmPin) {
-      alert('PINs do not match.');
+      Alert.alert('Error', 'PINs do not match.');
       return;
     }
 

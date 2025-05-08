@@ -128,12 +128,14 @@ function AppStack() {
 					},
 				}}
 			>
+				
+
 				<Stack.Screen
 					name="(protected)"
 					options={{ headerTitle: "", headerShown: false }}
 				/>
 				<Stack.Screen
-					name="(auth)"
+					name="(Auth)"
 					options={{ headerTitle: "", headerShown: false }}
 				/>
 				<Stack.Screen

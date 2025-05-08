@@ -1,56 +1,156 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   FlatList,
   Pressable,
-  ScrollView,
   RefreshControl,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import moment from 'moment';
+import { supabase } from '@/config/supabase';
 
 interface HistoryItem {
-  id: number;
+  id: string;
   provider: string;
   data: string;
   price: number;
   date: string;
   status: 'Success' | 'Failed' | 'Pending';
   phoneNumber: string;
+  reference: string;
+  metadata: any;
 }
 
-const mockHistory: HistoryItem[] = [
-  { id: 1, provider: 'MTN', data: '1GB', price: 200, date: '2024-08-01T10:20:00Z', status: 'Success', phoneNumber: '08012345678' },
-  { id: 2, provider: 'MTN', data: '2GB', price: 400, date: '2024-08-02T14:00:00Z', status: 'Success', phoneNumber: '08012345678' },
-  { id: 3, provider: 'MTN', data: '500MB', price: 100, date: '2024-08-04T08:30:00Z', status: 'Failed', phoneNumber: '08087654321' },
-  { id: 4, provider: 'MTN', data: '10GB', price: 2000, date: '2024-08-05T16:45:00Z', status: 'Pending', phoneNumber: '08022223333' },
-];
-
 const statusColors: { [key: string]: string } = {
-  Success: '#22c55e', // Green
-  Failed: '#ef4444',  // Red
-  Pending: '#eab308', // Yellow
+  Success: '#22c55e',
+  Failed: '#ef4444',
+  Pending: '#eab308',
 };
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const [filter, setFilter] = useState<'All' | 'Success' | 'Failed' | 'Pending'>('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [userEmail, setUserEmail] = useState<string>('');
 
-  const filteredHistory = filter === 'All' ? mockHistory : mockHistory.filter(h => h.status === filter);
+  // Fetch user and transaction history
+  const fetchHistory = useCallback(async () => {
+    try {
+      setRefreshing(true);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
+      // Get authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || !user.email) {
+        console.error('User not authenticated or email missing:', authError?.message);
+        Alert.alert('Error', 'Please log in to view your transaction history.');
+        router.replace('/login');
+        return;
+      }
 
-    // Simulate refreshing (e.g., API call)
-    setTimeout(() => {
+      console.log('Authenticated user email:', user.email);
+      setUserEmail(user.email);
+
+      // Fetch transactions
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('id, amount, status, metadata, created_at, reference')
+        .eq('user_email', user.email)
+        .order('created_at', { ascending: false });
+
+      if (txError) {
+        console.error('Transaction fetch error:', txError.message);
+        throw new Error('Failed to fetch transaction history');
+      }
+
+      console.log('Fetched transactions:', JSON.stringify(txData, null, 2));
+
+      if (txData.length === 0) {
+        Alert.alert('No Transactions', 'No transactions found for this account. Try making a purchase or check if you’re logged in with the correct email.');
+      }
+
+      // Map transactions to HistoryItem
+      const formattedHistory: HistoryItem[] = txData.map((tx) => {
+        let provider = 'Unknown';
+        let data = 'Unknown';
+        let phoneNumber = tx.metadata?.phone_number || 'N/A';
+
+        if (tx.metadata?.purchase) {
+          const purchase = tx.metadata.purchase;
+          const [dataPart, providerPart] = purchase.split(' on ');
+          data = dataPart || 'Data Purchase';
+          provider = providerPart || 'Unknown';
+        } else if (tx.metadata?.payment_method) {
+          data = 'Wallet Funding';
+          provider = tx.metadata.payment_method || 'Unknown';
+        }
+
+        const normalizedStatus = tx.status.toLowerCase();
+        const status = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+
+        return {
+          id: tx.id,
+          provider,
+          data,
+          price: Math.abs(tx.amount),
+          date: tx.created_at,
+          status: (['success', 'failed', 'pending'].includes(normalizedStatus)
+            ? status
+            : 'Unknown') as 'Success' | 'Failed' | 'Pending',
+          phoneNumber,
+          reference: tx.reference || 'N/A',
+          metadata: tx.metadata || {},
+        };
+      });
+
+      setHistory(formattedHistory);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      Alert.alert('Error', 'Failed to load purchase history. Please try again.');
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   }, []);
 
+  // Fetch history on mount
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const onRefresh = useCallback(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const filteredHistory = filter === 'All' ? history : history.filter(h => h.status === filter);
+
+  const handleTransactionPress = (item: HistoryItem) => {
+    try {
+      router.push({
+        pathname: '/(app)/receipt',
+        params: {
+          id: item.id,
+          provider: item.provider,
+          data: item.data,
+          price: item.price.toString(),
+          date: item.date,
+          status: item.status,
+          phoneNumber: item.phoneNumber,
+          reference: item.reference,
+          metadata: JSON.stringify(item.metadata),
+        },
+      });
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Error', 'Failed to navigate to receipt. Please try again.');
+    }
+  };
+
   const renderItem = ({ item }: { item: HistoryItem }) => (
-    <View style={styles.historyItem}>
+    <Pressable onPress={() => handleTransactionPress(item)} style={styles.historyItem}>
       <View style={styles.historyItemHeader}>
         <Text style={styles.historyTitle}>{item.provider} - {item.data}</Text>
         <Text style={[styles.historyStatus, { color: statusColors[item.status] }]}>{item.status}</Text>
@@ -58,7 +158,7 @@ export default function HistoryScreen() {
       <Text style={styles.historyPrice}>₦{item.price}</Text>
       <Text style={styles.historyPhone}>Phone: {item.phoneNumber}</Text>
       <Text style={styles.historyDate}>Date: {moment(item.date).format('MMM D, YYYY h:mm A')}</Text>
-    </View>
+    </Pressable>
   );
 
   return (
@@ -73,13 +173,15 @@ export default function HistoryScreen() {
             onPress={() => setFilter(item as typeof filter)}
             style={[
               styles.filterButton,
-              filter === item && styles.activeFilterButton
+              filter === item && styles.activeFilterButton,
             ]}
           >
-            <Text style={[
-              styles.filterButtonText,
-              filter === item && styles.activeFilterButtonText
-            ]}>
+            <Text
+              style={[
+                styles.filterButtonText,
+                filter === item && styles.activeFilterButtonText,
+              ]}
+            >
               {item}
             </Text>
           </Pressable>
@@ -90,7 +192,7 @@ export default function HistoryScreen() {
       {filteredHistory.length > 0 ? (
         <FlatList
           data={filteredHistory}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 40 }}
           refreshControl={
@@ -130,21 +232,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 9999,
     borderWidth: 1,
-    borderColor: '#4b5563', // Gray-600
+    borderColor: '#4b5563',
   },
   activeFilterButton: {
-    backgroundColor: '#2563eb', // Blue-600
+    backgroundColor: '#2563eb',
     borderColor: '#2563eb',
   },
   filterButtonText: {
     fontSize: 14,
-    color: '#d1d5db', // Gray-300
+    color: '#d1d5db',
   },
   activeFilterButtonText: {
     color: '#fff',
   },
   historyItem: {
-    backgroundColor: '#1f2937', // Gray-800
+    backgroundColor: '#1f2937',
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
@@ -164,14 +266,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   historyPrice: {
-    color: '#d1d5db', // Gray-300
+    color: '#d1d5db',
   },
   historyPhone: {
-    color: '#9ca3af', // Gray-400
+    color: '#9ca3af',
     fontSize: 14,
   },
   historyDate: {
-    color: '#6b7280', // Gray-500
+    color: '#6b7280',
     fontSize: 12,
     marginTop: 4,
   },
