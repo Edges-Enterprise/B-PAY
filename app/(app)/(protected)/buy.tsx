@@ -29,6 +29,8 @@ interface DataBundle {
   validity: string;
   category: string;
   description?: string;
+  variation_code: string;
+  planType: string; // SME, Gifting, or Corporate Gifting
 }
 
 interface Provider {
@@ -38,43 +40,14 @@ interface Provider {
   bundles: DataBundle[];
 }
 
-// Sample data
+// Sample data (updated to be dynamically fetched)
 const providers: Provider[] = [
   {
     id: 1,
     name: 'MTN',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4e/MTN_Group_logo.svg',
-    bundles: [
-      {
-        id: 101,
-        data: '1GB',
-        price: 200,
-        validity: '1 day',
-        category: 'Daily',
-        description: 'Perfect for light browsing and social media',
-      },
-      {
-        id: 102,
-        data: '500MB',
-        price: 100,
-        validity: '1 day',
-        category: 'Daily',
-        description: 'Basic browsing and messaging',
-      },
-    ],
+    bundles: [], // Will be populated dynamically
   },
-];
-
-const categories: string[] = [
-  'Daily',
-  'Weekly',
-  'Monthly',
-  'Weekend',
-  '2 Months',
-  '4 Months',
-  'Annual',
-  'Bonanza',
-  'Edge Network',
 ];
 
 const BuyDataScreen: React.FC = () => {
@@ -100,10 +73,15 @@ const BuyDataScreen: React.FC = () => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasTransactionPin: boolean = true;
 
-  // Fetch user data and wallet balance
+  // State to store fetched bundles and categories
+  const [mtnBundles, setMtnBundles] = useState<DataBundle[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Fetch user data, wallet balance, MTN data plans, and dynamically generate categories
   useEffect(() => {
-    const fetchUserAndWallet = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch user and wallet balance
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user || !user.email) {
           console.error('User not authenticated or email missing');
@@ -113,7 +91,6 @@ const BuyDataScreen: React.FC = () => {
 
         setUserEmail(user.email);
 
-        // Fetch wallet balance
         const { data: wallet, error: walletError } = await supabase
           .from('wallets')
           .select('balance')
@@ -125,13 +102,84 @@ const BuyDataScreen: React.FC = () => {
         }
 
         setBalance(wallet?.balance || 0);
+
+        // Fetch MTN data plans from VTpass API
+        const response = await fetch('https://sandbox.vtpass.com/api/service-variations?serviceID=mtn-data', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+        if (data.response_description !== '000') {
+          throw new Error('Failed to fetch MTN data plans');
+        }
+
+        // Map VTpass variations to DataBundle type
+        const fetchedBundles: DataBundle[] = data.content.variations.map((variation: any, index: number) => {
+          // Extract data amount and validity from the name
+          const nameParts = variation.name.match(/N\d+\s*([\d.]+[MG]B)\s*-\s*(\d+\s*(?:day|month|year|hrs)|(?:Saturday|Sunday|night))/i);
+          const dataAmount = nameParts ? nameParts[1] : variation.name;
+          let validity = nameParts ? nameParts[2] : 'Unknown';
+
+          // Determine category based on validity
+          let category = '';
+          if (validity === 'Saturday' || validity === 'Sunday' || variation.name.toLowerCase().includes('weekend')) {
+            category = 'Weekend Plans';
+            validity = 'Weekend'; // Standardize for display
+          } else if (validity.toLowerCase().includes('night') || variation.name.toLowerCase().includes('night')) {
+            category = 'Night Plans';
+            validity = '11 PM - 5 AM'; // Standardize for display
+          } else {
+            const days = parseInt(validity.match(/\d+/)?.[0] || '0', 10);
+            if (['24 hrs', '48 hrs', '72 hrs'].includes(validity) || days <= 3) {
+              category = 'Daily Plans';
+            } else if (days >= 5 && days <= 14) {
+              category = 'Weekly Plans';
+            } else if (days >= 28 && days <= 60) {
+              category = 'Monthly Plans';
+            } else {
+              category = 'Monthly Plans'; // Default to Monthly for anything above 14 days
+            }
+          }
+
+          // Determine plan type (SME, Gifting, Corporate Gifting)
+          let planType = '';
+          if (variation.name.toLowerCase().includes('sme')) planType = 'SME';
+          else if (variation.name.toLowerCase().includes('gifting')) planType = 'Gifting';
+          else if (variation.name.toLowerCase().includes('corporate')) planType = 'Corporate Gifting';
+
+          return {
+            id: index + 1,
+            data: dataAmount,
+            price: parseFloat(variation.variation_amount),
+            validity: validity,
+            category: category,
+            description: variation.name,
+            variation_code: variation.variation_code,
+            planType: planType,
+          };
+        });
+
+        setMtnBundles(fetchedBundles);
+
+        // Update providers with fetched bundles
+        providers[0].bundles = fetchedBundles;
+
+        // Dynamically generate categories from fetched bundles
+        const uniqueCategories = Array.from(new Set(fetchedBundles.map(bundle => bundle.category)));
+        // Sort categories for consistent display
+        const categoryOrder = ['Daily Plans', 'Weekly Plans', 'Monthly Plans', 'Weekend Plans', 'Night Plans'];
+        uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
+        setCategories(uniqueCategories);
       } catch (error) {
-        console.error('Error fetching wallet data:', error);
-        Alert.alert('Error', 'Failed to load wallet data.');
+        console.error('Error fetching data:', error);
+        Alert.alert('Error', 'Failed to load data plans or wallet balance.');
       }
     };
 
-    fetchUserAndWallet();
+    fetchData();
   }, []);
 
   const getProviderFromPhone = (phone: string): string => {
@@ -182,11 +230,14 @@ const BuyDataScreen: React.FC = () => {
     setTransactionStatus('processing');
 
     try {
-      // Record pending transaction
+      // Generate a unique request_id
+      const requestId = `DATA_PURCHASE_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+
+      // Record pending transaction in Supabase
       const transactionData = {
         user_email: userEmail,
         amount: -selectedBundle.price,
-        reference: `DATA_PURCHASE_${Date.now()}`,
+        reference: requestId,
         status: 'pending',
         metadata: {
           purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
@@ -203,8 +254,6 @@ const BuyDataScreen: React.FC = () => {
         },
       };
 
-      console.log('Inserting pending transaction:', JSON.stringify(transactionData, null, 2));
-
       const { data: pendingTx, error: pendingTxError } = await supabase
         .from('transactions')
         .insert(transactionData)
@@ -216,24 +265,62 @@ const BuyDataScreen: React.FC = () => {
         throw new Error('Failed to record pending transaction');
       }
 
-      // Simulate payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const isSuccess = Math.random() > 0.3;
+      // Make purchase request to VTpass API
+      const purchasePayload = {
+        request_id: requestId,
+        serviceID: 'mtn-data',
+        billersCode: phoneNumber,
+        variation_code: selectedBundle.variation_code,
+        amount: selectedBundle.price,
+        phone: phoneNumber,
+      };
 
-      if (!isSuccess) {
+      const purchaseResponse = await fetch('https://sandbox.vtpass.com/api/pay', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(purchasePayload),
+      });
+
+      const purchaseData = await purchaseResponse.json();
+
+      if (purchaseData.code !== '000') {
         // Update transaction to failed
-        const { error: updateError } = await supabase
+        await supabase
           .from('transactions')
           .update({ status: 'failed' })
           .eq('id', pendingTx.id);
 
-        if (updateError) {
-          console.error('Failed transaction update error:', updateError.message);
-          throw new Error('Failed to update transaction status');
-        }
-
         setTransactionStatus('failed');
         Alert.alert('Error', 'Transaction failed. Please try again.');
+        return;
+      }
+
+      // Query transaction status to confirm
+      const queryPayload = {
+        request_id: requestId,
+      };
+
+      const queryResponse = await fetch('https://sandbox.vtpass.com/api/requery', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(queryPayload),
+      });
+
+      const queryData = await queryResponse.json();
+
+      if (queryData.code !== '000' || queryData.content.transactions.status !== 'delivered') {
+        // Update transaction to failed
+        await supabase
+          .from('transactions')
+          .update({ status: 'failed' })
+          .eq('id', pendingTx.id);
+
+        setTransactionStatus('failed');
+        Alert.alert('Error', 'Transaction failed during verification. Please try again.');
         return;
       }
 
@@ -245,7 +332,6 @@ const BuyDataScreen: React.FC = () => {
         .eq('user_email', userEmail);
 
       if (walletUpdateError) {
-        // Update transaction to failed
         await supabase
           .from('transactions')
           .update({ status: 'failed' })
@@ -272,7 +358,20 @@ const BuyDataScreen: React.FC = () => {
 
       router.push({
         pathname: '/success',
-        params: { plan: `${selectedBundle.data} on ${selectedProvider.name}`, amount: selectedBundle.price.toString() },
+        params: {
+          id: pendingTx.id,
+          provider: selectedProvider.name,
+          data: selectedBundle.data,
+          price: selectedBundle.price.toString(),
+          date: new Date().toISOString(),
+          status: 'Success',
+          phoneNumber: phoneNumber,
+          reference: requestId,
+          metadata: JSON.stringify({
+            validity: selectedBundle.validity,
+            payment_method: 'Wallet',
+          }),
+        },
       });
     } catch (error) {
       console.error('Error processing purchase:', error);
@@ -387,6 +486,9 @@ const BuyDataScreen: React.FC = () => {
             <Text style={styles.bundlePrice}>₦{bundle.price}</Text>
           </View>
           <Text style={styles.bundleDescription}>{bundle.description}</Text>
+          {bundle.planType && (
+            <Text style={styles.planTypeText}>{bundle.planType}</Text>
+          )}
           <View style={styles.bundleActions}>
             <MotiView
               from={{ scale: 1 }}
@@ -429,47 +531,51 @@ const BuyDataScreen: React.FC = () => {
             <Text style={styles.providerName}>{selectedProvider.name} Data Bundles</Text>
           </View>
 
-          {categories.map((category) => {
-            const bundlesInCategory = selectedProvider.bundles.filter(
-              (bundle) => bundle.category === category
-            );
-            if (bundlesInCategory.length === 0) return null;
-            const isExpanded = expandedCategory === category;
+          {categories.length === 0 ? (
+            <Text style={styles.loadingText}>Loading categories...</Text>
+          ) : (
+            categories.map((category) => {
+              const bundlesInCategory = selectedProvider.bundles.filter(
+                (bundle) => bundle.category === category
+              );
+              if (bundlesInCategory.length === 0) return null;
+              const isExpanded = expandedCategory === category;
 
-            return (
-              <Animated.View
-                key={category}
-                style={isExpanded ? { zIndex: 10, transform: [{ scale: scaleAnim }] } : {}}
-              >
-                <Pressable
-                  onPress={() => toggleCategory(category)}
-                  style={[
-                    styles.categoryCard,
-                    isExpanded ? styles.expandedCategory : styles.collapsedCategory,
-                  ]}
+              return (
+                <Animated.View
+                  key={category}
+                  style={isExpanded ? { zIndex: 10, transform: [{ scale: scaleAnim }] } : {}}
                 >
-                  <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryTitle}>{category} Plans</Text>
-                    <Ionicons
-                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={20}
-                      color="white"
-                    />
-                  </View>
-                  {isExpanded && (
-                    <View style={styles.categoryContent}>
-                      <Text style={styles.categoryHint}>Select a plan:</Text>
-                      <View style={styles.bundleList}>
-                        {bundlesInCategory.map((bundle) => (
-                          <BundleCard key={bundle.id} bundle={bundle} />
-                        ))}
-                      </View>
+                  <Pressable
+                    onPress={() => toggleCategory(category)}
+                    style={[
+                      styles.categoryCard,
+                      isExpanded ? styles.expandedCategory : styles.collapsedCategory,
+                    ]}
+                  >
+                    <View style={styles.categoryHeader}>
+                      <Text style={styles.categoryTitle}>{category}</Text>
+                      <Ionicons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={20}
+                        color="white"
+                      />
                     </View>
-                  )}
-                </Pressable>
-              </Animated.View>
-            );
-          })}
+                    {isExpanded && (
+                      <View style={styles.categoryContent}>
+                        <Text style={styles.categoryHint}>Select a plan:</Text>
+                        <View style={styles.bundleList}>
+                          {bundlesInCategory.map((bundle) => (
+                            <BundleCard key={bundle.id} bundle={bundle} />
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </Pressable>
+                </Animated.View>
+              );
+            })
+          )}
         </ScrollView>
 
         {/* Modals */}
@@ -635,6 +741,12 @@ const styles = StyleSheet.create({
     color: '#A1A1AA',
     marginBottom: 12,
   },
+  planTypeText: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
   bundleActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -691,6 +803,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
 
