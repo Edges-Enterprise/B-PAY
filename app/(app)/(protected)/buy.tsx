@@ -1,627 +1,76 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  Image,
-  Animated,
-  PanResponder,
-  StyleSheet,
-  Platform,
-  Alert,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { View, Text, Pressable, Image, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MotiView } from 'moti';
-import { supabase } from '@/config/supabase';
 
-// Import modals
-import PurchaseModal from '@/components/homescreen/PurchaseModal';
-import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
-import CreatePinModal from '@/components/homescreen/CreatePinModal';
-
-// Define types
-interface DataBundle {
-  id: number;
-  data: string;
-  price: number;
-  validity: string;
-  category: string;
-  description?: string;
-  variation_code: string;
-  planType: string; // SME, Gifting, or Corporate Gifting
-}
-
+// Define Provider type
 interface Provider {
   id: number;
   name: string;
   logo: string;
-  bundles: DataBundle[];
+  serviceID: string;
 }
 
-// Sample data (updated to be dynamically fetched)
 const providers: Provider[] = [
   {
     id: 1,
     name: 'MTN',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4e/MTN_Group_logo.svg',
-    bundles: [], // Will be populated dynamically
+    serviceID: 'mtn-data',
+  },
+  {
+    id: 2,
+    name: 'Glo',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Glo_logo.svg',
+    serviceID: 'glo-data',
+  },
+  {
+    id: 3,
+    name: 'Airtel',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3c/Airtel_logo.svg',
+    serviceID: 'airtel-data',
+  },
+  {
+    id: 4,
+    name: '9mobile',
+    logo: 'https://upload.wikimedia.org/wikipedia/en/7/7e/9mobile_logo.png',
+    serviceID: 'etisalat-data',
+  },
+  {
+    id: 5,
+    name: 'Glo SME',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Glo_logo.svg',
+    serviceID: 'glo-sme-data',
+  },
+  {
+    id: 6,
+    name: 'Spectranet',
+    logo: 'https://www.spectranet.com.ng/assets/images/logo.png',
+    serviceID: 'spectranet',
+  },
+  {
+    id: 7,
+    name: 'Smile',
+    logo: 'https://smile.com.ng/wp-content/uploads/2020/05/Smile-logo.png',
+    serviceID: 'smile-direct',
   },
 ];
 
-const BuyDataScreen: React.FC = () => {
+const ServiceProviderScreen: React.FC = () => {
   const router = useRouter();
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const [lastPurchasedNumber, setLastPurchasedNumber] = useState<string>('08012345678');
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
-  const [createPinModalVisible, setCreatePinModalVisible] = useState<boolean>(false);
-  const [selectedBundle, setSelectedBundle] = useState<DataBundle | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [transactionPin, setTransactionPin] = useState<string>('');
-  const [networkProvider, setNetworkProvider] = useState<string>('');
-  const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
-  const [showTransactionPin, setShowTransactionPin] = useState<boolean>(false);
-  const [newPin, setNewPin] = useState<string>('');
-  const [confirmPin, setConfirmPin] = useState<string>('');
-  const [showNewPin, setShowNewPin] = useState<boolean>(false);
-  const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
-  const [balance, setBalance] = useState<number>(0);
-  const [userEmail, setUserEmail] = useState<string>('');
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const hasTransactionPin: boolean = true;
-
-  // State to store fetched bundles and categories
-  const [mtnBundles, setMtnBundles] = useState<DataBundle[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-
-  // Fetch user data, wallet balance, MTN data plans, and dynamically generate categories
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch user and wallet balance
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user || !user.email) {
-          console.error('User not authenticated or email missing');
-          router.replace('/login');
-          return;
-        }
-
-        setUserEmail(user.email);
-
-        const { data: wallet, error: walletError } = await supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_email', user.email)
-          .single();
-
-        if (walletError && walletError.code !== 'PGRST116') {
-          throw walletError;
-        }
-
-        setBalance(wallet?.balance || 0);
-
-        // Fetch MTN data plans from VTpass API
-        const response = await fetch('https://sandbox.vtpass.com/api/service-variations?serviceID=mtn-data', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const data = await response.json();
-        if (data.response_description !== '000') {
-          throw new Error('Failed to fetch MTN data plans');
-        }
-
-        // Map VTpass variations to DataBundle type
-        const fetchedBundles: DataBundle[] = data.content.variations.map((variation: any, index: number) => {
-          // Extract data amount and validity from the name
-          const nameParts = variation.name.match(/N\d+\s*([\d.]+[MG]B)\s*-\s*(\d+\s*(?:day|month|year|hrs)|(?:Saturday|Sunday|night))/i);
-          const dataAmount = nameParts ? nameParts[1] : variation.name;
-          let validity = nameParts ? nameParts[2] : 'Unknown';
-
-          // Determine category based on validity
-          let category = '';
-          if (validity === 'Saturday' || validity === 'Sunday' || variation.name.toLowerCase().includes('weekend')) {
-            category = 'Weekend Plans';
-            validity = 'Weekend'; // Standardize for display
-          } else if (validity.toLowerCase().includes('night') || variation.name.toLowerCase().includes('night')) {
-            category = 'Night Plans';
-            validity = '11 PM - 5 AM'; // Standardize for display
-          } else {
-            const days = parseInt(validity.match(/\d+/)?.[0] || '0', 10);
-            if (['24 hrs', '48 hrs', '72 hrs'].includes(validity) || days <= 3) {
-              category = 'Daily Plans';
-            } else if (days >= 5 && days <= 14) {
-              category = 'Weekly Plans';
-            } else if (days >= 28 && days <= 60) {
-              category = 'Monthly Plans';
-            } else {
-              category = 'Monthly Plans'; // Default to Monthly for anything above 14 days
-            }
-          }
-
-          // Determine plan type (SME, Gifting, Corporate Gifting)
-          let planType = '';
-          if (variation.name.toLowerCase().includes('sme')) planType = 'SME';
-          else if (variation.name.toLowerCase().includes('gifting')) planType = 'Gifting';
-          else if (variation.name.toLowerCase().includes('corporate')) planType = 'Corporate Gifting';
-
-          return {
-            id: index + 1,
-            data: dataAmount,
-            price: parseFloat(variation.variation_amount),
-            validity: validity,
-            category: category,
-            description: variation.name,
-            variation_code: variation.variation_code,
-            planType: planType,
-          };
-        });
-
-        setMtnBundles(fetchedBundles);
-
-        // Update providers with fetched bundles
-        providers[0].bundles = fetchedBundles;
-
-        // Dynamically generate categories from fetched bundles
-        const uniqueCategories = Array.from(new Set(fetchedBundles.map(bundle => bundle.category)));
-        // Sort categories for consistent display
-        const categoryOrder = ['Daily Plans', 'Weekly Plans', 'Monthly Plans', 'Weekend Plans', 'Night Plans'];
-        uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
-        setCategories(uniqueCategories);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        Alert.alert('Error', 'Failed to load data plans or wallet balance.');
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const getProviderFromPhone = (phone: string): string => {
-    const prefix = phone.slice(0, 4);
-    const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
-    const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
-    const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
-    const etisalat = ['0809', '0817', '0818', '0909', '0908'];
-
-    if (mtn.includes(prefix)) return 'MTN';
-    if (glo.includes(prefix)) return 'GLO';
-    if (airtel.includes(prefix)) return 'AIRTEL';
-    if (etisalat.includes(prefix)) return '9MOBILE';
-    return '';
-  };
-
-  useEffect(() => {
-    if (phoneNumber.length === 11) {
-      setNetworkProvider(getProviderFromPhone(phoneNumber));
-    } else {
-      setNetworkProvider('');
-    }
-  }, [phoneNumber]);
-
-  const handlePurchase = async () => {
-    if (!selectedBundle || !selectedProvider) {
-      Alert.alert('Error', 'No bundle or provider selected');
-      return;
-    }
-
-    if (phoneNumber.length !== 11) {
-      Alert.alert('Error', 'Please enter a valid 11-digit phone number');
-      return;
-    }
-
-    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-      Alert.alert('Error', 'Please enter a transaction PIN between 4 and 6 digits');
-      return;
-    }
-
-    if (balance < selectedBundle.price) {
-      Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
-      return;
-    }
-
-    setModalVisible(false);
-    setTransactionModalVisible(true);
-    setTransactionStatus('processing');
-
-    try {
-      // Generate a unique request_id
-      const requestId = `DATA_PURCHASE_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-
-      // Record pending transaction in Supabase
-      const transactionData = {
-        user_email: userEmail,
-        amount: -selectedBundle.price,
-        reference: requestId,
-        status: 'pending',
-        metadata: {
-          purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
-          phone_number: phoneNumber,
-          validity: selectedBundle.validity,
-          payment_date: new Date().toISOString(),
-          custom_fields: [
-            {
-              display_name: 'Mobile Payment',
-              variable_name: 'mobile_payment',
-              value: 'Edges Network',
-            },
-          ],
-        },
-      };
-
-      const { data: pendingTx, error: pendingTxError } = await supabase
-        .from('transactions')
-        .insert(transactionData)
-        .select('id')
-        .single();
-
-      if (pendingTxError) {
-        console.error('Pending transaction insert error:', pendingTxError.message);
-        throw new Error('Failed to record pending transaction');
-      }
-
-      // Make purchase request to VTpass API
-      const purchasePayload = {
-        request_id: requestId,
-        serviceID: 'mtn-data',
-        billersCode: phoneNumber,
-        variation_code: selectedBundle.variation_code,
-        amount: selectedBundle.price,
-        phone: phoneNumber,
-      };
-
-      const purchaseResponse = await fetch('https://sandbox.vtpass.com/api/pay', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(purchasePayload),
-      });
-
-      const purchaseData = await purchaseResponse.json();
-
-      if (purchaseData.code !== '000') {
-        // Update transaction to failed
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-
-        setTransactionStatus('failed');
-        Alert.alert('Error', 'Transaction failed. Please try again.');
-        return;
-      }
-
-      // Query transaction status to confirm
-      const queryPayload = {
-        request_id: requestId,
-      };
-
-      const queryResponse = await fetch('https://sandbox.vtpass.com/api/requery', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryPayload),
-      });
-
-      const queryData = await queryResponse.json();
-
-      if (queryData.code !== '000' || queryData.content.transactions.status !== 'delivered') {
-        // Update transaction to failed
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-
-        setTransactionStatus('failed');
-        Alert.alert('Error', 'Transaction failed during verification. Please try again.');
-        return;
-      }
-
-      // Deduct balance and update wallet
-      const newBalance = balance - selectedBundle.price;
-      const { error: walletUpdateError } = await supabase
-        .from('wallets')
-        .update({ balance: newBalance })
-        .eq('user_email', userEmail);
-
-      if (walletUpdateError) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        throw new Error('Failed to update wallet balance');
-      }
-
-      // Update transaction to success
-      const { error: successUpdateError } = await supabase
-        .from('transactions')
-        .update({ status: 'success' })
-        .eq('id', pendingTx.id);
-
-      if (successUpdateError) {
-        console.error('Success transaction update error:', successUpdateError.message);
-        throw new Error('Failed to update transaction status');
-      }
-
-      // Update state
-      setBalance(newBalance);
-      setLastPurchasedNumber(phoneNumber);
-      setTransactionStatus('success');
-      Alert.alert('Success', `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${selectedBundle.price}.`);
-
-      router.push({
-        pathname: '/success',
-        params: {
-          id: pendingTx.id,
-          provider: selectedProvider.name,
-          data: selectedBundle.data,
-          price: selectedBundle.price.toString(),
-          date: new Date().toISOString(),
-          status: 'Success',
-          phoneNumber: phoneNumber,
-          reference: requestId,
-          metadata: JSON.stringify({
-            validity: selectedBundle.validity,
-            payment_method: 'Wallet',
-          }),
-        },
-      });
-    } catch (error) {
-      console.error('Error processing purchase:', error);
-      setTransactionStatus('failed');
-      Alert.alert('Error', 'Failed to process purchase. Please try again.');
-    }
-  };
-
-  const closeTransactionModal = () => {
-    setTransactionModalVisible(false);
-    setPhoneNumber('');
-    setTransactionPin('');
-    setSelectedBundle(null);
-    setNetworkProvider('');
-    setTransactionStatus('processing');
-  };
-
-  const closePurchaseModal = () => {
-    setModalVisible(false);
-    setPhoneNumber('');
-    setTransactionPin('');
-    setSelectedBundle(null);
-    setNetworkProvider('');
-  };
-
-  const closeCreatePinModal = () => {
-    setCreatePinModalVisible(false);
-    setNewPin('');
-    setConfirmPin('');
-  };
-
-  const handleCreatePin = () => {
-    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
-      Alert.alert('Error', 'PIN must be between 4 and 6 digits.');
-      return;
-    }
-
-    if (newPin !== confirmPin) {
-      Alert.alert('Error', 'PINs do not match.');
-      return;
-    }
-
-    setTransactionPin(newPin);
-    setCreatePinModalVisible(false);
-    setNewPin('');
-    setConfirmPin('');
-  };
 
   const selectProvider = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setExpandedCategory(null);
+    router.push({
+      pathname: '/(app)/serviceprovider',
+      params: {
+        provider: JSON.stringify({
+          id: provider.id,
+          name: provider.name,
+          logo: provider.logo,
+          serviceID: provider.serviceID,
+        }),
+      },
+    });
   };
-
-  const goBackToProviders = () => {
-    setSelectedProvider(null);
-    setExpandedCategory(null);
-  };
-
-  const toggleCategory = (category: string) => {
-    if (expandedCategory === category) {
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => setExpandedCategory(null));
-    } else {
-      setExpandedCategory(category);
-      Animated.timing(scaleAnim, {
-        toValue: 1.05,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
-  };
-
-  const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
-    const slideAnim = useRef(new Animated.Value(0)).current;
-
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dx > 0) {
-            slideAnim.setValue(gestureState.dx);
-          }
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx > 100) {
-            setSelectedBundle(bundle);
-            setModalVisible(true);
-          }
-          Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        },
-      })
-    ).current;
-
-    return (
-      <Animated.View
-        key={bundle.id}
-        {...panResponder.panHandlers}
-        style={[{ transform: [{ translateX: slideAnim }] }]}
-      >
-        <View style={styles.bundleCard}>
-          <View style={styles.bundleHeader}>
-            <View>
-              <Text style={styles.bundleTitle}>{bundle.data}</Text>
-              <Text style={styles.bundleValidity}>{bundle.validity}</Text>
-            </View>
-            <Text style={styles.bundlePrice}>₦{bundle.price}</Text>
-          </View>
-          <Text style={styles.bundleDescription}>{bundle.description}</Text>
-          {bundle.planType && (
-            <Text style={styles.planTypeText}>{bundle.planType}</Text>
-          )}
-          <View style={styles.bundleActions}>
-            <MotiView
-              from={{ scale: 1 }}
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ type: 'timing', duration: 1500 }}
-            >
-              <Pressable
-                onPress={() => {
-                  setSelectedBundle(bundle);
-                  setModalVisible(true);
-                }}
-                style={styles.buyButton}
-              >
-                <Text style={styles.buyButtonText}>Click to Buy</Text>
-              </Pressable>
-            </MotiView>
-            <View style={styles.swipeHint}>
-              <Text style={styles.swipeText}>or swipe right</Text>
-              <Ionicons name="arrow-forward" size={16} color="#ccc" />
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-    );
-  };
-
-  if (selectedProvider) {
-    return (
-      <>
-        <ScrollView style={styles.container} contentContainerStyle={styles.scrollViewContent}>
-          <View style={styles.providerHeader}>
-            <Pressable onPress={goBackToProviders} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </Pressable>
-            <Image
-              source={{ uri: selectedProvider.logo }}
-              style={styles.providerLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.providerName}>{selectedProvider.name} Data Bundles</Text>
-          </View>
-
-          {categories.length === 0 ? (
-            <Text style={styles.loadingText}>Loading categories...</Text>
-          ) : (
-            categories.map((category) => {
-              const bundlesInCategory = selectedProvider.bundles.filter(
-                (bundle) => bundle.category === category
-              );
-              if (bundlesInCategory.length === 0) return null;
-              const isExpanded = expandedCategory === category;
-
-              return (
-                <Animated.View
-                  key={category}
-                  style={isExpanded ? { zIndex: 10, transform: [{ scale: scaleAnim }] } : {}}
-                >
-                  <Pressable
-                    onPress={() => toggleCategory(category)}
-                    style={[
-                      styles.categoryCard,
-                      isExpanded ? styles.expandedCategory : styles.collapsedCategory,
-                    ]}
-                  >
-                    <View style={styles.categoryHeader}>
-                      <Text style={styles.categoryTitle}>{category}</Text>
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color="white"
-                      />
-                    </View>
-                    {isExpanded && (
-                      <View style={styles.categoryContent}>
-                        <Text style={styles.categoryHint}>Select a plan:</Text>
-                        <View style={styles.bundleList}>
-                          {bundlesInCategory.map((bundle) => (
-                            <BundleCard key={bundle.id} bundle={bundle} />
-                          ))}
-                        </View>
-                      </View>
-                    )}
-                  </Pressable>
-                </Animated.View>
-              );
-            })
-          )}
-        </ScrollView>
-
-        {/* Modals */}
-        <View style={{ zIndex: 1000 }}>
-          <PurchaseModal
-            visible={modalVisible}
-            onClose={closePurchaseModal}
-            selectedPlan={selectedBundle?.data || ''}
-            phoneNumber={phoneNumber}
-            setPhoneNumber={setPhoneNumber}
-            transactionPin={transactionPin}
-            setTransactionPin={setTransactionPin}
-            networkProvider={networkProvider}
-            hasTransactionPin={hasTransactionPin}
-            showTransactionPin={showTransactionPin}
-            setShowTransactionPin={setShowTransactionPin}
-            onCreatePin={() => setCreatePinModalVisible(true)}
-            onContinue={handlePurchase}
-          />
-
-          <TransactionStatusModal
-            visible={transactionModalVisible}
-            onClose={closeTransactionModal}
-            transactionStatus={transactionStatus}
-            selectedPlan={selectedBundle}
-            phoneNumber={phoneNumber}
-            networkProvider={networkProvider}
-          />
-
-          <CreatePinModal
-            visible={createPinModalVisible}
-            onClose={closeCreatePinModal}
-            newPin={newPin}
-            setNewPin={setNewPin}
-            confirmPin={confirmPin}
-            setConfirmPin={setConfirmPin}
-            showNewPin={showNewPin}
-            setShowNewPin={setShowNewPin}
-            showConfirmPin={showConfirmPin}
-            setShowConfirmPin={setShowConfirmPin}
-            onSave={handleCreatePin}
-          />
-        </View>
-      </>
-    );
-  }
 
   return (
     <ScrollView style={styles.container}>
@@ -654,122 +103,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
     paddingTop: 48,
     paddingHorizontal: 16,
-  },
-  scrollViewContent: {
-    paddingBottom: 50,
-  },
-  providerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  backButton: {
-    marginRight: 12,
-  },
-  providerLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'white',
-  },
-  providerName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginLeft: 12,
-  },
-  categoryCard: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-  },
-  categoryTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'white',
-  },
-  collapsedCategory: {
-    backgroundColor: '#1E1E1E',
-  },
-  expandedCategory: {
-    backgroundColor: '#2D2D2D',
-  },
-  categoryContent: {
-    padding: 16,
-  },
-  categoryHint: {
-    fontSize: 14,
-    color: '#A1A1AA',
-    marginBottom: 12,
-  },
-  bundleList: {
-    gap: 12,
-  },
-  bundleCard: {
-    backgroundColor: '#2D2D2D',
-    borderRadius: 12,
-    padding: 16,
-  },
-  bundleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  bundleTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  bundleValidity: {
-    fontSize: 12,
-    color: '#A1A1AA',
-  },
-  bundlePrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  bundleDescription: {
-    fontSize: 14,
-    color: '#A1A1AA',
-    marginBottom: 12,
-  },
-  planTypeText: {
-    fontSize: 12,
-    color: '#A1A1AA',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  bundleActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  buyButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  buyButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-  },
-  swipeHint: {
-    alignItems: 'center',
-  },
-  swipeText: {
-    fontSize: 12,
-    color: '#A1A1AA',
-    marginBottom: 4,
   },
   selectProviderTitle: {
     fontSize: 20,
@@ -804,12 +137,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
   },
-  loadingText: {
-    fontSize: 16,
-    color: '#A1A1AA',
-    textAlign: 'center',
-    marginTop: 20,
-  },
 });
 
-export default BuyDataScreen;
+export default ServiceProviderScreen;
