@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
-
-// Import modal
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
 
 // Define types
@@ -28,14 +26,21 @@ interface Provider {
 
 const ConfirmationPage: React.FC = () => {
   const router = useRouter();
-  const { bundle, provider, phoneNumber, transactionPin, userEmail } = useLocalSearchParams();
+  const { bundle, provider, phoneNumber, transactionPin, userEmail, source } = useLocalSearchParams<{
+    bundle?: string;
+    provider?: string;
+    phoneNumber?: string;
+    transactionPin?: string;
+    userEmail?: string;
+    source?: string;
+  }>();
 
   let selectedBundle: DataBundle | null = null;
   let selectedProvider: Provider | null = null;
 
   try {
-    selectedBundle = bundle ? JSON.parse(bundle as string) as DataBundle : null;
-    selectedProvider = provider ? JSON.parse(provider as string) as Provider : null;
+    selectedBundle = bundle ? JSON.parse(bundle) as DataBundle : null;
+    selectedProvider = provider ? JSON.parse(provider) as Provider : null;
   } catch (error) {
     console.error('Error parsing params:', error);
     Alert.alert('Error', 'Invalid purchase data');
@@ -47,9 +52,32 @@ const ConfirmationPage: React.FC = () => {
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [balance, setBalance] = useState<number>(0);
   const [referenceId, setReferenceId] = useState<string>('');
+  const [editablePhoneNumber, setEditablePhoneNumber] = useState<string>(phoneNumber || '');
+  const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false);
+  const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider?.name || '');
 
   // Animation for slide to purchase
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Pulse animation for Edit text
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.5,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   // Fetch user UUID and generate referenceId
   useEffect(() => {
@@ -118,6 +146,43 @@ const ConfirmationPage: React.FC = () => {
     }
   }, [userEmail]);
 
+  // Detect network provider based on phone number
+  const getProviderFromPhone = (phone: string): string => {
+    if (phone.length !== 11) return selectedProvider?.name || '';
+    const prefix = phone.slice(0, 4);
+    const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
+    const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
+    const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
+    const etisalat = ['0809', '0817', '0818', '0909', '0908'];
+    if (mtn.includes(prefix)) return 'MTN';
+    if (glo.includes(prefix)) return 'GLO';
+    if (airtel.includes(prefix)) return 'AIRTEL';
+    if (etisalat.includes(prefix)) return '9MOBILE';
+    return selectedProvider?.name || '';
+  };
+
+  useEffect(() => {
+    setNetworkProvider(getProviderFromPhone(editablePhoneNumber));
+  }, [editablePhoneNumber]);
+
+  // Validate and auto-save phone number when 11 digits
+  const handlePhoneNumberChange = (text: string) => {
+    setEditablePhoneNumber(text);
+    if (text.length === 11 && /^\d{11}$/.test(text)) {
+      const providerFromNumber = getProviderFromPhone(text);
+      if (providerFromNumber.toUpperCase() === selectedProvider?.name.toUpperCase()) {
+        setIsEditingPhone(false); // Auto-save
+      } else {
+        Alert.alert(
+          'Invalid Phone Number',
+          `The phone number does not match the provider (${selectedProvider?.name}). Please enter a valid ${selectedProvider?.name} number.`
+        );
+        setEditablePhoneNumber(phoneNumber || '');
+        setIsEditingPhone(false);
+      }
+    }
+  };
+
   // Format number with commas
   const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -129,7 +194,7 @@ const ConfirmationPage: React.FC = () => {
       return;
     }
 
-    if (!phoneNumber || (phoneNumber as string).length !== 11 || !/^\d{11}$/.test(phoneNumber as string)) {
+    if (!editablePhoneNumber || editablePhoneNumber.length !== 11 || !/^\d{11}$/.test(editablePhoneNumber)) {
       Alert.alert('Error', 'Invalid phone number');
       return;
     }
@@ -184,11 +249,10 @@ const ConfirmationPage: React.FC = () => {
         status: 'pending',
         metadata: {
           purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
-          phone_number: phoneNumber as string,
+          phone_number: editablePhoneNumber,
           validity: selectedBundle.validity,
-          payment_date: new Date().toISOString(),
-          app_fee: appFee, // Internal tracking
-          data_amount: dataPurchaseAmount, // Internal tracking
+          app_fee: appFee,
+          data_amount: dataPurchaseAmount,
           custom_fields: [
             {
               display_name: 'Mobile Payment',
@@ -219,10 +283,10 @@ const ConfirmationPage: React.FC = () => {
         },
         body: JSON.stringify({
           serviceID: selectedProvider.code,
-          billersCode: phoneNumber as string,
+          billersCode: editablePhoneNumber,
           variation_code: selectedBundle.variation_code,
           amount: dataPurchaseAmount,
-          phone: phoneNumber as string,
+          phone: editablePhoneNumber,
         }),
       });
 
@@ -268,25 +332,25 @@ const ConfirmationPage: React.FC = () => {
       setBalance(newBalance);
       setTransactionStatus('success');
 
-      // Log transaction details for debugging (includes appFee for internal use)
+      // Log transaction details for debugging
       console.log('Transaction successful:', {
         transactionId: pendingTx.id,
         provider: selectedProvider.name,
         data: selectedBundle.data,
-        phoneNumber,
+        phoneNumber: editablePhoneNumber,
         totalAmount: selectedBundle.price,
         appFee,
         dataPurchaseAmount,
         reference: referenceId,
       });
 
-      // Success message (excludes appFee)
+      // Success message
       Alert.alert(
         'Success',
-        `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(selectedBundle.price)}. Data sent to ${phoneNumber}.`
+        `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(selectedBundle.price)}. Data sent to ${editablePhoneNumber}.`
       );
 
-      // Navigate to success screen (excludes appFee in metadata)
+      // Navigate to success screen
       router.push({
         pathname: '/success',
         params: {
@@ -296,7 +360,7 @@ const ConfirmationPage: React.FC = () => {
           price: selectedBundle.price.toString(),
           date: new Date().toISOString(),
           status: 'Success',
-          phoneNumber: phoneNumber as string,
+          phoneNumber: editablePhoneNumber,
           reference: referenceId,
           metadata: JSON.stringify({
             validity: selectedBundle.validity,
@@ -319,6 +383,14 @@ const ConfirmationPage: React.FC = () => {
     setTransactionModalVisible(false);
   };
 
+  const toggleEditPhone = () => {
+    if (isEditingPhone) {
+      setIsEditingPhone(false);
+    } else {
+      setIsEditingPhone(true);
+    }
+  };
+
   if (!selectedBundle || !selectedProvider || !phoneNumber) {
     return null;
   }
@@ -335,7 +407,7 @@ const ConfirmationPage: React.FC = () => {
               <Ionicons name="arrow-back" size={24} color="white" />
             </Pressable>
             <Image
-              source={{ uri: selectedProvider.image }}
+              source={{ uri: selectedProvider.image || 'https://via.placeholder.com/40' }}
               style={styles.providerLogo}
               resizeMode="contain"
             />
@@ -355,7 +427,29 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Phone Number</Text>
-            <Text style={styles.detailValue}>{phoneNumber}</Text>
+            {isEditingPhone ? (
+              <View style={styles.phoneContainer}>
+                <TextInput
+                  style={styles.phoneInput}
+                  value={editablePhoneNumber}
+                  onChangeText={handlePhoneNumberChange}
+                  placeholder="Enter 11-digit phone number"
+                  placeholderTextColor="#A1A1AA"
+                  keyboardType="numeric"
+                  maxLength={11}
+                  autoFocus
+                />
+              </View>
+            ) : (
+              <View style={styles.phoneContainer}>
+                <Pressable onPress={toggleEditPhone}>
+                  <Animated.Text style={[styles.editText, { opacity: pulseAnim }]}>
+                    Edit
+                  </Animated.Text>
+                </Pressable>
+                <Text style={styles.phoneNumberText}>{editablePhoneNumber}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Plan Type</Text>
@@ -367,7 +461,7 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Reference ID</Text>
-            <Text style={styles.detailValue}>{referenceId}</Text>
+            <Text style={[styles.detailValue, styles.referenceId]}>{referenceId}</Text>
           </View>
           <Animated.View
             {...panResponder.panHandlers}
@@ -385,8 +479,8 @@ const ConfirmationPage: React.FC = () => {
         onClose={closeTransactionModal}
         transactionStatus={transactionStatus}
         selectedPlan={selectedBundle}
-        phoneNumber={phoneNumber as string}
-        networkProvider={selectedProvider.name}
+        phoneNumber={editablePhoneNumber}
+        networkProvider={networkProvider}
       />
     </View>
   );
@@ -400,21 +494,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 48, // Space for status bar
+    paddingTop: 48,
   },
   card: {
     backgroundColor: '#2D2D2D',
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
-    position: 'relative', // Required for absolute positioning of closeButton
+    position: 'relative',
   },
   closeButton: {
     position: 'absolute',
     top: 15,
     right: 8,
     padding: 4,
-  
   },
   providerInfo: {
     flexDirection: 'row',
@@ -439,18 +532,57 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+    flexWrap: 'nowrap',
   },
   detailLabel: {
     fontSize: 16,
     color: '#A1A1AA',
+    flexShrink: 0,
   },
   detailValue: {
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
-    maxWidth: '60%',
     textAlign: 'right',
+    maxWidth: '55%',
+    flexWrap: 'wrap',
+  },
+  referenceId: {
+    numberOfLines: 2,
+    ellipsizeMode: 'tail',
+  },
+  phoneContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    maxWidth: '60%',
+    flexShrink: 1,
+  },
+  phoneInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    padding: 8,
+    textAlign: 'right',
+    width: 140,
+  },
+  phoneNumberText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    textAlign: 'right',
+    width: 110, // Fixed width to prevent overflow
+  },
+  editText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#22C55E',
+    textDecorationLine: 'underline',
+    marginRight: 8,
   },
   slideContainer: {
     marginTop: 16,

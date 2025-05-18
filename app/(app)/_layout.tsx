@@ -155,6 +155,12 @@ function AppStack() {
             headerShown: false, // Let BuyDataScreen.tsx handle its own header
           }}
         />
+		<Stack.Screen
+          name="notifications"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
 
         <Stack.Screen
           name="Confirmation"
