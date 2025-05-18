@@ -1,73 +1,96 @@
-import React from 'react';
-import { View, Text, Pressable, Image, ScrollView, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  Image,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 
-// Define Provider type
+// Define the Provider interface
 interface Provider {
   id: number;
   name: string;
-  logo: string;
-  serviceID: string;
+  image: string;
+  code: string;
 }
 
-const providers: Provider[] = [
-  {
-    id: 1,
-    name: 'MTN',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4e/MTN_Group_logo.svg',
-    serviceID: 'mtn-data',
-  },
-  {
-    id: 2,
-    name: 'Glo',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Glo_logo.svg',
-    serviceID: 'glo-data',
-  },
-  {
-    id: 3,
-    name: 'Airtel',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3c/Airtel_logo.svg',
-    serviceID: 'airtel-data',
-  },
-  {
-    id: 4,
-    name: '9mobile',
-    logo: 'https://upload.wikimedia.org/wikipedia/en/7/7e/9mobile_logo.png',
-    serviceID: 'etisalat-data',
-  },
-  {
-    id: 5,
-    name: 'Glo SME',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Glo_logo.svg',
-    serviceID: 'glo-sme-data',
-  },
-  {
-    id: 6,
-    name: 'Spectranet',
-    logo: 'https://www.spectranet.com.ng/assets/images/logo.png',
-    serviceID: 'spectranet',
-  },
-  {
-    id: 7,
-    name: 'Smile',
-    logo: 'https://smile.com.ng/wp-content/uploads/2020/05/Smile-logo.png',
-    serviceID: 'smile-direct',
-  },
-];
+// Placeholder images for each network (replace with actual image URLs if available)
+const NETWORK_IMAGES: { [key: string]: string } = {
+  '9MOBILE': 'https://example.com/9mobile.png',
+  AIRTEL: 'https://example.com/airtel.png',
+  GLO: 'https://example.com/glo.png',
+  MTN: 'https://example.com/mtn.png',
+};
 
 const ServiceProviderScreen: React.FC = () => {
   const router = useRouter();
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchProviders = async () => {
+    try {
+      const response = await fetch('https://ebenkdata.com/api/network/', {
+        headers: {
+          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch providers: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+
+      // Transform the API response into an array of Provider objects
+      const providerMap: { [key: string]: Provider } = {};
+
+      // Iterate through each network plan array
+      Object.keys(data).forEach((networkKey) => {
+        const plans = data[networkKey];
+        if (Array.isArray(plans) && plans.length > 0) {
+          const networkName = plans[0].plan_network; // e.g., 9MOBILE, AIRTEL, GLO, MTN
+          if (!providerMap[networkName]) {
+            providerMap[networkName] = {
+              id: plans[0].network, // Use network ID from the first plan
+              name: networkName,
+              image: NETWORK_IMAGES[networkName] || 'https://example.com/default.png', // Placeholder image
+              code: networkName.toLowerCase(), // Use network name as code (lowercase)
+            };
+          }
+        }
+      });
+
+      // Convert providerMap to array
+      const providerArray = Object.values(providerMap);
+      setProviders(providerArray);
+
+      if (providerArray.length === 0) {
+        Alert.alert('Error', 'No valid providers found in the response.');
+      }
+    } catch (error) {
+      console.error('Fetch error:', error);
+      Alert.alert('Error', 'Could not load data providers.');
+      setProviders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProviders();
+  }, []);
 
   const selectProvider = (provider: Provider) => {
     router.push({
       pathname: '/(app)/serviceprovider',
       params: {
-        provider: JSON.stringify({
-          id: provider.id,
-          name: provider.name,
-          logo: provider.logo,
-          serviceID: provider.serviceID,
-        }),
+        provider: JSON.stringify(provider),
       },
     });
   };
@@ -75,24 +98,31 @@ const ServiceProviderScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
-      <View style={styles.providerGrid}>
-        {providers.map((provider) => (
-          <Pressable
-            key={provider.id}
-            onPress={() => selectProvider(provider)}
-            style={styles.providerCard}
-          >
-            <View style={styles.providerCardContent}>
-              <Image
-                source={{ uri: provider.logo }}
-                style={styles.providerLogoLarge}
-                resizeMode="contain"
-              />
-              <Text style={styles.providerCardName}>{provider.name}</Text>
-            </View>
-          </Pressable>
-        ))}
-      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#00ff99" style={{ marginTop: 50 }} />
+      ) : providers.length === 0 ? (
+        <Text style={styles.noProvidersText}>No providers available.</Text>
+      ) : (
+        <View style={styles.providerGrid}>
+          {providers.map((provider) => (
+            <Pressable
+              key={provider.id}
+              onPress={() => selectProvider(provider)}
+              style={styles.providerCard}
+            >
+              <View style={styles.providerCardContent}>
+                <Image
+                  source={{ uri: provider.image }}
+                  style={styles.providerLogoLarge}
+                  resizeMode="contain"
+                />
+                <Text style={styles.providerCardName}>{provider.name}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -136,6 +166,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  noProvidersText: {
+    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 50,
   },
 });
 

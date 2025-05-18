@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   PanResponder,
   StyleSheet,
   Alert,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,14 +31,14 @@ interface DataBundle {
   category: string;
   description?: string;
   variation_code: string;
-  planType: string; // SME, Gifting, Corporate Gifting, etc.
+  planType: string;
 }
 
 interface Provider {
   id: number;
   name: string;
-  logo: string;
-  serviceID: string;
+  image: string;
+  code: string;
 }
 
 const BuyDataScreen: React.FC = () => {
@@ -48,11 +50,12 @@ const BuyDataScreen: React.FC = () => {
   } catch (error) {
     console.error('Error parsing providerParam:', error);
     Alert.alert('Error', 'Invalid provider data');
-    router.replace('/(app)/(protected)/providers');
+    router.back();
     return null;
   }
 
-  const [expandedCategory, setExpandedCategory] = useState<string>('Hot'); // Default to Hot
+  const [expandedCategory, setExpandedCategory] = useState<string>('Daily Plans');
+  const [selectedPlanType, setSelectedPlanType] = useState<string>('Gifting');
   const [lastPurchasedNumber, setLastPurchasedNumber] = useState<string>('08012345678');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
@@ -63,57 +66,145 @@ const BuyDataScreen: React.FC = () => {
   const [networkProvider, setNetworkProvider] = useState<string>('');
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [showTransactionPin, setShowTransactionPin] = useState<boolean>(false);
+  const [hasTransactionPin, setHasTransactionPin] = useState<boolean>(true);
   const [newPin, setNewPin] = useState<string>('');
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [showNewPin, setShowNewPin] = useState<boolean>(false);
   const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
   const [lastPurchasedBundle, setLastPurchasedBundle] = useState<DataBundle | null>(null);
+  const [lastPurchaseTime, setLastPurchaseTime] = useState<string | null>(null);
   const [balance, setBalance] = useState<number>(0);
   const [userEmail, setUserEmail] = useState<string>('');
   const [bundles, setBundles] = useState<DataBundle[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // Scrollbar state
-  const scrollViewRef = useRef<ScrollView>(null);
-  const scrollBarAnim = useRef(new Animated.Value(0)).current;
-  const [contentHeight, setContentHeight] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(0);
-  const hasTransactionPin: boolean = true;
-
-  // Custom scrollbar PanResponder
-  const scrollBarPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        scrollBarAnim.stopAnimation();
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const scrollRange = containerHeight - 60; // Scrollbar handle height
-        const contentRange = Math.max(contentHeight - containerHeight, 1);
-        const newY = Math.max(0, Math.min(scrollBarAnim._value + gestureState.dy, scrollRange));
-        scrollBarAnim.setValue(newY);
-        if (scrollViewRef.current) {
-          const scrollY = (newY / scrollRange) * contentRange;
-          scrollViewRef.current.scrollTo({ y: scrollY, animated: false });
-        }
-      },
-      onPanResponderRelease: () => {
-        scrollBarAnim.stopAnimation();
-      },
-    })
-  ).current;
-
-  // Synchronize ScrollView with scrollbar
-  const handleScroll = (event: any) => {
-    const scrollY = event.nativeEvent.contentOffset.y;
-    const contentRange = Math.max(contentHeight - containerHeight, 1);
-    const scrollRange = containerHeight - 60;
-    const scrollBarY = (scrollY / contentRange) * scrollRange;
-    scrollBarAnim.setValue(scrollBarY);
+  // Format number with commas
+  const formatNumberWithCommas = (number: number): string => {
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
+
+  // Parse search query to extract data amount, validity, and plan type
+  const parseSearchQuery = (query: string) => {
+    const normalizedQuery = query.toLowerCase().trim();
+    const dataMatch = normalizedQuery.match(/(\d*\.?\d*)\s*(gb|mb)/i);
+    const validityMatch = normalizedQuery.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
+    const planTypeMatch = normalizedQuery.match(/(sme|gifting|corporate)/i);
+
+    return {
+      dataAmount: dataMatch ? parseFloat(dataMatch[1]) : null,
+      dataUnit: dataMatch ? dataMatch[2].toUpperCase() : null,
+      validityDays: validityMatch ? parseInt(validityMatch[1], 10) : null,
+      validityUnit: validityMatch ? validityMatch[2].toLowerCase() : null,
+      planType: planTypeMatch ? planTypeMatch[1].toLowerCase() : null,
+    };
+  };
+
+  // Filter bundles based on search query
+  const filterBundlesBySearch = (query: string) => {
+    if (!query) return null;
+
+    const { dataAmount, dataUnit, validityDays, validityUnit, planType } = parseSearchQuery(query);
+    return bundles.filter((bundle) => {
+      let matches = true;
+
+      // Match data amount
+      if (dataAmount && dataUnit) {
+        const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
+        const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
+        const bundleDataInMB = bundleUnit === 'GB' ? bundleDataValue * 1000 : bundleDataValue;
+        const searchDataInMB = dataUnit === 'GB' ? dataAmount * 1000 : dataAmount;
+        matches = matches && Math.abs(bundleDataInMB - searchDataInMB) <= searchDataInMB * 0.2;
+      }
+
+      // Match validity and category
+      if (validityDays && validityUnit) {
+        const bundleDaysMatch = bundle.validity.match(/\d+/);
+        const bundleDays = bundleDaysMatch ? parseInt(bundleDaysMatch[0], 10) : 0;
+        const bundleValidityLower = bundle.validity.toLowerCase();
+
+        if (validityUnit.includes('day')) {
+          if (validityDays <= 3) {
+            matches = matches && bundle.category === 'Daily Plans';
+          } else if (validityDays <= 14) {
+            matches = matches && bundle.category === 'Weekly Plans';
+          } else {
+            matches = matches && bundle.category === 'Monthly Plans';
+          }
+          matches = matches && Math.abs(bundleDays - validityDays) <= validityDays * 0.2;
+        } else if (validityUnit.includes('week')) {
+          const searchDays = validityDays * 7;
+          matches = matches && bundle.category === 'Weekly Plans';
+          matches = matches && Math.abs(bundleDays - searchDays) <= searchDays * 0.2;
+        } else if (validityUnit.includes('month')) {
+          const searchDays = validityDays * 30;
+          matches = matches && bundle.category === 'Monthly Plans';
+          matches = matches && (
+            bundleDays === searchDays ||
+            bundleValidityLower.includes(`${validityDays} month`) ||
+            bundleValidityLower.includes(`${searchDays} days`)
+          );
+        }
+      }
+
+      // Match plan type (from search query or selectedPlanType)
+      if (planType) {
+        matches = matches && bundle.planType.toLowerCase() === planType;
+      } else {
+        matches = matches && bundle.planType.toLowerCase() === selectedPlanType.toLowerCase();
+      }
+
+      return matches;
+    }).sort((a, b) => a.price - b.price);
+  };
+
+  // Get available plan types for the current expandedCategory
+  const availablePlanTypes = useMemo(() => {
+    if (searchQuery) {
+      const searchResults = filterBundlesBySearch(searchQuery);
+      if (searchResults) {
+        return Array.from(new Set(searchResults.map(bundle => bundle.planType))).sort();
+      }
+      return ['SME', 'Gifting', 'Corporate'];
+    }
+
+    if (!bundles || !Array.isArray(bundles)) {
+      return [];
+    }
+
+    if (expandedCategory === 'Hot' && lastPurchasedBundle) {
+      const hotBundles = bundles.filter((bundle) => {
+        try {
+          const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
+          const isSameCategory = bundle.category === lastPurchasedBundle.category;
+          const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || '0');
+          const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || '';
+          const lastDataInMB = lastUnit === 'GB' ? lastDataValue * 1000 : lastDataValue;
+          const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
+          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
+          const bundleDataInMB = bundleUnit === 'GB' ? bundleDataValue * 1000 : bundleDataValue;
+          const isSimilarDataAmount =
+            bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
+          return isSamePlanType && isSameCategory && isSimilarDataAmount;
+        } catch (error) {
+          console.error('Error processing bundle:', bundle, error);
+          return false;
+        }
+      });
+      return Array.from(new Set(hotBundles.map(bundle => bundle.planType))).sort();
+    }
+
+    return Array.from(
+      new Set(
+        bundles
+          .filter(bundle => bundle.category === expandedCategory)
+          .map(bundle => bundle.planType)
+      )
+    ).sort();
+  }, [bundles, expandedCategory, searchQuery, lastPurchasedBundle]);
 
   // Fetch user data, wallet balance, provider data plans, and last purchased bundle
   useEffect(() => {
@@ -121,7 +212,7 @@ const BuyDataScreen: React.FC = () => {
       if (!selectedProvider) {
         setError('No provider selected');
         setLoading(false);
-        router.replace('/(app)/(protected)/providers');
+        router.back();
         return;
       }
 
@@ -149,7 +240,7 @@ const BuyDataScreen: React.FC = () => {
         // Fetch last purchased bundle for the phone number
         const { data: transactions, error: txError } = await supabase
           .from('transactions')
-          .select('metadata')
+          .select('metadata, created_at')
           .eq('user_email', user.email)
           .eq('status', 'success')
           .eq('metadata->>phone_number', lastPurchasedNumber)
@@ -174,155 +265,96 @@ const BuyDataScreen: React.FC = () => {
             variation_code: '',
             planType: '',
           });
+          setLastPurchaseTime(transactions.created_at);
         }
 
-        // Fetch data plans from both VTpass and CampusCyberCafe APIs
-        let fetchedBundles: DataBundle[] = [];
+        // Fetch data plans from ebenkdata.com API
+        const response = await fetch('https://ebenkdata.com/api/network/', {
+          headers: {
+            Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
+          },
+        });
 
-        // VTpass API
-        try {
-          const vtpassResponse = await fetch(`https://sandbox.vtpass.com/api/service-variations?serviceID=${selectedProvider.serviceID}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data plans: ${response.status}`);
+        }
 
-          const vtpassData = await vtpassResponse.json();
-          if (vtpassData.response_description === '000') {
-            fetchedBundles = vtpassData.content.variations.map((variation: any, index: number) => {
-              const nameParts = variation.name.match(/N\d+\s*([\d.]+[MG]B|Unlimited|Voice|.*?\d+GB|\d+MB|\d+TB)?\s*(?:-\s*(\d+\s*(?:day|month|year|hrs)|(?:Saturday|Sunday|night|30days)))?/i) || [];
-              const dataAmount = nameParts[1] || variation.name.split('-')[1]?.trim() || variation.name;
-              let validity = nameParts[2] || '';
+        const data = await response.json();
+        const providerKey = `${selectedProvider.name}_PLAN`;
+        const plans = data[providerKey];
 
-              let category = '';
-              if (validity === 'Saturday' || validity === 'Sunday' || variation.name.toLowerCase().includes('weekend')) {
-                category = 'Weekend Plans';
-                validity = 'Weekend';
-              } else if (validity.toLowerCase().includes('night') || variation.name.toLowerCase().includes('night')) {
-                category = 'Night Plans';
-                validity = '11 PM - 5 AM';
-              } else if (variation.name.toLowerCase().includes('unlimited') || variation.name.toLowerCase().includes('platinum')) {
-                category = 'Unlimited Plans';
-              } else {
-                const days = parseInt(validity.match(/\d+/)?.[0] || '0', 10);
-                if (['24 hrs', '48 hrs', '72 hrs'].includes(validity) || days <= 3) {
-                  category = 'Daily Plans';
-                } else if (days >= 5 && days <= 14) {
-                  category = 'Weekly Plans';
-                } else if (days >= 28 && days <= 60) {
-                  category = 'Monthly Plans';
-                } else {
-                  category = 'Monthly Plans';
-                }
-              }
+        if (!Array.isArray(plans) || plans.length === 0) {
+          throw new Error(`No plans found for ${selectedProvider.name}`);
+        }
 
-              let planType = '';
-              if (variation.name.toLowerCase().includes('sme')) planType = 'SME';
-              else if (variation.name.toLowerCase().includes('gifting')) planType = 'Gifting';
-              else if (variation.name.toLowerCase().includes('corporate')) planType = 'Corporate Gifting';
-              else if (variation.name.toLowerCase().includes('voice')) planType = 'Voice';
-              else if (selectedProvider.serviceID.includes('sme')) planType = 'SME';
-              else planType = 'Standard';
+        const fetchedBundles: DataBundle[] = plans.map((plan: any) => {
+          const dataAmount = plan.plan || 'Unknown';
+          let validity = plan.month_validate || 'Not Specified';
+          let category = '';
 
-              if (!validity) {
-                validity = planType ? planType : 'Not Specified';
-              }
-
-              return {
-                id: index + 1,
-                data: dataAmount,
-                price: parseFloat((parseFloat(variation.variation_amount) * 1.05).toFixed(2)),
-                validity: validity,
-                category: category,
-                description: variation.name,
-                variation_code: variation.variation_code,
-                planType: planType,
-              };
-            });
+          if (validity.toLowerCase().includes('saturday') || validity.toLowerCase().includes('sunday') || plan.plan.toLowerCase().includes('weekend')) {
+            category = 'Weekend Plans';
+            validity = 'Weekend';
+          } else if (validity.toLowerCase().includes('night') || plan.plan.toLowerCase().includes('night')) {
+            category = 'Night Plans';
+            validity = '11 PM - 5 AM';
+          } else if (plan.plan.toLowerCase().includes('unlimited')) {
+            category = 'Unlimited Plans';
+          } else {
+            const daysMatch = validity.match(/\d+/);
+            const days = daysMatch ? parseInt(daysMatch[0], 10) : 0;
+            if (
+              validity.toLowerCase().includes('month') ||
+              validity.toLowerCase().includes('months') ||
+              validity.toLowerCase().includes('30 days') ||
+              validity.toLowerCase().includes('30days') ||
+              days >= 30
+            ) {
+              category = 'Monthly Plans';
+            } else if (['24 hrs', '48 hrs', '72 hrs'].includes(validity) || days <= 3) {
+              category = 'Daily Plans';
+            } else if (days >= 5 && days <= 14) {
+              category = 'Weekly Plans';
+            } else {
+              category = 'Monthly Plans';
+            }
           }
-        } catch (vtpassError) {
-          console.warn('VTpass API failed, trying CampusCyberCafe API:', vtpassError);
-        }
 
-        // CampusCyberCafe API
-        try {
-          const cccResponse = await fetch(`https://campuscybercafe.com/api/data/?serviceID=${selectedProvider.serviceID}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+          const planType = plan.plan_type || 'Standard';
 
-          const cccData = await cccResponse.json();
-          if (cccData.status === 'success' && cccData.data?.variations) {
-            const cccBundles: DataBundle[] = cccData.data.variations.map((variation: any, index: number) => {
-              const nameParts = variation.name.match(/([\d.]+[MG]B|Unlimited|Voice|.*?\d+GB|\d+MB|\d+TB)?\s*(?:-\s*(\d+\s*(?:day|month|year|hrs)|(?:Saturday|Sunday|night|30days)))?/i) || [];
-              const dataAmount = nameParts[1] || variation.name.split('-')[1]?.trim() || variation.name;
-              let validity = nameParts[2] || '';
-
-              let category = '';
-              if (validity === 'Saturday' || validity === 'Sunday' || variation.name.toLowerCase().includes('weekend')) {
-                category = 'Weekend Plans';
-                validity = 'Weekend';
-              } else if (validity.toLowerCase().includes('night') || variation.name.toLowerCase().includes('night')) {
-                category = 'Night Plans';
-                validity = '11 PM - 5 AM';
-              } else if (variation.name.toLowerCase().includes('unlimited') || variation.name.toLowerCase().includes('platinum')) {
-                category = 'Unlimited Plans';
-              } else {
-                const days = parseInt(validity.match(/\d+/)?.[0] || '0', 10);
-                if (['24 hrs', '48 hrs', '72 hrs'].includes(validity) || days <= 3) {
-                  category = 'Daily Plans';
-                } else if (days >= 5 && days <= 14) {
-                  category = 'Weekly Plans';
-                } else if (days >= 28 && days <= 60) {
-                  category = 'Monthly Plans';
-                } else {
-                  category = 'Monthly Plans';
-                }
-              }
-
-              let planType = '';
-              if (variation.name.toLowerCase().includes('sme')) planType = 'SME';
-              else if (variation.name.toLowerCase().includes('gifting')) planType = 'Gifting';
-              else if (variation.name.toLowerCase().includes('corporate')) planType = 'Corporate Gifting';
-              else if (variation.name.toLowerCase().includes('voice')) planType = 'Voice';
-              else if (selectedProvider.serviceID.includes('sme')) planType = 'SME';
-              else planType = 'Standard';
-
-              if (!validity) {
-                validity = planType ? planType : 'Not Specified';
-              }
-
-              return {
-                id: fetchedBundles.length + index + 1,
-                data: dataAmount,
-                price: parseFloat((parseFloat(variation.amount) * 1.05).toFixed(2)),
-                validity: validity,
-                category: category,
-                description: variation.name,
-                variation_code: variation.code || variation.variation_code,
-                planType: planType,
-              };
-            });
-            fetchedBundles = [...fetchedBundles, ...cccBundles];
-          }
-        } catch (cccError) {
-          console.warn('CampusCyberCafe API failed:', cccError);
-        }
-
-        if (fetchedBundles.length === 0) {
-          throw new Error(`Failed to fetch ${selectedProvider.name} data plans from both APIs`);
-        }
+          return {
+            id: plan.id,
+            data: dataAmount,
+            price: parseFloat(plan.plan_amount) + 50,
+            validity,
+            category,
+            description: plan.plan,
+            variation_code: plan.dataplan_id,
+            planType,
+          };
+        });
 
         setBundles(fetchedBundles);
 
-        // Dynamically generate categories
         const uniqueCategories = Array.from(new Set(fetchedBundles.map(bundle => bundle.category)));
         const categoryOrder = ['Daily Plans', 'Weekly Plans', 'Monthly Plans', 'Weekend Plans', 'Night Plans', 'Unlimited Plans'];
         uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
-        setCategories(['Hot', ...uniqueCategories]);
+        
+        let finalCategories = uniqueCategories;
+        if (lastPurchasedBundle && lastPurchaseTime) {
+          const purchaseDate = new Date(lastPurchaseTime);
+          const currentTime = new Date();
+          const hoursDiff = (currentTime.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60);
+          const dataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || '0');
+          const unit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || '';
+          const dataInGB = unit === 'GB' ? dataValue : dataValue / 1000;
+          
+          if (dataInGB >= 5 && hoursDiff <= 6) {
+            finalCategories = ['Hot', ...uniqueCategories];
+          }
+        }
+        
+        setCategories(finalCategories);
       } catch (error: any) {
         console.error('Error fetching data:', error);
         setError(`Failed to load ${selectedProvider?.name || 'provider'} data plans or wallet balance.`);
@@ -342,9 +374,9 @@ const BuyDataScreen: React.FC = () => {
     const nineMobile = ['0809', '0817', '0818', '0909', '0908'];
 
     if (mtn.includes(prefix)) return 'MTN';
-    if (glo.includes(prefix)) return 'Glo';
-    if (airtel.includes(prefix)) return 'Airtel';
-    if (nineMobile.includes(prefix)) return '9mobile';
+    if (glo.includes(prefix)) return 'GLO';
+    if (airtel.includes(prefix)) return 'AIRTEL';
+    if (nineMobile.includes(prefix)) return '9MOBILE';
     return '';
   };
 
@@ -357,30 +389,13 @@ const BuyDataScreen: React.FC = () => {
     }
   }, [phoneNumber, selectedProvider]);
 
-  const checkSimLoanStatus = async (phone: string): Promise<boolean> => {
-    try {
-      const response = await fetch('https://sandbox.vtpass.com/api/check-loan-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ billersCode: phone }),
-      });
-      const data = await response.json();
-      return data.hasLoan || false;
-    } catch (error) {
-      console.error('Error checking loan status:', error);
-      return false;
-    }
-  };
-
-  const handlePurchase = async () => {
+  const handleContinue = () => {
     if (!selectedBundle || !selectedProvider) {
       Alert.alert('Error', 'No bundle or provider selected');
       return;
     }
 
-    if (phoneNumber.length !== 11) {
+    if (phoneNumber.length !== 11 || !/^\d{11}$/.test(phoneNumber)) {
       Alert.alert('Error', 'Please enter a valid 11-digit phone number');
       return;
     }
@@ -390,176 +405,18 @@ const BuyDataScreen: React.FC = () => {
       return;
     }
 
-    if (balance < selectedBundle.price) {
-      Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
-      return;
-    }
-
-    const hasLoan = await checkSimLoanStatus(phoneNumber);
-    if (hasLoan) {
-      Alert.alert('Error', 'Cannot purchase data plan due to an outstanding loan on this SIM.');
-      setModalVisible(false);
-      return;
-    }
-
+    // Navigate to confirmation page
+    router.push({
+      pathname: '/Confirmation',
+      params: {
+        bundle: JSON.stringify(selectedBundle),
+        provider: JSON.stringify(selectedProvider),
+        phoneNumber,
+        transactionPin,
+        userEmail,
+      },
+    });
     setModalVisible(false);
-    setTransactionModalVisible(true);
-    setTransactionStatus('processing');
-
-    try {
-      const requestId = `DATA_PURCHASE_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-
-      const transactionData = {
-        user_email: userEmail,
-        amount: -selectedBundle.price,
-        reference: requestId,
-        status: 'pending',
-        metadata: {
-          purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
-          phone_number: phoneNumber,
-          validity: selectedBundle.validity,
-          payment_date: new Date().toISOString(),
-          custom_fields: [
-            {
-              display_name: 'Mobile Payment',
-              variable_name: 'mobile_payment',
-              value: 'Edges Network',
-            },
-          ],
-        },
-      };
-
-      const { data: pendingTx, error: pendingTxError } = await supabase
-        .from('transactions')
-        .insert(transactionData)
-        .select('id')
-        .single();
-
-      if (pendingTxError) {
-        console.error('Pending transaction insert error:', pendingTxError.message);
-        throw new Error('Failed to record pending transaction');
-      }
-
-      let purchasePayload: any = {
-        request_id: requestId,
-        serviceID: selectedProvider.serviceID,
-        billersCode: phoneNumber,
-        variation_code: selectedBundle.variation_code,
-        amount: selectedBundle.price,
-        phone: phoneNumber,
-      };
-
-      if (selectedProvider.serviceID === 'spectranet') {
-        purchasePayload.billersCode = '1212121212';
-      } else if (selectedProvider.serviceID === 'smile-direct') {
-        const verifyResponse = await fetch('https://sandbox.vtpass.com/api/merchant-verify/smile/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ billersCode: 'tester@sandbox.com' }),
-        });
-        const verifyData = await verifyResponse.json();
-        if (verifyData.code !== '000') {
-          throw new Error('Smile email verification failed');
-        }
-        purchasePayload.billersCode = 'tester@sandbox.com';
-        purchasePayload.email = 'tester@sandbox.com';
-      }
-
-      const purchaseResponse = await fetch('https://sandbox.vtpass.com/api/pay', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(purchasePayload),
-      });
-
-      const purchaseData = await purchaseResponse.json();
-
-      if (purchaseData.code !== '000') {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        setTransactionStatus('failed');
-        Alert.alert('Error', 'Transaction failed. Please try again.');
-        return;
-      }
-
-      const queryPayload = { request_id: requestId };
-      const queryResponse = await fetch('https://sandbox.vtpass.com/api/requery', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryPayload),
-      });
-
-      const queryData = await queryResponse.json();
-
-      if (queryData.code !== '000' || queryData.content.transactions.status !== 'delivered') {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        setTransactionStatus('failed');
-        Alert.alert('Error', 'Transaction failed during verification. Please try again.');
-        return;
-      }
-
-      const newBalance = balance - selectedBundle.price;
-      const { error: walletUpdateError } = await supabase
-        .from('wallets')
-        .update({ balance: newBalance })
-        .eq('user_email', userEmail);
-
-      if (walletUpdateError) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        throw new Error('Failed to update wallet balance');
-      }
-
-      const { error: successUpdateError } = await supabase
-        .from('transactions')
-        .update({ status: 'success' })
-        .eq('id', pendingTx.id);
-
-      if (successUpdateError) {
-        console.error('Success transaction update error:', successUpdateError.message);
-        throw new Error('Failed to update transaction status');
-      }
-
-      setBalance(newBalance);
-      setLastPurchasedNumber(phoneNumber);
-      setLastPurchasedBundle(selectedBundle);
-      setTransactionStatus('success');
-      Alert.alert('Success', `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${selectedBundle.price}.`);
-
-      router.push({
-        pathname: '/success',
-        params: {
-          id: pendingTx.id,
-          provider: selectedProvider.name,
-          data: selectedBundle.data,
-          price: selectedBundle.price.toString(),
-          date: new Date().toISOString(),
-          status: 'Success',
-          phoneNumber: phoneNumber,
-          reference: requestId,
-          metadata: JSON.stringify({
-            validity: selectedBundle.validity,
-            payment_method: 'Wallet',
-          }),
-        },
-      });
-    } catch (error) {
-      console.error('Error processing purchase:', error);
-      setTransactionStatus('failed');
-      Alert.alert('Error', 'Failed to process purchase. Please try again.');
-    }
   };
 
   const closeTransactionModal = () => {
@@ -597,17 +454,25 @@ const BuyDataScreen: React.FC = () => {
     }
 
     setTransactionPin(newPin);
+    setHasTransactionPin(true);
     setCreatePinModalVisible(false);
     setNewPin('');
     setConfirmPin('');
   };
 
   const goBackToProviders = () => {
-    router.replace('/(app)/(protected)/providers');
+    router.back();
   };
 
   const selectCategory = (category: string) => {
     setExpandedCategory(category);
+    const newAvailablePlanTypes = bundles
+      .filter(bundle => bundle.category === category)
+      .map(bundle => bundle.planType);
+    const uniquePlanTypes = Array.from(new Set(newAvailablePlanTypes)).sort();
+    if (uniquePlanTypes.length > 0 && !uniquePlanTypes.includes(selectedPlanType)) {
+      setSelectedPlanType(uniquePlanTypes[0]);
+    }
     Animated.timing(scaleAnim, {
       toValue: 1.05,
       duration: 300,
@@ -619,6 +484,14 @@ const BuyDataScreen: React.FC = () => {
         useNativeDriver: true,
       }).start();
     });
+  };
+
+  const selectPlanType = (planType: string) => {
+    setSelectedPlanType(planType);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
   };
 
   const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
@@ -659,7 +532,7 @@ const BuyDataScreen: React.FC = () => {
               </Text>
               <Text style={styles.bundleValidity}>{bundle.validity}</Text>
             </View>
-            <Text style={styles.bundlePrice}>₦{bundle.price}</Text>
+            <Text style={styles.bundlePrice}>₦{formatNumberWithCommas(bundle.price)}</Text>
           </View>
           <Text style={styles.bundleDescription} numberOfLines={2} ellipsizeMode="tail">
             {bundle.description}
@@ -702,21 +575,28 @@ const BuyDataScreen: React.FC = () => {
     if (!bundles || !Array.isArray(bundles)) {
       return [];
     }
+
+    if (searchQuery) {
+      const searchResults = filterBundlesBySearch(searchQuery);
+      return searchResults || [];
+    }
+
+    let filteredBundles = bundles;
+
+    filteredBundles = filteredBundles.filter(bundle => bundle.planType.toLowerCase() === selectedPlanType.toLowerCase());
+
     if (category === 'Hot' && lastPurchasedBundle) {
-      return bundles
+      return filteredBundles
         .filter((bundle) => {
           try {
-            // Match bundles with the same planType and category as the last purchased bundle
             const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
             const isSameCategory = bundle.category === lastPurchasedBundle.category;
-            // Parse data amounts for proximity check
             const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || '0');
             const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || '';
             const lastDataInMB = lastUnit === 'GB' ? lastDataValue * 1000 : lastDataValue;
             const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
             const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
             const bundleDataInMB = bundleUnit === 'GB' ? bundleDataValue * 1000 : bundleDataValue;
-            // Include bundles within ±50% of the last purchased data amount
             const isSimilarDataAmount =
               bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
             return isSamePlanType && isSameCategory && isSimilarDataAmount;
@@ -726,30 +606,10 @@ const BuyDataScreen: React.FC = () => {
           }
         })
         .sort((a, b) => a.price - b.price)
-        .slice(0, 5); // Limit to 5 bundles
-    } else if (category === 'Hot') {
-      // Fallback if no purchase history
-      return bundles
-        .filter((bundle) => {
-          try {
-            const dataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
-            const unit = bundle.data.match(/[MG]B/)?.[0] || '';
-            const dataInMB = unit === 'GB' ? dataValue * 1000 : dataValue;
-            const pricePerMB = dataInMB ? bundle.price / dataInMB : Infinity;
-            return (
-              pricePerMB < 0.5 ||
-              bundle.planType === 'SME' ||
-              bundle.category === 'Unlimited Plans'
-            );
-          } catch (error) {
-            console.error('Error processing bundle:', bundle, error);
-            return false;
-          }
-        })
-        .sort((a, b) => a.price - b.price)
-        .slice(0, 5); // Limit to 5 bundles
+        .slice(0, 5);
     }
-    return bundles
+
+    return filteredBundles
       .filter((bundle) => bundle.category === category)
       .sort((a, b) => a.price - b.price);
   };
@@ -761,94 +621,122 @@ const BuyDataScreen: React.FC = () => {
   const bundlesInCategory = getBundlesForCategory(expandedCategory);
 
   return (
-    <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollViewContent}>
+    <View style={styles.container}>
+      <View style={styles.fixedHeader}>
         <View style={styles.providerHeader}>
           <Pressable onPress={goBackToProviders} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </Pressable>
           <Image
-            source={{ uri: selectedProvider.logo }}
+            source={{ uri: selectedProvider.image }}
             style={styles.providerLogo}
             resizeMode="contain"
           />
           <Text style={styles.providerName}>{selectedProvider.name} Data Bundles</Text>
         </View>
-
-        <ScrollView
-          horizontal
-          style={styles.categoryBar}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryBarContent}
-        >
-          {categories.map((category) => (
-            <Pressable
-              key={category}
-              onPress={() => selectCategory(category)}
-              style={[
-                styles.categoryButton,
-                expandedCategory === category ? styles.selectedCategoryButton : {},
-              ]}
-            >
-              <Text
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#A1A1AA" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search plans (e.g., 1GB for 30 days)"
+            placeholderTextColor="#A1A1AA"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={20} color="#A1A1AA" />
+            </TouchableOpacity>
+          )}
+        </View>
+        {!searchQuery && (
+          <ScrollView
+            horizontal
+            style={styles.categoryBar}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryBarContent}
+          >
+            {categories.map((category) => (
+              <Pressable
+                key={category}
+                onPress={() => selectCategory(category)}
                 style={[
-                  styles.categoryButtonText,
-                  expandedCategory === category ? styles.selectedCategoryButtonText : {},
+                  styles.categoryButton,
+                  expandedCategory === category ? styles.selectedCategoryButton : {},
                 ]}
               >
-                {category === 'Hot' ? '🔥 Hot' : category}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    expandedCategory === category ? styles.selectedCategoryButtonText : {},
+                  ]}
+                >
+                  {category === 'Hot' ? '🔥 Hot' : category}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+        {!searchQuery && availablePlanTypes.length > 0 && (
+          <ScrollView
+            horizontal
+            style={styles.planTypeBar}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.planTypeBarContent}
+          >
+            {availablePlanTypes.map((planType) => (
+              <Pressable
+                key={planType}
+                onPress={() => selectPlanType(planType)}
+                style={[
+                  styles.planTypeButton,
+                  selectedPlanType === planType ? styles.selectedPlanTypeButton : {},
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planTypeButtonText,
+                    selectedPlanType === planType ? styles.selectedPlanTypeButtonText : {},
+                  ]}
+                >
+                  {planType}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        nestedScrollEnabled={true}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
+        removeClippedSubviews={true}
+      >
         {loading ? (
           <Text style={styles.loadingText}>Loading...</Text>
         ) : error ? (
           <Text style={styles.errorText}>{error}</Text>
-        ) : categories.length === 0 ? (
+        ) : categories.length === 0 && !searchQuery ? (
           <Text style={styles.loadingText}>No categories available</Text>
         ) : bundlesInCategory.length === 0 ? (
-          <Text style={styles.loadingText}>No bundles available for this category</Text>
+          <Text style={styles.loadingText}>
+            {searchQuery ? 'No plans match your search' : 'No bundles available for this category'}
+          </Text>
         ) : (
           <View style={styles.bundleListContainer}>
-            <Text style={styles.categoryHint}>Select a plan:</Text>
-            <View
-              style={styles.scrollViewWrapper}
-              onLayout={(event) => setContainerHeight(event.nativeEvent.layout.height)}
-            >
-              <ScrollView
-                ref={scrollViewRef}
-                contentContainerStyle={styles.bundleList}
-                nestedScrollEnabled={true}
-                showsVerticalScrollIndicator={false}
-                overScrollMode="never"
-                removeClippedSubviews={true}
-                onTouchStart={(e) => e.stopPropagation()}
-                onContentSizeChange={(_, height) => setContentHeight(height)}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-              >
-                {bundlesInCategory.map((bundle) => (
-                  <BundleCard key={bundle.id} bundle={bundle} />
-                ))}
-              </ScrollView>
-              <View style={styles.scrollBarTrack}>
-                <Animated.View
-                  style={[
-                    styles.scrollBarHandle,
-                    {
-                      transform: [{ translateY: scrollBarAnim }],
-                    },
-                  ]}
-                  {...scrollBarPanResponder.panHandlers}
-                />
-              </View>
+            <Text style={styles.categoryHint}>
+              {searchQuery ? 'Search Results:' : 'Select a plan:'}
+            </Text>
+            <View style={styles.scrollViewWrapper}>
+              {bundlesInCategory.map((bundle) => (
+                <BundleCard key={bundle.id} bundle={bundle} />
+              ))}
             </View>
           </View>
         )}
       </ScrollView>
-
       <View style={{ zIndex: 1000 }}>
         <PurchaseModal
           visible={modalVisible}
@@ -863,9 +751,8 @@ const BuyDataScreen: React.FC = () => {
           showTransactionPin={showTransactionPin}
           setShowTransactionPin={setShowTransactionPin}
           onCreatePin={() => setCreatePinModalVisible(true)}
-          onContinue={handlePurchase}
+          onContinue={handleContinue}
         />
-
         <TransactionStatusModal
           visible={transactionModalVisible}
           onClose={closeTransactionModal}
@@ -874,7 +761,6 @@ const BuyDataScreen: React.FC = () => {
           phoneNumber={phoneNumber}
           networkProvider={networkProvider}
         />
-
         <CreatePinModal
           visible={createPinModalVisible}
           onClose={closeCreatePinModal}
@@ -889,7 +775,7 @@ const BuyDataScreen: React.FC = () => {
           onSave={handleCreatePin}
         />
       </View>
-    </>
+    </View>
   );
 };
 
@@ -897,11 +783,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
+  },
+  fixedHeader: {
+    backgroundColor: 'black',
     paddingTop: 48,
     paddingHorizontal: 16,
+    zIndex: 10,
+  },
+  scrollView: {
+    flex: 1,
+    marginTop: 0,
   },
   scrollViewContent: {
+    paddingHorizontal: 16,
     paddingBottom: 50,
+    paddingTop: 8,
   },
   providerHeader: {
     flexDirection: 'row',
@@ -923,10 +819,39 @@ const styles = StyleSheet.create({
     color: 'white',
     marginLeft: 12,
   },
-  categoryBar: {
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     marginBottom: 16,
   },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: 'white',
+    paddingVertical: 10,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  categoryBar: {
+    marginBottom: 8,
+  },
+  planTypeBar: {
+    marginBottom: 16,
+    marginLeft: 40,
+  },
   categoryBarContent: {
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  planTypeBarContent: {
+    justifyContent: 'center',
     paddingHorizontal: 4,
   },
   categoryButton: {
@@ -934,9 +859,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    marginRight: 8,
+    marginHorizontal: 4,
+  },
+  planTypeButton: {
+    backgroundColor: '#1E1E1E',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginHorizontal: 4,
   },
   selectedCategoryButton: {
+    backgroundColor: '#3B82F6',
+  },
+  selectedPlanTypeButton: {
     backgroundColor: '#3B82F6',
   },
   categoryButtonText: {
@@ -944,7 +879,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#A1A1AA',
   },
+  planTypeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#A1A1AA',
+  },
   selectedCategoryButtonText: {
+    color: 'white',
+  },
+  selectedPlanTypeButtonText: {
     color: 'white',
   },
   categoryHint: {
@@ -959,16 +902,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     flex: 1,
   },
-  bundleList: {
-    gap: 8,
-    paddingBottom: 16,
-    paddingRight: 16,
-  },
   bundleCard: {
     backgroundColor: '#2D2D2D',
     borderRadius: 8,
     padding: 8,
     marginRight: 12,
+    marginBottom: 8,
   },
   bundleHeader: {
     flexDirection: 'row',
@@ -1050,22 +989,6 @@ const styles = StyleSheet.create({
     color: '#FF4444',
     textAlign: 'center',
     marginTop: 20,
-  },
-  scrollBarTrack: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: 10,
-    height: '100%',
-    backgroundColor: '#3B82F6',
-    opacity: 0.3,
-    borderRadius: 5,
-  },
-  scrollBarHandle: {
-    width: 10,
-    height: 60,
-    backgroundColor: '#3B82F6',
-    borderRadius: 5,
   },
 });
 
