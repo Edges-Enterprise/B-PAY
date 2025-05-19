@@ -37,11 +37,11 @@ interface ConfirmationParams {
 
 const actions = [
   { title: 'Buy Data', icon: 'cellular-outline', color: '#22C55E', route: '/(app)/(protected)/buy' },
-  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '/(app)/(protected)/buy-airtime' },
-  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '/(app)/(protected)/electricity' },
-  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '/(app)/(protected)/cable-tv' },
-  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '/(app)/(protected)/customer-care' },
-  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '/(app)/(protected)/referral' },
+  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '../airtimeprovider' },
+  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '../electricity' },
+  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '../cableTv' },
+  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '../Customer' },
+  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '../referral' },
 ];
 
 export default function HomeScreen() {
@@ -269,7 +269,7 @@ export default function HomeScreen() {
 
       <View style={styles.quickActionsHeader}>
         <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-        <Pressable onPress={() => router.push('/(app)/(protected)/all-actions')}>
+        <Pressable onPress={() => router.push('../commingsoon')}>
           <Text style={styles.moreButtonText}>More ... ></Text>
         </Pressable>
       </View>

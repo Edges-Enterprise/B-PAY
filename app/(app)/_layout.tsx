@@ -162,6 +162,41 @@ function AppStack() {
           }}
         />
 
+		<Stack.Screen
+          name="electricity"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
+
+		<Stack.Screen
+          name="cableTv"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
+
+		<Stack.Screen
+          name="Customer"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
+
+		<Stack.Screen
+          name="referral"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
+
+		<Stack.Screen
+          name="commingsoon"
+          options={{
+            headerShown: false, // Let BuyDataScreen.tsx handle its own header
+          }}
+        />
+
         <Stack.Screen
           name="Confirmation"
           options={{

@@ -5,16 +5,20 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
 
-// Define types
-interface DataBundle {
+// Define shared bundle interface
+interface Bundle {
   id: number;
-  data: string;
-  price: number;
-  validity: string;
-  category: string;
-  description?: string;
   variation_code: string;
-  planType: string;
+  description?: string;
+  // Properties for AirtimeBundle
+  amount?: number;
+  type?: string;
+  // Properties for DataBundle
+  data?: string;
+  price?: number;
+  validity?: string;
+  category?: string;
+  planType?: string;
 }
 
 interface Provider {
@@ -35,12 +39,12 @@ const ConfirmationPage: React.FC = () => {
     source?: string;
   }>();
 
-  let selectedBundle: DataBundle | null = null;
+  let selectedBundle: Bundle | null = null;
   let selectedProvider: Provider | null = null;
 
   try {
-    selectedBundle = bundle ? JSON.parse(bundle) as DataBundle : null;
-    selectedProvider = provider ? JSON.parse(provider) as Provider : null;
+    selectedBundle = bundle ? JSON.parse(bundle) : null;
+    selectedProvider = provider ? JSON.parse(provider) : null;
   } catch (error) {
     console.error('Error parsing params:', error);
     Alert.alert('Error', 'Invalid purchase data');
@@ -55,6 +59,7 @@ const ConfirmationPage: React.FC = () => {
   const [editablePhoneNumber, setEditablePhoneNumber] = useState<string>(phoneNumber || '');
   const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false);
   const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider?.name || '');
+  const [actualPrice, setActualPrice] = useState<number | null>(null); // State for actual price
 
   // Animation for slide to purchase
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -87,7 +92,7 @@ const ConfirmationPage: React.FC = () => {
         if (error || !user || !user.id) {
           throw new Error('User not authenticated or UUID missing');
         }
-        const newReferenceId = `EdgesNetwork_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const newReferenceId = `VTUNetwork_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
         setReferenceId(newReferenceId);
       } catch (error) {
         console.error('Error fetching user UUID:', error);
@@ -184,7 +189,10 @@ const ConfirmationPage: React.FC = () => {
   };
 
   // Format number with commas
-  const formatNumberWithCommas = (number: number): string => {
+  const formatNumberWithCommas = (number: number | undefined | null): string => {
+    if (number === undefined || number === null) {
+      return 'N/A';
+    }
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
@@ -204,7 +212,8 @@ const ConfirmationPage: React.FC = () => {
       return;
     }
 
-    if (balance < selectedBundle.price) {
+    const purchaseAmount = selectedBundle.amount || selectedBundle.price || 0;
+    if (balance < purchaseAmount) {
       Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
       return;
     }
@@ -238,26 +247,24 @@ const ConfirmationPage: React.FC = () => {
     setTransactionStatus('processing');
 
     try {
-      const appFee = 50; // ₦50 fee (not shown to user)
-      const dataPurchaseAmount = selectedBundle.price - appFee; // Amount for data purchase
-
       // Record pending transaction in Supabase
       const transactionData = {
         user_email: userEmail as string,
-        amount: -selectedBundle.price,
+        amount: -purchaseAmount,
         reference: referenceId,
         status: 'pending',
         metadata: {
-          purchase: `${selectedBundle.data} on ${selectedProvider.name}`,
+          purchase: selectedBundle.type === 'airtime'
+            ? `Airtime ₦${formatNumberWithCommas(selectedBundle.amount)} on ${selectedProvider.name}`
+            : `${selectedBundle.data} on ${selectedProvider.name}`,
           phone_number: editablePhoneNumber,
-          validity: selectedBundle.validity,
-          app_fee: appFee,
-          data_amount: dataPurchaseAmount,
+          validity: selectedBundle.validity || 'N/A',
+          type: selectedBundle.type || 'data',
           custom_fields: [
             {
               display_name: 'Mobile Payment',
               variable_name: 'mobile_payment',
-              value: 'Edges Network',
+              value: 'VTU.ng',
             },
           ],
         },
@@ -274,36 +281,60 @@ const ConfirmationPage: React.FC = () => {
         throw new Error('Failed to record pending transaction');
       }
 
-      // Purchase data with Ebenkdata API
-      const purchaseResponse = await fetch('https://ebenkdata.com/api/data/purchase', {
-        method: 'POST',
+      // Purchase with VTU.ng API
+      const networkIdMap: { [key: string]: string } = {
+        MTN: 'mtn',
+        GLO: 'glo',
+        AIRTEL: 'airtel',
+        '9MOBILE': 'etisalat',
+      };
+      const networkId = networkIdMap[selectedProvider.name.toUpperCase()] || 'mtn';
+
+      const apiUrl = `https://vtu.ng/wp-json/api/v1/airtime?username=b.uche@fudutsinma.edu.ng&password=@Password7492&phone=${editablePhoneNumber}&network_id=${networkId}&amount=${purchaseAmount}`;
+
+      const purchaseResponse = await fetch(apiUrl, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
         },
-        body: JSON.stringify({
-          serviceID: selectedProvider.code,
-          billersCode: editablePhoneNumber,
-          variation_code: selectedBundle.variation_code,
-          amount: dataPurchaseAmount,
-          phone: editablePhoneNumber,
-        }),
       });
 
       const purchaseData = await purchaseResponse.json();
+      console.log('VTU.ng API Response:', purchaseData);
 
-      if (purchaseData.status !== 'success') {
+      if (purchaseData.code !== 'success') {
         await supabase
           .from('transactions')
           .update({ status: 'failed' })
           .eq('id', pendingTx.id);
         setTransactionStatus('failed');
-        Alert.alert('Error', 'Data purchase failed. Please try again.');
+        Alert.alert('Error', `Airtime purchase failed: ${purchaseData.message || 'Unknown error'}`);
         return;
       }
 
+      // Extract actual price from API response
+      const actualCost = purchaseData.data?.amount
+        ? parseFloat(purchaseData.data.amount.replace('NGN', ''))
+        : purchaseAmount;
+      setActualPrice(actualCost);
+
+      // Update transaction metadata with actual cost
+      const { error: updateTxError } = await supabase
+        .from('transactions')
+        .update({
+          metadata: {
+            ...transactionData.metadata,
+            actual_cost: actualCost,
+          },
+        })
+        .eq('id', pendingTx.id);
+
+      if (updateTxError) {
+        console.error('Transaction metadata update error:', updateTxError.message);
+      }
+
       // Update wallet balance
-      const newBalance = balance - selectedBundle.price;
+      const newBalance = balance - purchaseAmount;
       const { error: walletUpdateError } = await supabase
         .from('wallets')
         .update({ balance: newBalance })
@@ -336,18 +367,18 @@ const ConfirmationPage: React.FC = () => {
       console.log('Transaction successful:', {
         transactionId: pendingTx.id,
         provider: selectedProvider.name,
-        data: selectedBundle.data,
+        purchase: selectedBundle.type === 'airtime' ? `Airtime ₦${purchaseAmount}` : selectedBundle.data,
         phoneNumber: editablePhoneNumber,
-        totalAmount: selectedBundle.price,
-        appFee,
-        dataPurchaseAmount,
+        totalAmount: purchaseAmount,
+        actualCost,
         reference: referenceId,
+        type: selectedBundle.type || 'data',
       });
 
       // Success message
       Alert.alert(
         'Success',
-        `Successfully purchased ${selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(selectedBundle.price)}. Data sent to ${editablePhoneNumber}.`
+        `Successfully purchased ${selectedBundle.type === 'airtime' ? `Airtime ₦${formatNumberWithCommas(purchaseAmount)}` : selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Airtime sent to ${editablePhoneNumber}.`
       );
 
       // Navigate to success screen
@@ -356,15 +387,17 @@ const ConfirmationPage: React.FC = () => {
         params: {
           id: pendingTx.id,
           provider: selectedProvider.name,
-          data: selectedBundle.data,
-          price: selectedBundle.price.toString(),
+          data: selectedBundle.type === 'airtime' ? `Airtime ₦${purchaseAmount}` : selectedBundle.data,
+          price: actualCost.toString(),
           date: new Date().toISOString(),
           status: 'Success',
           phoneNumber: editablePhoneNumber,
           reference: referenceId,
           metadata: JSON.stringify({
-            validity: selectedBundle.validity,
+            validity: selectedBundle.validity || 'N/A',
             payment_method: 'Wallet',
+            type: selectedBundle.type || 'data',
+            actual_cost: actualCost,
           }),
         },
       });
@@ -395,6 +428,11 @@ const ConfirmationPage: React.FC = () => {
     return null;
   }
 
+  const purchaseAmount = selectedBundle.amount || selectedBundle.price || 0;
+  const purchaseDescription = selectedBundle.type === 'airtime'
+    ? `Airtime ₦${formatNumberWithCommas(selectedBundle.amount)}`
+    : selectedBundle.data || 'N/A';
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -414,17 +452,25 @@ const ConfirmationPage: React.FC = () => {
             <Text style={styles.providerName}>{selectedProvider.name}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Data Plan</Text>
-            <Text style={styles.detailValue}>{selectedBundle.data}</Text>
+            <Text style={styles.detailLabel}>{selectedBundle.type === 'airtime' ? 'Airtime Amount' : 'Data Plan'}</Text>
+            <Text style={styles.detailValue}>{purchaseDescription}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>₦{formatNumberWithCommas(selectedBundle.price)}</Text>
+            <Text style={styles.detailValue}>₦{formatNumberWithCommas(purchaseAmount)}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Validity</Text>
-            <Text style={styles.detailValue}>{selectedBundle.validity}</Text>
+            <Text style={styles.detailLabel}>Actual Price</Text>
+            <Text style={styles.detailValue}>
+              {actualPrice !== null ? `₦${formatNumberWithCommas(actualPrice)}` : 'Pending purchase'}
+            </Text>
           </View>
+          {selectedBundle.validity && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Validity</Text>
+              <Text style={styles.detailValue}>{selectedBundle.validity}</Text>
+            </View>
+          )}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Phone Number</Text>
             {isEditingPhone ? (
@@ -451,10 +497,12 @@ const ConfirmationPage: React.FC = () => {
               </View>
             )}
           </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Plan Type</Text>
-            <Text style={styles.detailValue}>{selectedBundle.planType}</Text>
-          </View>
+          {selectedBundle.planType && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Plan Type</Text>
+              <Text style={styles.detailValue}>{selectedBundle.planType}</Text>
+            </View>
+          )}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Bundle ID</Text>
             <Text style={styles.detailValue}>{selectedBundle.id}</Text>
