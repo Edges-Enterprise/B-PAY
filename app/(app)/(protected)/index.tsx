@@ -133,85 +133,97 @@ export default function HomeScreen() {
   }, [phoneNumber]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-        <Text style={styles.welcomeTitle}>{welcomeMessage}</Text>
-        <Text style={styles.welcomeSubtitle}>Your business dashboard is here 🔥</Text>
-        <View style={styles.quickActionsHeader}>
-          <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-          <Pressable onPress={() => router.push('/(app)/(protected)/all-actions')}>
-            <Text style={styles.moreButtonText}>More ... ></Text>
-          </Pressable>
-        </View>
-        <View style={styles.quickActionsCard}>
-          <View style={styles.quickActionsGrid}>
-            {actions.map((action, index) => (
-              <Pressable
-                key={index}
-                onPress={() => router.push(action.route)}
-                style={styles.quickActionCard}
-              >
-                <Ionicons name={action.icon} size={24} color={action.color} />
-                <Text style={styles.quickActionTitle}>
-                  {action.title.length > 12 ? action.title.slice(0, 11) + '...' : action.title}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-        <Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
-        {['MTN 1.5GB – ₦300', 'Glo 2GB – ₦500', 'Airtel 1GB – ₦250'].map((plan, index) => (
-          <PlanItemWithSwipe
-            key={plan}
-            plan={plan}
-            index={index}
-            setSelectedPlan={setSelectedPlan}
-            setModalVisible={setModalVisible}
-          />
-        ))}
-      </View>
+		<GestureHandlerRootView style={{ flex: 1 }}>
+			<View style={styles.container}>
+				<StatusBar
+					translucent
+					backgroundColor="transparent"
+					barStyle="light-content"
+				/>
+				<View className='bg-red-500'>
+					<Text style={styles.welcomeTitle}>{welcomeMessage}</Text>
+					<Text style={styles.welcomeSubtitle}>
+						Your business dashboard is here 🔥
+					</Text>
+				</View>
+				<View style={styles.quickActionsHeader}>
+					<Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
+					<Pressable onPress={() => router.push("/(app)/all-actions")}>
+						<Text style={styles.moreButtonText}>More ... {">"}</Text>
+					</Pressable>
+				</View>
+				<View style={styles.quickActionsCard}>
+					<View style={styles.quickActionsGrid}>
+						{actions.map((action, index) => (
+							<Pressable
+								key={index}
+								onPress={() => router.push(action.route)}
+								style={styles.quickActionCard}
+							>
+								<Ionicons name={action.icon} size={24} color={action.color} />
+								<Text style={styles.quickActionTitle}>
+									{action.title.length > 12
+										? action.title.slice(0, 11) + "..."
+										: action.title}
+								</Text>
+							</Pressable>
+						))}
+					</View>
+				</View>
+				<Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
+				{["MTN 1.5GB – ₦300", "Glo 2GB – ₦500", "Airtel 1GB – ₦250"].map(
+					(plan, index) => (
+						<PlanItemWithSwipe
+							key={plan}
+							plan={plan}
+							index={index}
+							setSelectedPlan={setSelectedPlan}
+							setModalVisible={setModalVisible}
+						/>
+					),
+				)}
+			</View>
 
-      <PurchaseModal
-        visible={isModalVisible}
-        onClose={closePurchaseModal}
-        selectedPlan={selectedPlan}
-        phoneNumber={phoneNumber}
-        setPhoneNumber={setPhoneNumber}
-        transactionPin={transactionPin}
-        setTransactionPin={setTransactionPin}
-        networkProvider={networkProvider}
-        hasTransactionPin={hasTransactionPin}
-        showTransactionPin={showTransactionPin}
-        setShowTransactionPin={setShowTransactionPin}
-        onCreatePin={() => setCreatePinModalVisible(true)}
-        onContinue={handlePurchase}
-      />
+			<PurchaseModal
+				visible={isModalVisible}
+				onClose={closePurchaseModal}
+				selectedPlan={selectedPlan}
+				phoneNumber={phoneNumber}
+				setPhoneNumber={setPhoneNumber}
+				transactionPin={transactionPin}
+				setTransactionPin={setTransactionPin}
+				networkProvider={networkProvider}
+				hasTransactionPin={hasTransactionPin}
+				showTransactionPin={showTransactionPin}
+				setShowTransactionPin={setShowTransactionPin}
+				onCreatePin={() => setCreatePinModalVisible(true)}
+				onContinue={handlePurchase}
+			/>
 
-      <TransactionStatusModal
-        visible={transactionModalVisible}
-        onClose={closeTransactionModal}
-        transactionStatus={transactionStatus}
-        selectedPlan={selectedPlan}
-        phoneNumber={phoneNumber}
-        networkProvider={networkProvider}
-      />
+			<TransactionStatusModal
+				visible={transactionModalVisible}
+				onClose={closeTransactionModal}
+				transactionStatus={transactionStatus}
+				selectedPlan={selectedPlan}
+				phoneNumber={phoneNumber}
+				networkProvider={networkProvider}
+			/>
 
-      <CreatePinModal
-        visible={createPinModalVisible}
-        onClose={closeCreatePinModal}
-        newPin={newPin}
-        setNewPin={setNewPin}
-        confirmPin={confirmPin}
-        setConfirmPin={setConfirmPin}
-        showNewPin={showNewPin}
-        setShowNewPin={setShowNewPin}
-        showConfirmPin={showConfirmPin}
-        setShowConfirmPin={setShowConfirmPin}
-        onSave={handleCreatePin}
-      />
-    </GestureHandlerRootView>
-  );
+			<CreatePinModal
+				visible={createPinModalVisible}
+				onClose={closeCreatePinModal}
+				newPin={newPin}
+				setNewPin={setNewPin}
+				confirmPin={confirmPin}
+				setConfirmPin={setConfirmPin}
+				showNewPin={showNewPin}
+				setShowNewPin={setShowNewPin}
+				showConfirmPin={showConfirmPin}
+				setShowConfirmPin={setShowConfirmPin}
+				onSave={handleCreatePin}
+			/>
+		</GestureHandlerRootView>
+	);
 }
 
 const styles = StyleSheet.create({
@@ -222,7 +234,7 @@ const styles = StyleSheet.create({
     paddingTop: StatusBar.currentHeight || 48,
   },
   welcomeTitle: {
-    fontSize: 28,
+    fontSize: 14,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,

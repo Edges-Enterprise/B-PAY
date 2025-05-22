@@ -219,7 +219,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 		try {
 			const response = await fetch(
-				"https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/deleteaccount",
+				"https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/delete-account",
 				{
 					method: "POST",
 					headers: {
