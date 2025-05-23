@@ -135,7 +135,7 @@ function AppStack() {
 					options={{ headerTitle: "", headerShown: false }}
 				/>
 				<Stack.Screen
-					name="(Auth)"
+					name="(auth)"
 					options={{ headerTitle: "", headerShown: false }}
 				/>
 				<Stack.Screen

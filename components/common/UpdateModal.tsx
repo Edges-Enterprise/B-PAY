@@ -40,7 +40,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({ visible, onClose, isStoreUpda
           >
             <View style={styles.iconContainer}>
               <Image 
-                source={require('@/assets/icon.png')}
+                source={require('@/assets/images/icon.png')}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
