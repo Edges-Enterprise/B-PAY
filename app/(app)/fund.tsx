@@ -16,6 +16,10 @@ import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/config/supabase';
 import { WebView } from 'react-native-webview';
+import { v4 as uuidv4 } from 'uuid';
+
+// Polyfill crypto.getRandomValues
+import 'react-native-get-random-values';
 
 type PaymentMethod = 'card' | 'bank_transfer';
 
@@ -34,9 +38,21 @@ const FundScreen = () => {
   } | null>(null);
   const [showWebView, setShowWebView] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [userId, setUserId] = useState('');
+  const [paymentReference, setPaymentReference] = useState(''); // Store reference
 
-  // Paystack test public key
-  const PAYSTACK_PUBLIC_KEY = 'pk_test_766ebb286cc861a4807dd2e5b81e265e4778388f';
+  // Access Paystack public key from environment variables
+  const PAYSTACK_PUBLIC_KEY = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
+
+  // Log and validate Paystack key
+  useEffect(() => {
+    console.log('Environment Variables:', process.env);
+    console.log('Paystack Public Key:', PAYSTACK_PUBLIC_KEY);
+    if (!PAYSTACK_PUBLIC_KEY || !PAYSTACK_PUBLIC_KEY.startsWith('pk_')) {
+      console.error('Invalid or missing Paystack public key');
+      Alert.alert('Error', 'Payment configuration error. Please contact support.');
+    }
+  }, [PAYSTACK_PUBLIC_KEY]);
 
   // Listen for real-time transaction updates
   useEffect(() => {
@@ -67,7 +83,7 @@ const FundScreen = () => {
         supabase.removeChannel(subscription);
       }
     };
-  }, [bankDetails]);
+  }, [bankDetails, router]);
 
   // Fetch user data on load
   useEffect(() => {
@@ -85,6 +101,7 @@ const FundScreen = () => {
         }
         setUserEmail(user.email);
         setUserName(user.user_metadata.username);
+        setUserId(user.id);
       } catch (error) {
         console.error('Error fetching user data:', error);
         Alert.alert('Error', 'Failed to load user data. Please sign in again.');
@@ -93,7 +110,7 @@ const FundScreen = () => {
     };
 
     fetchUserData();
-  }, []);
+  }, [router]);
 
   const handlePresetAmount = (value: number) => {
     const currentAmount = amount ? parseFloat(amount) : 0;
@@ -104,29 +121,49 @@ const FundScreen = () => {
 
   const sendTestReceipt = async (reference: string, amount: string, email: string) => {
     try {
+      const parsedAmount = parseFloat(amount);
+      const feePercentage = 0.10;
+      const feeAmount = parsedAmount * feePercentage;
+      const netAmount = parsedAmount - feeAmount;
+
       const receiptDetails = {
         to: email,
-        subject: 'Payment Receipt',
+        subject: 'Payment Receipt - Edges Network',
         body: `
           Payment Receipt
           ----------------
           Reference: ${reference}
-          Amount: ₦${parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Amount Paid: ₦${parsedAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Fees:
+            - Transfer Fee (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - Wallet Management Fee (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - API & Network Protocols Fee (4%): ₦${(parsedAmount * 0.04).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - VAT (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Total Fees (10%): ₦${feeAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Amount Credited to Your Wallet: ₦${netAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
           Date: ${new Date().toLocaleString()}
           Status: Successful
           ----------------
+          View your wallet balance in the Edges Network app.
           Thank you for your payment!
         `,
       };
       console.log('Sending receipt:', receiptDetails);
+      // TODO: Implement actual email sending via serverless function
     } catch (error) {
       console.error('Error sending receipt:', error);
     }
   };
 
-  const updateWalletBalance = async (userEmail: string, amount: number) => {
+  const updateWalletBalance = async (userEmail: string, amount: number, transactionId: string, reference: string) => {
     try {
-      // Fetch current wallet
+      const feePercentage = 0.10;
+      const netAmount = amount * (1 - feePercentage);
+      const feeAmount = amount * feePercentage;
+
+      console.log(`Deducting 10% fee (₦${feeAmount.toFixed(2)}) from deposit of ₦${amount}. Crediting ₦${netAmount.toFixed(2)} to user wallet`);
+
+      // Update or insert user wallet balance
       const { data: wallet, error: fetchError } = await supabase
         .from('wallets')
         .select('balance')
@@ -137,10 +174,9 @@ const FundScreen = () => {
         throw fetchError;
       }
 
-      let newBalance = amount;
+      let newBalance = netAmount;
       if (wallet) {
-        newBalance = wallet.balance + amount;
-        // Update existing wallet
+        newBalance = wallet.balance + netAmount;
         const { error: updateError } = await supabase
           .from('wallets')
           .update({ balance: newBalance })
@@ -148,7 +184,6 @@ const FundScreen = () => {
 
         if (updateError) throw updateError;
       } else {
-        // Create new wallet
         const { error: insertError } = await supabase
           .from('wallets')
           .insert({ user_email: userEmail, balance: newBalance });
@@ -156,7 +191,35 @@ const FundScreen = () => {
         if (insertError) throw insertError;
       }
 
-      console.log(`Wallet balance updated for ${userEmail}: ₦${newBalance}`);
+      console.log(`Wallet balance updated for ${userEmail}: ₦${newBalance.toFixed(2)}`);
+
+      // Record fees in business_ledger
+      const feeEntries = [
+        { fee_type: 'transfer_fee', amount: amount * 0.02 },
+        { fee_type: 'wallet_management_fee', amount: amount * 0.02 },
+        { fee_type: 'api_network_fee', amount: amount * 0.04 },
+        { fee_type: 'vat', amount: amount * 0.02 },
+        { fee_type: 'total_fee', amount: feeAmount },
+      ];
+
+      const { error: ledgerError } = await supabase
+        .from('business_ledger')
+        .insert(
+          feeEntries.map((entry) => ({
+            id: uuidv4(),
+            transaction_id: transactionId,
+            user_email: userEmail,
+            fee_amount: entry.amount,
+            fee_type: entry.fee_type,
+          }))
+        );
+
+      if (ledgerError) {
+        console.error('Error recording fees in business_ledger:', ledgerError);
+        throw new Error('Failed to record business fees');
+      }
+
+      console.log(`Recorded fees for transaction ${reference}: ₦${feeAmount.toFixed(2)}`);
     } catch (error) {
       console.error('Error updating wallet balance:', error);
       throw new Error('Failed to update wallet balance');
@@ -165,6 +228,10 @@ const FundScreen = () => {
 
   const handleFundWallet = async () => {
     try {
+      if (!PAYSTACK_PUBLIC_KEY) {
+        throw new Error('Payment configuration error: Missing Paystack key');
+      }
+
       const parsedAmount = parseFloat(amount);
       if (!amount || isNaN(parsedAmount)) {
         setError('Please enter a valid amount');
@@ -180,12 +247,23 @@ const FundScreen = () => {
       if (!userName) {
         throw new Error('User username is required');
       }
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
 
-      // Record pending transaction
+      const feePercentage = 0.10;
+      const feeAmount = parsedAmount * feePercentage;
+      const netAmount = parsedAmount - feeAmount;
+
+      const reference = `EDGES_${userId}_${Date.now()}`;
+      setPaymentReference(reference); // Store reference
+      const transactionId = uuidv4();
+
       const transactionData = {
+        id: transactionId,
         user_email: userEmail,
         amount: parsedAmount,
-        reference: `PS_${Date.now()}`,
+        reference,
         status: 'pending',
         metadata: {
           custom_fields: [
@@ -197,6 +275,14 @@ const FundScreen = () => {
           ],
           payment_method: 'card',
           payment_date: new Date().toISOString(),
+          fees: {
+            transfer_fee: parsedAmount * 0.02,
+            wallet_management_fee: parsedAmount * 0.02,
+            api_network_fee: parsedAmount * 0.04,
+            vat: parsedAmount * 0.02,
+            total_fee: feeAmount,
+            net_amount: netAmount,
+          },
         },
       };
 
@@ -209,8 +295,8 @@ const FundScreen = () => {
         .single();
 
       if (pendingTxError) {
-        console.error('Pending transaction insert error:', pendingTxError.message);
-        throw new Error('Failed to record pending transaction');
+        console.error('Pending transaction insert error:', JSON.stringify(pendingTxError, null, 2));
+        throw new Error(`Failed to record pending transaction: ${pendingTxError.message}`);
       }
 
       setIsProcessing(true);
@@ -218,7 +304,7 @@ const FundScreen = () => {
       setPaymentMethod('card');
       setShowWebView(true);
     } catch (err) {
-      console.error('Error:', err);
+      console.error('Error in handleFundWallet:', err);
       Alert.alert('Error', err.message || 'An unexpected error occurred');
       setIsProcessing(false);
     }
@@ -229,28 +315,42 @@ const FundScreen = () => {
     try {
       if (data.startsWith('payment-success:')) {
         const reference = data.split(':')[1];
+        console.log(`Processing payment success for reference: ${reference}`);
 
-        // Update transaction to success
+        // Update transaction status
         const { error: successError } = await supabase
           .from('transactions')
           .update({ status: 'success' })
           .eq('reference', reference);
 
         if (successError) {
-          console.error('Success transaction update error:', successError.message);
-          throw new Error('Failed to update transaction status');
+          console.error('Success transaction update error:', JSON.stringify(successError, null, 2));
+          throw new Error(`Failed to update transaction status: ${successError.message}`);
         }
 
-        // Update wallet balance
-        await updateWalletBalance(userEmail, parseFloat(amount));
+        // Fetch transaction details
+        const { data: transaction, error: fetchTxError } = await supabase
+          .from('transactions')
+          .select('id, amount')
+          .eq('reference', reference)
+          .single();
 
-        // Send receipt
+        if (fetchTxError || !transaction) {
+          console.error('Fetch transaction error:', JSON.stringify(fetchTxError, null, 2));
+          // Log all transactions for debugging
+          const { data: allTx, error: allTxError } = await supabase
+            .from('transactions')
+            .select('*');
+          console.log('All transactions:', JSON.stringify(allTx, null, 2));
+          if (allTxError) console.error('Error fetching all transactions:', allTxError);
+          throw new Error(`Failed to fetch transaction details: ${fetchTxError?.message || 'No transaction found'}`);
+        }
+
+        await updateWalletBalance(userEmail, transaction.amount, transaction.id, reference);
         await sendTestReceipt(reference, amount, userEmail);
 
-        // Navigate to wallet
         router.push('/wallet');
       } else if (data === 'payment-cancelled' || data === 'payment-declined') {
-        // Update transaction to failed
         const { error: failedError } = await supabase
           .from('transactions')
           .update({ status: 'failed' })
@@ -259,23 +359,26 @@ const FundScreen = () => {
           .eq('amount', parseFloat(amount));
 
         if (failedError) {
-          console.error('Failed transaction update error:', failedError.message);
-          throw new Error('Failed to update transaction status');
+          console.error('Failed transaction update error:', JSON.stringify(failedError, null, 2));
+          throw new Error(`Failed to update transaction status: ${failedError.message}`);
         }
 
         Alert.alert(data === 'payment-cancelled' ? 'Cancelled' : 'Declined', 'Payment was not completed.');
       }
     } catch (err) {
       console.error('Error processing transaction:', err);
-      Alert.alert('Error', 'Failed to process transaction.');
+      Alert.alert('Error', `Failed to process transaction: ${err.message || 'Unknown error'}`);
     } finally {
       setShowWebView(false);
       setIsProcessing(false);
+      setPaymentReference(''); // Clear reference
     }
   };
 
   const generatePaystackHTML = (): string => {
-    const reference = `PS_${Date.now()}`;
+    // Use stored reference
+    const reference = paymentReference || `EDGES_${userId}_${Date.now()}`;
+    console.log(`Generating Paystack HTML with reference: ${reference}`);
     return `
       <!DOCTYPE html>
       <html>
@@ -289,7 +392,7 @@ const FundScreen = () => {
         <script>
           const paymentMethod = '${paymentMethod}';
           const handler = PaystackPop.setup({
-            key: '${PAYSTACK_PUBLIC_KEY}',
+            key: '${PAYSTACK_PUBLIC_KEY || ''}',
             email: '${userEmail}',
             amount: ${parseFloat(amount) * 100},
             currency: 'NGN',
@@ -361,27 +464,25 @@ const FundScreen = () => {
 
         {!showBankDetails ? (
           <>
-            {/* Balance Section */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 300 }}
               style={styles.balanceContainer}
             >
-              <Text style={styles.balanceLabel}>Balance (NGN)</Text>
+              <Text style={styles.balanceLabel}>Wallet Balance (NGN)</Text>
               <Text style={styles.balanceText}>
                 ₦{amount ? parseFloat(amount).toLocaleString('en-NG', { minimumFractionDigits: 2 }) : '0.00'}
               </Text>
             </MotiView>
 
-            {/* Amount Input */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 300, delay: 100 }}
               style={styles.inputContainer}
             >
-              <Text style={styles.label}>Amount (NGN)</Text>
+              <Text style={styles.label}>Amount to Fund (NGN)</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
@@ -403,7 +504,6 @@ const FundScreen = () => {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </MotiView>
 
-            {/* Preset Amounts */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -424,7 +524,6 @@ const FundScreen = () => {
               ))}
             </MotiView>
 
-            {/* Top Up Button */}
             <MotiView
               from={{ scale: 1 }}
               animate={{ scale: [1, 1.02, 1] }}
@@ -444,7 +543,6 @@ const FundScreen = () => {
               </Pressable>
             </MotiView>
 
-            {/* Payment Steps */}
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -462,7 +560,7 @@ const FundScreen = () => {
               </View>
               <View style={styles.step}>
                 <Text style={styles.stepNumber}>3</Text>
-                <Text style={styles.stepText}>Wallet will be credited automatically</Text>
+                <Text style={styles.stepText}>Wallet will be credited after fees (view balance in app)</Text>
               </View>
             </MotiView>
           </>
