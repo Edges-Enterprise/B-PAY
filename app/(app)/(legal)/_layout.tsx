@@ -4,10 +4,9 @@ import { useFont } from "@/context/font-context";
 import { useTheme } from "@/context/theme-context";
 
 import { Stack } from "expo-router";
-import { useTranslation } from "react-i18next";
 
 export default function LegalLayout() {
-  const { t } = useTranslation();
+
   const { selectedFont } = useFont();
   const { colorScheme } = useTheme();
 
@@ -32,30 +31,25 @@ export default function LegalLayout() {
       <Stack.Screen
         name="eula"
         options={{
-          title: t("settings.eulaAgreement"),
+          title: "EULA Agreement",
           headerShown: true,
         }}
       />
       <Stack.Screen
         name="terms"
         options={{
-          title: t("settings.termsOfService"),
+          title: "Terms Of Service",
           headerShown: true,
         }}
       />
       <Stack.Screen
         name="privacy"
         options={{
-          title: t("settings.privacyPolicy"),
+          title: "Privacy Policy",
           headerShown: true,
         }}
       />
-      <Stack.Screen
-        name="uwcPolicy"
-        options={{
-          title: t("settings.uwcPolicy"),
-        }}
-      />
+      
     </Stack>
   );
 }
