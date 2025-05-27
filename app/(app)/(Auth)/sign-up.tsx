@@ -54,7 +54,7 @@ export default function SignUpScreen() {
 		if (!isFormValid) {
 			Alert.alert(
 				"Invalid Input",
-				"Please ensure username is at least 3 characters, email is valid, and password is at least 6 characters."
+				"Please ensure username is at least 3 characters, email is valid, and password is at least 6 characters.",
 			);
 			return;
 		}
@@ -102,18 +102,58 @@ export default function SignUpScreen() {
 				}}
 				keyboardShouldPersistTaps="handled"
 			>
-				<Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-					<View style={styles.logoContainer}>
+				<Animated.View
+					style={[
+						{
+							flex: 1,
+							justifyContent: "center",
+							alignItems: "center",
+							paddingHorizontal: 20,
+						},
+						{ opacity: fadeAnim },
+					]}
+				>
+					<View
+						style={{
+							alignItems: "center",
+							marginBottom: 30,
+						}}
+					>
 						<Image
 							source={require("@/assets/images/playstore.jpg")}
-							style={styles.logo}
+							style={{
+								width: 150,
+								height: 150,
+								borderRadius: 70,
+								marginBottom: 10,
+							}}
 						/>
-						<Text style={styles.welcomeText}>Create Account</Text>
+						<Text
+							style={{
+								fontSize: 24,
+								fontWeight: "bold",
+								color: "#fff",
+							}}
+						>
+							Create Account
+						</Text>
 					</View>
 
-					<View style={styles.inputContainer}>
+					<View
+						style={{
+							width: "100%",
+							backgroundColor: "#222",
+							borderRadius: 8,
+							marginBottom: 20,
+						}}
+					>
 						<TextInput
-							style={styles.input}
+							style={{
+								height: 50,
+								paddingHorizontal: 10,
+								fontSize: 16,
+								color: "#fff",
+							}}
 							placeholder="Username"
 							placeholderTextColor="#aaa"
 							autoCapitalize="none"
@@ -122,9 +162,21 @@ export default function SignUpScreen() {
 						/>
 					</View>
 
-					<View style={styles.inputContainer}>
+					<View
+						style={{
+							width: "100%",
+							backgroundColor: "#222",
+							borderRadius: 8,
+							marginBottom: 20,
+						}}
+					>
 						<TextInput
-							style={styles.input}
+							style={{
+								height: 50,
+								paddingHorizontal: 10,
+								fontSize: 16,
+								color: "#fff",
+							}}
 							placeholder="Email"
 							placeholderTextColor="#aaa"
 							keyboardType="email-address"
@@ -134,9 +186,21 @@ export default function SignUpScreen() {
 						/>
 					</View>
 
-					<View style={styles.inputContainer}>
+					<View
+						style={{
+							width: "100%",
+							backgroundColor: "#222",
+							borderRadius: 8,
+							marginBottom: 20,
+						}}
+					>
 						<TextInput
-							style={styles.input}
+							style={{
+								height: 50,
+								paddingHorizontal: 10,
+								fontSize: 16,
+								color: "#fff",
+							}}
 							placeholder="Password"
 							placeholderTextColor="#aaa"
 							secureTextEntry
@@ -146,20 +210,51 @@ export default function SignUpScreen() {
 						/>
 					</View>
 
-					<View style={styles.rememberMeContainer}>
+					<View
+						style={{
+							width: "100%",
+							flexDirection: "row",
+							alignItems: "center",
+							gap: 10,
+							marginBottom: 20,
+						}}
+					>
 						<Switch
 							value={rememberMe}
 							onValueChange={setRememberMe}
 							trackColor={{ false: "#444", true: "#D4AF37" }}
 							thumbColor={rememberMe ? "#D4AF37" : "#ccc"}
 						/>
-						<Text style={styles.rememberMeText}>Remember Me</Text>
+						<Text
+							style={{
+								color: "#aaa",
+								fontSize: 16,
+							}}
+						>
+							Remember Me
+						</Text>
 					</View>
 
 					<TouchableOpacity
 						style={[
-							styles.signUpButton,
-							!isFormValid ? styles.disabledButton : styles.activeButton,
+							{
+								width: "100%",
+								height: 50,
+								borderRadius: 8,
+								justifyContent: "center",
+								alignItems: "center",
+								marginBottom: 20,
+								borderWidth: 2,
+							},
+							!isFormValid
+								? {
+										backgroundColor: "#333",
+										borderColor: "transparent",
+									}
+								: {
+										backgroundColor: "transparent",
+										borderColor: "#D4AF37",
+									},
 						]}
 						onPress={handleSignUp}
 						disabled={loading || !isFormValid}
@@ -169,8 +264,13 @@ export default function SignUpScreen() {
 						) : (
 							<Text
 								style={[
-									styles.signUpButtonText,
-									isFormValid && styles.activeButtonText,
+									{
+										fontSize: 16,
+										fontWeight: "bold",
+									},
+									isFormValid && {
+										color: "white",
+									},
 								]}
 							>
 								Sign Up
@@ -178,10 +278,31 @@ export default function SignUpScreen() {
 						)}
 					</TouchableOpacity>
 
-					<View style={styles.signupContainer}>
-						<Text style={styles.signupText}>Already have an account? </Text>
+					<View
+						style={{
+							flexDirection: "row",
+							alignItems: "center",
+							marginTop: 30,
+						}}
+					>
+						<Text
+							style={{
+								color: "#aaa",
+								fontSize: 14,
+							}}
+						>
+							Already have an account?{" "}
+						</Text>
 						<TouchableOpacity onPress={() => router.push("/sign-in")}>
-							<Text style={styles.signupLink}>Sign in</Text>
+							<Text
+								style={{
+									color: "#D7A77F",
+									fontSize: 14,
+									fontWeight: "bold",
+								}}
+							>
+								Sign in
+							</Text>
 						</TouchableOpacity>
 					</View>
 				</Animated.View>
@@ -189,88 +310,3 @@ export default function SignUpScreen() {
 		</KeyboardAvoidingView>
 	);
 }
-
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		justifyContent: "center",
-		alignItems: "center",
-		paddingHorizontal: 20,
-	},
-	logoContainer: {
-		alignItems: "center",
-		marginBottom: 30,
-	},
-	logo: {
-		width: 150,
-		height: 150,
-		borderRadius: 70,
-		marginBottom: 10,
-	},
-	welcomeText: {
-		fontSize: 24,
-		fontWeight: "bold",
-		color: "#fff",
-	},
-	inputContainer: {
-		width: "100%",
-		backgroundColor: "#222",
-		borderRadius: 8,
-		marginBottom: 20,
-	},
-	input: {
-		height: 50,
-		paddingHorizontal: 10,
-		fontSize: 16,
-		color: "#fff",
-	},
-	rememberMeContainer: {
-		width: "100%",
-		flexDirection: "row",
-		alignItems: "center",
-		gap: 10,
-		marginBottom: 20,
-	},
-	rememberMeText: {
-		color: "#aaa",
-		fontSize: 16,
-	},
-	signUpButton: {
-		width: "100%",
-		height: 50,
-		borderRadius: 8,
-		justifyContent: "center",
-		alignItems: "center",
-		marginBottom: 20,
-		borderWidth: 2,
-	},
-	disabledButton: {
-		backgroundColor: "#333",
-		borderColor: "transparent",
-	},
-	activeButton: {
-		backgroundColor: "transparent",
-		borderColor: "#D4AF37",
-	},
-	signUpButtonText: {
-		fontSize: 16,
-		fontWeight: "bold",
-	},
-	activeButtonText: {
-		color: "white",
-	},
-	signupContainer: {
-		flexDirection: "row",
-		alignItems: "center",
-		marginTop: 30,
-	},
-	signupText: {
-		color: "#aaa",
-		fontSize: 14,
-	},
-	signupLink: {
-		color: "#D7A77F",
-		fontSize: 14,
-		fontWeight: "bold",
-	},
-});
