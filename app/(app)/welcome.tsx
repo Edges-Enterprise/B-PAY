@@ -1,22 +1,24 @@
-import { rotatingTexts } from "@/constants/helper";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import Buttons from "@/components/AnimatedButton";
+import RotatingText from "@/components/RotatingText";
+import { fullWelcomeText, rotatingTexts } from "@/constants/helper";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
 	Dimensions,
 	Image,
 	ImageBackground,
-	Pressable,
 	StatusBar,
 	StyleSheet,
 	Text,
 	Vibration,
 	View,
 } from "react-native";
-import { State, TapGestureHandler } from "react-native-gesture-handler";
+import {
+	State,
+	TapGestureHandler,
+	TapGestureHandlerStateChangeEvent,
+} from "react-native-gesture-handler";
 import Animated, {
-	SlideInRight,
-	SlideOutLeft,
 	useAnimatedStyle,
 	useSharedValue,
 	withRepeat,
@@ -27,14 +29,12 @@ import Animated, {
 const { width, height } = Dimensions.get("window");
 
 export default function WelcomeScreen() {
-	const router = useRouter();
 	const [showButton, setShowButton] = useState(false);
 	const [showStatusBar, setShowStatusBar] = useState(false);
 	const [textIndex, setTextIndex] = useState(0);
 	const [typewriterText, setTypewriterText] = useState("");
-	const [navigationError, setNavigationError] = useState(null);
+	const [navigationError, setNavigationError] = useState<string | null>(null);
 
-	const fullWelcomeText = "Welcome";
 	const scale = useSharedValue(1);
 	const buttonScale = useSharedValue(1);
 	const logoScale = useSharedValue(1);
@@ -47,9 +47,10 @@ export default function WelcomeScreen() {
 			currentIndex++;
 			if (currentIndex === fullWelcomeText.length) {
 				clearInterval(interval);
-				setTimeout(() => setShowButton(true), 500);
+				const timeout = setTimeout(() => setShowButton(true), 500);
+				return () => clearTimeout(timeout); // Cleanup right when we set it
 			}
-		}, 250);
+		}, 50);
 		return () => clearInterval(interval);
 	}, []);
 
@@ -91,25 +92,17 @@ export default function WelcomeScreen() {
 		return () => clearInterval(interval);
 	}, []);
 
-	const onDoubleTap = ({ nativeEvent }) => {
+	const onDoubleTap = ({ nativeEvent }: TapGestureHandlerStateChangeEvent) => {
 		if (nativeEvent.state === State.ACTIVE) {
 			setShowStatusBar(true);
 		}
 	};
 
-	const pulseStyle = useAnimatedStyle(() => ({
-		transform: [{ scale: scale.value }],
-	}));
-
-	const buttonPulseStyle = useAnimatedStyle(() => ({
-		transform: [{ scale: buttonScale.value }],
-	}));
-
 	const logoPulseStyle = useAnimatedStyle(() => ({
 		transform: [{ scale: logoScale.value }],
 	}));
 
-	const handleNavigation = (route) => {
+	const handleNavigation = (route: "/sign-in" | "/sign-up") => {
 		Vibration.vibrate(40);
 		try {
 			router.push(route);
@@ -118,8 +111,6 @@ export default function WelcomeScreen() {
 			setNavigationError("Failed to navigate. Please try again.");
 		}
 	};
-
-	const current = rotatingTexts[textIndex];
 
 	return (
 		<TapGestureHandler onHandlerStateChange={onDoubleTap} numberOfTaps={2}>
@@ -179,117 +170,14 @@ export default function WelcomeScreen() {
 							>
 								{typewriterText}
 							</Text>
-							<Animated.View
-								key={textIndex}
-								entering={SlideInRight.duration(1500)}
-								exiting={SlideOutLeft.duration(1200)}
-								style={{
-									flexDirection: "row",
-									alignItems: "center",
-									marginTop: 14,
-									maxWidth: "90%",
-								}}
-							>
-								<MaterialCommunityIcons
-									name={current.icon}
-									size={22}
-									color="#D7A77F"
-									style={{ marginRight: 8 }}
-								/>
-								<Text
-									style={{
-										color: "#d1d5db",
-										fontSize: 16,
-										lineHeight: 22,
-									}}
-								>
-									{current.text}
-								</Text>
-							</Animated.View>
+							<RotatingText texts={rotatingTexts} />
 						</View>
 
 						{showButton && (
-							<View
-								style={[
-									{
-										flexDirection: "row",
-										alignItems: "center",
-										justifyContent: "center",
-										marginBottom: 40,
-										gap: 16,
-									},
-								]}
-							>
-								<Pressable
-									onPress={() => handleNavigation("/sign-up")}
-									style={[
-										{
-											flex: 1,
-											paddingVertical: 12,
-											borderRadius: 14,
-											alignItems: "center",
-											borderWidth: 2,
-											borderColor: "#D7A77F",
-											zIndex: 10,
-										},
-									]}
-								>
-									<Text
-										style={[
-											{
-												fontSize: 18,
-												fontWeight: "900",
-												textShadowColor: "black",
-												textShadowOffset: { width: 1.5, height: 2 },
-												textShadowRadius: 3,
-												transform: [{ translateY: -1 }, { translateX: -0.5 }],
-											},
-											{
-												color: "#ffffff",
-											},
-										]}
-									>
-										Sign Up
-									</Text>
-								</Pressable>
-
-								<Pressable
-									onPress={() => handleNavigation("/sign-in")}
-									style={[
-										{
-											flex: 1,
-											paddingVertical: 12,
-											borderRadius: 14,
-											alignItems: "center",
-											borderWidth: 2,
-											borderColor: "#D7A77F",
-											zIndex: 10,
-										},
-										{
-											backgroundColor: "transparent",
-											borderColor: "transparent",
-										},
-									]}
-								>
-									<Text
-										style={[
-											{
-												fontSize: 18,
-												fontWeight: "900",
-												textShadowColor: "black",
-												textShadowOffset: { width: 1.5, height: 2 },
-												textShadowRadius: 3,
-												transform: [{ translateY: -1 }, { translateX: -0.5 }],
-											},
-											{
-												color: "#ffffff",
-											},
-										]}
-									>
-										Sign In
-									</Text>
-								</Pressable>
-							</View>
+							<Buttons
+								handleNavigation={handleNavigation}
+								buttonScale={buttonScale}
+							/>
 						)}
 
 						{navigationError && (
@@ -310,12 +198,3 @@ export default function WelcomeScreen() {
 		</TapGestureHandler>
 	);
 }
-
-const styles = StyleSheet.create({
-	logoBackground: {
-		...StyleSheet.absoluteFillObject,
-		justifyContent: "center",
-		alignItems: "center",
-		zIndex: 1,
-	},
-});
