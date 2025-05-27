@@ -3,14 +3,12 @@ import { ThemeProvider, useTheme } from "@/context/theme-context";
 import { FontProvider, useFont } from "@/context/font-context";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-
 import { Platform } from "react-native";
 import * as Updates from "expo-updates";
 import UpdateModal from "@/components/common/UpdateModal";
 import { TouchableOpacity } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
 import { colors } from "@/constants/colors";
 import { useColorScheme } from "@/lib/useColorScheme";
 
@@ -24,6 +22,7 @@ export default function AppLayout() {
 		useState<boolean>(false);
 	const [isStoreUpdateRequired, setIsStoreUpdateRequired] =
 		useState<boolean>(false);
+
 	useEffect(() => {
 		// Skip update checks in development mode
 		if (__DEV__) {
@@ -92,6 +91,7 @@ export default function AppLayout() {
 			);
 		}
 	};
+
 	return (
 		<FontProvider>
 			<ThemeProvider>
@@ -128,8 +128,6 @@ function AppStack() {
 					},
 				}}
 			>
-				
-
 				<Stack.Screen
 					name="(protected)"
 					options={{ headerTitle: "", headerShown: false }}
@@ -146,12 +144,79 @@ function AppStack() {
 					name="welcome"
 					options={{ headerTitle: "", headerShown: false }}
 				/>
+				<Stack.Screen
+					name="serviceprovider"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="fund"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+				<Stack.Screen
+					name="notifications"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="electricity"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="cableTv"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="Customer"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="referral"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="commingsoon"
+					options={{
+						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+
+				<Stack.Screen
+					name="Confirmation"
+					options={{
+						headerShown: false, // Show header for confirmation screen
+						headerTransparent: false, // Make header transparent
+						headerStyle: {
+							backgroundColor: "transparent", // Ensure no background color
+						},
+						headerTintColor: "#fff", // White icons/text for visibility
+						headerTitle: "", // No title
+					}}
+				/>
 			</Stack>
 			{/* <StatusBar
-				style="inverted"
-				animated
-				backgroundColor={colors[colorScheme]?.background}
-			/> */}
+        style="inverted"
+        animated
+        backgroundColor={colors[colorScheme]?.background}
+      /> */}
 		</>
 	);
 }
