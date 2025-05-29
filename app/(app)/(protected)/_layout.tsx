@@ -1,14 +1,14 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ProtectedLayout() {
-  return (
+	return (
 		<Tabs
 			initialRouteName="wallet"
 			screenOptions={({ route }) => ({
 				tabBarIcon: ({ color, size }) => {
 					let iconName: any;
-
+					let iconSize = size;
 					switch (route.name) {
 						case "wallet":
 							iconName = "wallet-outline";
@@ -17,7 +17,8 @@ export default function ProtectedLayout() {
 							iconName = "cellular-outline";
 							break;
 						case "index":
-							iconName = "home-outline";
+							iconName = "bonfire";
+							iconSize = size + 4;
 							break;
 						case "history":
 							iconName = "time-outline";
@@ -29,9 +30,9 @@ export default function ProtectedLayout() {
 							iconName = "ellipse-outline";
 					}
 
-					return <Ionicons name={iconName} size={size} color={color} />;
+					return <Ionicons name={iconName} size={iconSize} color={color} />;
 				},
-				tabBarActiveTintColor: "#4e9bde",
+				tabBarActiveTintColor: "#d7a77f",
 				tabBarInactiveTintColor: "gray",
 				tabBarLabelStyle: {
 					fontSize: 12,
