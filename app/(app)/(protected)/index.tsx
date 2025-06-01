@@ -70,11 +70,6 @@ const actions = [
   { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '../cableTv' },
   { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '../Customer' },
   { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '../referral' },
-  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '../airtimeprovider' },
-  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '../electricity' },
-  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '../cableTv' },
-  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '../Customer' },
-  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '../referral' },
 ];
 
 export default function HomeScreen() {
@@ -83,11 +78,10 @@ export default function HomeScreen() {
   const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
   const username = user?.user_metadata?.username || 'Guest';
 
-  const username = user?.user_metadata?.username || 'Guest';
-
+ 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [popularPlans, setPopularPlans] = useState<string[]>([]);
-  const [popularPlans, setPopularPlans] = useState<string[]>([]);
+ 
   const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -95,8 +89,7 @@ export default function HomeScreen() {
   const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [hasPurchases, setHasPurchases] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
-  const [hasPurchases, setHasPurchases] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
+
 
   const closeCreatePinModal = () => {
     setCreatePinModalVisible(false);
@@ -332,21 +325,7 @@ export default function HomeScreen() {
       supabase.removeChannel(subscription);
     };
   }, [user]);
-    fetchPurchaseHistory();
-    fetchNotificationCount();
-
-    // Real-time subscription for notifications
-    const subscription = supabase
-      .channel('notifications')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user?.id}` }, () => {
-        fetchNotificationCount();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, [user]);
+    
 
   return (
     <View style={styles.container}>
@@ -416,7 +395,7 @@ export default function HomeScreen() {
         onSave={handleCreatePin}
       />
     </View>
-    </View>
+ 
   );
 }
 

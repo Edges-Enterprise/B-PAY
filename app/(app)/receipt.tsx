@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import React, { useRef, useEffect, useState } from 'react';
+
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Alert,
   Platform,
   ScrollView,
-  TouchableOpacity,
+
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,9 +28,6 @@ export default function ReceiptScreen() {
 
   const params = useLocalSearchParams();
   const viewShotRef = useRef<ViewShot>(null);
-
-  // State for media library permission
-  const [mediaPermission, setMediaPermission] = useState<boolean | null>(null);
 
   // State for media library permission
   const [mediaPermission, setMediaPermission] = useState<boolean | null>(null);
