@@ -6,7 +6,6 @@ import {
 	StatusBar,
 	TouchableOpacity,
 	ActivityIndicator,
-	StyleSheet,
 	Text,
 	Animated,
 	Alert,
@@ -68,7 +67,8 @@ export default function SignUpScreen() {
 			setEmail("");
 			setPassword("");
 			setRememberMe(false);
-		} catch (error) {
+		} catch (err: unknown) {
+			const error = err as Error;
 			console.error("SignUp error:", error);
 			if (error.message.includes("User already registered")) {
 				Alert.alert("Sign Up Error", "This email is already registered.");
