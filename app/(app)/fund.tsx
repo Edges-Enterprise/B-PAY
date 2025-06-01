@@ -157,6 +157,7 @@ const FundScreen = () => {
           Status: Successful
           ----------------
           View your wallet balance in the Edges Network app.
+          View your wallet balance in the Edges Network app.
           Thank you for your payment!
         `,
 			};

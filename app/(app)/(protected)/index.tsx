@@ -35,8 +35,41 @@ interface ConfirmationParams {
   source?: string;
 }
 
+// Define types for ConfirmationPage compatibility
+interface DataBundle {
+  id: number;
+  data: string;
+  price: number;
+  validity: string;
+  category: string;
+  description?: string;
+  variation_code: string;
+  planType: string;
+}
+
+interface Provider {
+  id: number;
+  name: string;
+  image: string;
+  code: string;
+}
+
+interface ConfirmationParams {
+  bundle?: string;
+  provider?: string;
+  phoneNumber?: string;
+  userEmail?: string;
+  transactionPin?: string;
+  source?: string;
+}
+
 const actions = [
   { title: 'Buy Data', icon: 'cellular-outline', color: '#22C55E', route: '/(app)/(protected)/buy' },
+  { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '../airtimeprovider' },
+  { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '../electricity' },
+  { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '../cableTv' },
+  { title: 'Customer Care', icon: 'headset-outline', color: '#3B82F6', route: '../Customer' },
+  { title: 'Referral', icon: 'gift-outline', color: '#F59E0B', route: '../referral' },
   { title: 'Buy Airtime', icon: 'call-outline', color: '#2563EB', route: '../airtimeprovider' },
   { title: 'Electricity', icon: 'flash-outline', color: '#EAB308', route: '../electricity' },
   { title: 'Cable TV', icon: 'tv-outline', color: '#3B82F6', route: '../cableTv' },
@@ -50,13 +83,18 @@ export default function HomeScreen() {
   const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
   const username = user?.user_metadata?.username || 'Guest';
 
+  const username = user?.user_metadata?.username || 'Guest';
+
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [popularPlans, setPopularPlans] = useState<string[]>([]);
   const [popularPlans, setPopularPlans] = useState<string[]>([]);
   const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [showNewPin, setShowNewPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
+  const [hasPurchases, setHasPurchases] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [hasPurchases, setHasPurchases] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
 
@@ -79,16 +117,19 @@ export default function HomeScreen() {
       const { error } = await supabase.auth.updateUser({
         data: {
           ...user?.user_metadata,
+          ...user?.user_metadata,
           transaction_pin_created: true,
           transaction_pin: newPin,
         },
       });
       if (error) throw error;
       console.log('Transaction PIN set successfully');
+      console.log('Transaction PIN set successfully');
       setCreatePinModalVisible(false);
       setNewPin('');
       setConfirmPin('');
     } catch (error) {
+      console.error('Error updating user metadata:', error);
       console.error('Error updating user metadata:', error);
       alert('Failed to save PIN. Please try again.');
     }
@@ -291,6 +332,21 @@ export default function HomeScreen() {
       supabase.removeChannel(subscription);
     };
   }, [user]);
+    fetchPurchaseHistory();
+    fetchNotificationCount();
+
+    // Real-time subscription for notifications
+    const subscription = supabase
+      .channel('notifications')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user?.id}` }, () => {
+        fetchNotificationCount();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [user]);
 
   return (
     <View style={styles.container}>
@@ -359,6 +415,7 @@ export default function HomeScreen() {
         setShowConfirmPin={setShowConfirmPin}
         onSave={handleCreatePin}
       />
+    </View>
     </View>
   );
 }

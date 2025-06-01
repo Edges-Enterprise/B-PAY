@@ -3,7 +3,13 @@ import { View, Text, Animated, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Easing } from 'react-native';
 
-const PlanItemWithSwipe = ({ plan, index, setSelectedPlan, setModalVisible }) => {
+interface PlanItemWithSwipeProps {
+  plan: string;
+  index: number;
+  onSwipePurchase: () => void;
+}
+
+const PlanItemWithSwipe: React.FC<PlanItemWithSwipeProps> = ({ plan, index, onSwipePurchase }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef(null);
 
@@ -30,9 +36,8 @@ const PlanItemWithSwipe = ({ plan, index, setSelectedPlan, setModalVisible }) =>
     };
   }, []);
 
-  const openSheet = () => {
-    setSelectedPlan(plan);
-    setModalVisible(true);
+  const handleSwipe = () => {
+    onSwipePurchase();
     if (swipeableRef.current) {
       swipeableRef.current.close();
     }
@@ -61,7 +66,7 @@ const PlanItemWithSwipe = ({ plan, index, setSelectedPlan, setModalVisible }) =>
     <View style={styles.planItemContainer}>
       <Swipeable
         ref={swipeableRef}
-        onSwipeableWillOpen={openSheet}
+        onSwipeableWillOpen={handleSwipe}
         friction={2}
         leftThreshold={40}
         renderLeftActions={renderLeftActions}

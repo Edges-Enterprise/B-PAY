@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +8,7 @@ import {
   Alert,
   Platform,
   ScrollView,
+  TouchableOpacity,
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +32,9 @@ export default function ReceiptScreen() {
   // State for media library permission
   const [mediaPermission, setMediaPermission] = useState<boolean | null>(null);
 
+  // State for media library permission
+  const [mediaPermission, setMediaPermission] = useState<boolean | null>(null);
+
   const {
     id,
     provider,
@@ -43,6 +48,21 @@ export default function ReceiptScreen() {
   } = params;
 
   const metadata = metadataString ? JSON.parse(metadataString as string) : {};
+
+  // Request media library permission on mount
+  useEffect(() => {
+    (async () => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      setMediaPermission(status === 'granted');
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Media library access is needed to save or share the receipt.'
+        );
+      }
+    })();
+  }, []);
 
   // Request media library permission on mount
   useEffect(() => {
@@ -94,6 +114,16 @@ export default function ReceiptScreen() {
     }
   };
 
+  // Conditional rendering based on permissions
+  if (mediaPermission === null) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Checking Permissions...</Text>
+      </View>
+    );
+  }
+
+  // Main UI (shown even if permissions are denied, since displaying the receipt doesn't require permissions)
   // Conditional rendering based on permissions
   if (mediaPermission === null) {
     return (
