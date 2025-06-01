@@ -7,9 +7,16 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 SplashScreen.preventAutoHideAsync();
 
+type UserProfile = {
+	id: string;
+	email: string;
+	username: string;
+	created_at: string;
+};
+
 type SupabaseContextProps = {
 	auth: any;
-	profile: any | null;
+	profile: UserProfile | null;
 	user: User | null;
 	session: Session | null;
 	initialized?: boolean;
@@ -57,118 +64,36 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 	const signUp = async (username: string, email: string, password: string) => {
 		try {
-			console.log("Signing up with:", { username, email });
-
-			// Step 1: Create the authentication user
 			const { data, error } = await supabase.auth.signUp({
 				email: email.trim(),
 				password,
 				options: {
-					data: {
-						username: username.trim(),
-					},
+					data: { username: username.trim() },
 				},
 			});
 
-			if (error) {
-				console.error("Auth signUp error:", error);
-				throw error;
+			if (error || !data.user) throw error || new Error("Failed to sign up");
+
+			const { error: insertError } = await supabase.from("profiles").upsert([
+				{
+					id: data.user.id,
+					username: username.trim(),
+					email: email.trim(),
+					created_at: new Date().toISOString(),
+				},
+			]);
+
+			if (insertError) {
+				await supabase.auth.admin.deleteUser(data.user.id);
+				throw new Error("Failed to save user profile.");
 			}
 
-			if (!data.user) {
-				console.error("No user returned from auth signUp");
-				throw new Error("Failed to create user account");
-			}
-
-			console.log("Auth user created:", data.user.id);
-
-			// Step 2: Check if a profile already exists for this user ID and email
-			const { data: existingProfile, error: fetchError } = await supabase
-				.from("profiles")
-				.select("id, email")
-				.eq("id", data.user.id)
-				.single();
-
-			if (fetchError && fetchError.code !== "PGRST116") {
-				// PGRST116 means "no rows found", which is expected if the profile doesn't exist
-				console.error("Error checking existing profile:", fetchError);
-				throw fetchError;
-			}
-
-			if (existingProfile) {
-				// If a profile exists, check if the email matches
-				if (existingProfile.email === email.trim()) {
-					// Email matches, proceed with sign-up using existing profile
-					console.log(
-						"Profile exists with matching email, proceeding with sign-up",
-					);
-				} else {
-					// Email differs, update the existing profile or handle conflict
-					const { error: updateError } = await supabase
-						.from("profiles")
-						.update({
-							username: username.trim(),
-							email: email.trim(),
-							created_at: new Date().toISOString(),
-						})
-						.eq("id", data.user.id);
-
-					if (updateError) {
-						console.error("Error updating existing profile:", updateError);
-						try {
-							await supabase.auth.admin.deleteUser(data.user.id);
-							console.log("Cleaned up auth user after failed profile update");
-						} catch (cleanupError) {
-							console.error("Failed to clean up auth user:", cleanupError);
-						}
-						throw updateError;
-					}
-					console.log("Updated existing profile with new email and username");
-				}
-			} else {
-				// Step 3: Create the user profile in the profiles table if no profile exists
-				const { error: insertError } = await supabase.from("profiles").insert([
-					{
-						id: data.user.id,
-						username: username.trim(),
-						email: email.trim(),
-						created_at: new Date().toISOString(),
-					},
-				]);
-
-				if (insertError) {
-					console.error("Database insert error:", insertError);
-
-					// If database insert fails, clean up the auth user
-					try {
-						await supabase.auth.admin.deleteUser(data.user.id);
-						console.log("Cleaned up auth user after failed profile creation");
-					} catch (cleanupError) {
-						console.error("Failed to clean up auth user:", cleanupError);
-					}
-
-					if (insertError.code === "23505") {
-						throw new Error(
-							"A profile with this user ID already exists. Please try signing in or use a different email.",
-						);
-					}
-
-					throw insertError;
-				}
-
-				console.log("User profile created in database");
-			}
-
-			// Set the user and session
 			setUser(data.user);
 			setSession(data.session);
-
-			Alert.alert("Success", "Account created successfully!");
-			return data;
-		} catch (error) {
-			console.error("SignUp process failed:", error);
-			Alert.alert("Sign Up Error", error.message || "Failed to create account");
-			throw error;
+			Alert.alert("Success", "Account created successfully.");
+		} catch (err: any) {
+			Alert.alert("Sign Up Error", err.message || "Unexpected error occurred.");
+			throw err;
 		}
 	};
 
@@ -179,138 +104,121 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 				password,
 			});
 
-			if (error) {
-				console.error("SignIn error:", error);
-				throw error;
+			if (error) throw error;
+			if (!data || !data.user || !data.session) {
+				throw new Error("Invalid login response from Supabase");
 			}
-
-			if (data.user) {
-				setUser(data.user);
-				setSession(data.session);
-				router.replace("/(app)/(protected)");
-			}
-		} catch (error) {
-			Alert.alert("Sign In Error", error.message || "Failed to sign in");
-			throw error;
+			setUser(data.user);
+			setSession(data.session);
+			router.replace("/(app)/(protected)");
+		} catch (err: any) {
+			Alert.alert("Sign In Error", err.message || "Failed to sign in.");
+			throw err;
 		}
 	};
 
 	const signOut = async () => {
 		try {
 			const { error } = await supabase.auth.signOut();
-			if (error) {
-				throw error;
-			}
+			if (error) throw error;
 			setUser(null);
 			setSession(null);
 			router.push("/(app)/(auth)/sign-in");
-		} catch (error) {
-			Alert.alert("Sign Out Error", error.message || "Failed to sign out");
-			throw error;
+		} catch (err: any) {
+			Alert.alert("Sign Out Error", err.message || "Failed to sign out.");
 		}
 	};
 
 	const deleteOwnAccount = async () => {
-		if (!user) {
-			Alert.alert("Error", "You need to be logged in to delete your account.");
+		if (!user || !session) {
+			Alert.alert("Error", "You must be logged in to delete your account.");
 			return;
 		}
 
 		try {
 			const response = await fetch(
-				"https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/delete-account",
+				`${process.env.EXPO_PUBLIC_SUPABASE_DELETE_ACCOUNT_FUNCTION_URL}`,
 				{
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
-						Authorization: `Bearer ${session?.access_token}`,
+						Authorization: `Bearer ${session.access_token}`,
 					},
 					body: JSON.stringify({ user_id: user.id }),
 				},
 			);
 
 			const result = await response.json();
-
-			if (!response.ok) {
-				throw new Error(result.error || "Failed to delete account");
-			}
+			if (!response.ok) throw new Error(result.error || "Delete failed");
 
 			setUser(null);
 			setSession(null);
-
-			Alert.alert(
-				"Account Deleted",
-				"Your account has been successfully deleted.",
-			);
+			Alert.alert("Deleted", "Your account was deleted successfully.");
 			router.replace("/(app)/(auth)/sign-in");
-		} catch (error) {
-			console.error("Error deleting account:", error.message);
-			Alert.alert("Error", "Failed to delete your account.");
+		} catch (err: any) {
+			console.error("Delete account error:", err.message);
+			Alert.alert("Error", err.message || "Failed to delete account.");
 		}
 	};
 
+	// Load session on mount
 	useEffect(() => {
-		if (!initialized || !fontsLoaded) return;
-
-		const inProtectedGroup = segments[1] === "(protected)";
-
-		if (session && !inProtectedGroup) {
-			router.replace("/(app)/(protected)");
-		} else if (!session) {
-			router.replace("/(app)/welcome");
-		}
-
-		setTimeout(() => {
-			SplashScreen.hideAsync();
-		}, 500);
-	}, [initialized, fontsLoaded, session]);
-
-	useEffect(() => {
-		supabase.auth.getSession().then(({ data: { session } }) => {
+		(async () => {
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
 			setSession(session);
-			setUser(session ? session.user : null);
+			setUser(session?.user || null);
 			setInitialized(true);
-		});
+		})();
 
-		const { data: authListener } = supabase.auth.onAuthStateChange(
+		const { data: listener } = supabase.auth.onAuthStateChange(
 			(_event, session) => {
 				setSession(session);
-				setUser(session ? session.user : null);
+				setUser(session?.user || null);
 			},
 		);
 
 		return () => {
-			authListener.subscription?.unsubscribe();
+			listener.subscription?.unsubscribe();
 		};
 	}, []);
 
+	// Fetch user profile when user changes
 	useEffect(() => {
-		if (!user) {
-			setProfile(null);
-			return;
-		}
 		const fetchProfile = async () => {
+			if (!user) return setProfile(null);
 			const { data, error } = await supabase
 				.from("profiles")
 				.select("*")
 				.eq("id", user.id)
 				.single();
-			if (error) {
-				console.error("Error fetching profile:", error);
-			} else {
-				setProfile(data);
-			}
+			if (!error && data) setProfile(data);
 		};
 		fetchProfile();
 	}, [user]);
+
+	// Handle splash screen
+	useEffect(() => {
+		if (!initialized || !fontsLoaded) return;
+
+		const inProtected = segments[1] === "(protected)";
+		if (session && !inProtected) {
+			router.replace("/(app)/(protected)");
+		} else if (!session) {
+			router.replace("/(app)/welcome");
+		}
+
+		SplashScreen.hideAsync();
+	}, [initialized, fontsLoaded, session]);
 
 	return (
 		<SupabaseContext.Provider
 			value={{
 				auth: supabase.auth,
 				user,
-				profile,
 				session,
+				profile,
 				initialized,
 				signUp,
 				signInWithPassword,
