@@ -14,10 +14,12 @@ import {
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/context/supabase-provider";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function SignInScreen() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
 
@@ -75,15 +77,6 @@ export default function SignInScreen() {
 		setLoading(true);
 		try {
 			await signInWithPassword(email, password, rememberMe);
-
-			// if (rememberMe) {
-			// 	await AsyncStorage.setItem(
-			// 		"userCredentials",
-			// 		JSON.stringify({ email, password }),
-			// 	);
-			// } else {
-			// 	await AsyncStorage.removeItem("userCredentials");
-			// }
 
 			router.replace("/(app)/(protected)");
 		} catch (err: unknown) {
@@ -146,24 +139,39 @@ export default function SignInScreen() {
 						/>
 					</View>
 
-					<View style={styles.inputContainer}>
+					<View
+						style={[
+							styles.inputContainer,
+							{ flexDirection: "row", alignItems: "center", paddingRight: 10 },
+						]}
+					>
 						<TextInput
-							style={styles.input}
+							style={[styles.input, { flex: 1 }]} // Add flex: 1 here
 							placeholder="Password"
 							placeholderTextColor="#aaa"
-							secureTextEntry
+							secureTextEntry={!showPassword}
 							autoCapitalize="none"
 							value={password}
 							onChangeText={setPassword}
 							onSubmitEditing={handleSignIn}
 						/>
+						<TouchableOpacity
+							style={styles.eyeIcon}
+							onPress={() => setShowPassword(!showPassword)}
+						>
+							<Ionicons
+								name={showPassword ? "eye-sharp" : "eye-off-sharp"}
+								size={24}
+								color="#aaa"
+							/>
+						</TouchableOpacity>
 					</View>
 
 					<View style={styles.rememberMeContainer}>
 						<Switch
 							value={rememberMe}
 							onValueChange={setRememberMe}
-							thumbColor={rememberMe ? "#523721" : "#666"}
+							thumbColor={rememberMe ? "#E9C9AF" : "#666"}
 							trackColor={{ false: "#444", true: "#D7A77F" }}
 						/>
 						<Text style={styles.rememberMeText}>Remember me</Text>
@@ -232,12 +240,16 @@ const styles = StyleSheet.create({
 		backgroundColor: "#333",
 		borderRadius: 8,
 		marginBottom: 20,
+		
 	},
 	input: {
 		height: 50,
 		paddingHorizontal: 10,
 		color: "#fff",
 		fontSize: 16,
+	},
+	eyeIcon: {
+		padding: 8,
 	},
 	rememberMeContainer: {
 		flexDirection: "row",
