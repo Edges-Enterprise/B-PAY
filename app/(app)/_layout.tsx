@@ -1,10 +1,10 @@
 import { Stack } from "expo-router";
+import * as Updates from "expo-updates";
+import React, { useEffect, useState } from "react";
+
+import UpdateModal from "@/components/common/UpdateModal";
 import { ThemeProvider, useTheme } from "@/context/theme-context";
 import { FontProvider, useFont } from "@/context/font-context";
-import React, { useEffect, useState } from "react";
-import { Platform } from "react-native";
-import * as Updates from "expo-updates";
-import UpdateModal from "@/components/common/UpdateModal";
 import { colors } from "@/constants/colors";
 
 export const unstable_settings = {
@@ -12,78 +12,35 @@ export const unstable_settings = {
 };
 
 export default function AppLayout() {
-	const [isUpdateModalVisible, setIsUpdateModalVisible] =
-		useState<boolean>(false);
-	const [isStoreUpdateRequired, setIsStoreUpdateRequired] =
-		useState<boolean>(false);
+	const [isUpdateModalVisible, setIsUpdateModalVisible] = useState(false);
 
 	useEffect(() => {
-		// Skip update checks in development mode
 		if (__DEV__) {
 			console.log("Skipping update check in development mode");
 			return;
 		}
-		checkForUpdates();
+		checkForOTAUpdate();
 	}, []);
 
-	const checkForUpdates = async () => {
+	const checkForOTAUpdate = async () => {
 		try {
-			// First check for OTA updates
 			const update = await Updates.checkForUpdateAsync();
 			if (update.isAvailable) {
 				await Updates.fetchUpdateAsync();
 				setIsUpdateModalVisible(true);
-				setIsStoreUpdateRequired(false);
-				return; // Exit if OTA update is available
-			}
-
-			// If no OTA update, check store version
-			await checkForStoreUpdate();
-		} catch (error) {
-			console.error("Error checking for updates:", error);
-			// On error, still try to check store version
-			await checkForStoreUpdate();
-		}
-	};
-
-	const checkForStoreUpdate = async () => {
-		try {
-			const currentVersion = require("../../app.json").expo.version;
-			let latestVersion = currentVersion; // Default to current version
-
-			if (Platform.OS === "ios") {
-				const appStoreId = "6741070697";
-				const response = await fetch(
-					`https://itunes.apple.com/lookup?id=${appStoreId}`,
-				);
-				const data = await response.json();
-
-				if (data.resultCount > 0 && data.results[0].version) {
-					latestVersion = data.results[0].version;
-				}
-			} else {
-				// For Android, you might want to implement your own version check
-				// or use a remote config service to manage versions
-				latestVersion = "1.0.1"; // This should come from your server or remote config
-			}
-
-			// Compare versions and show modal if update is needed
-			if (currentVersion !== latestVersion) {
-				setIsUpdateModalVisible(true);
-				setIsStoreUpdateRequired(true);
 			}
 		} catch (error) {
-			console.error("Error checking store version:", error);
+			console.error("Error checking for OTA update:", error);
+			// Silently fail - user can still use the app
 		}
 	};
 
 	const handleUpdateModalClose = () => {
 		setIsUpdateModalVisible(false);
-		if (!isStoreUpdateRequired) {
-			Updates.reloadAsync().catch((err) =>
-				console.error("Error reloading app:", err),
-			);
-		}
+		// Immediately reload to apply the update
+		Updates.reloadAsync().catch((err) =>
+			console.error("Error reloading app:", err),
+		);
 	};
 
 	return (
@@ -93,7 +50,7 @@ export default function AppLayout() {
 				<UpdateModal
 					visible={isUpdateModalVisible}
 					onClose={handleUpdateModalClose}
-					isStoreUpdate={isStoreUpdateRequired}
+					isStoreUpdate={false}
 				/>
 			</ThemeProvider>
 		</FontProvider>
