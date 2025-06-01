@@ -10,6 +10,7 @@ import {
 	Switch,
 	ScrollView,
 	StatusBar,
+	KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -99,7 +100,11 @@ export default function SignInScreen() {
 	};
 
 	return (
-		<View style={{ flex: 1, backgroundColor: "black" }}>
+		<KeyboardAvoidingView
+			style={{ flex: 1, backgroundColor: "black" }}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
+		>
 			<StatusBar
 				translucent
 				backgroundColor="transparent"
@@ -114,7 +119,7 @@ export default function SignInScreen() {
 				contentContainerStyle={{
 					flexGrow: 1,
 					justifyContent: "center",
-					paddingBottom: 40,
+					paddingBottom: 20,
 				}}
 				keyboardShouldPersistTaps="handled"
 			>
@@ -207,7 +212,7 @@ export default function SignInScreen() {
 					</View>
 				</View>
 			</ScrollView>
-		</View>
+		</KeyboardAvoidingView>
 	);
 }
 

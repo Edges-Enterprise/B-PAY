@@ -82,7 +82,8 @@ export default function SignUpScreen() {
 	return (
 		<KeyboardAvoidingView
 			style={{ flex: 1, backgroundColor: "#000" }}
-			behavior={Platform.OS === "ios" ? "padding" : undefined}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
 		>
 			<StatusBar
 				translucent
@@ -98,7 +99,7 @@ export default function SignUpScreen() {
 				contentContainerStyle={{
 					flexGrow: 1,
 					justifyContent: "center",
-					paddingBottom: 40,
+					paddingBottom: 20,
 				}}
 				keyboardShouldPersistTaps="handled"
 			>
