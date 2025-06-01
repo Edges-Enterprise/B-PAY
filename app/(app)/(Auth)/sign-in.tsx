@@ -58,18 +58,7 @@ export default function SignInScreen() {
 
 		setLoading(true);
 		try {
-			const { user, error } = await signInWithPassword(email, password);
-
-			if (error) {
-				if (error.message.includes("Email not confirmed")) {
-					Alert.alert(
-						"Email Not Verified",
-						"Please check your email for verification instructions.",
-					);
-					return;
-				}
-				throw error;
-			}
+			await signInWithPassword(email, password);
 
 			if (rememberMe) {
 				await AsyncStorage.setItem(
@@ -81,11 +70,20 @@ export default function SignInScreen() {
 			}
 
 			router.replace("/(app)/(protected)");
-		} catch (error) {
-			Alert.alert(
-				"Login Error",
-				error.message || "An error occurred during login.",
-			);
+		} catch (err: unknown) {
+			const error = err as Error;
+			// Handle specific error cases
+			if (error.message && error.message.includes("Email not confirmed")) {
+				Alert.alert(
+					"Email Not Verified",
+					"Please check your email for verification instructions.",
+				);
+			} else {
+				Alert.alert(
+					"Login Error",
+					error.message || "An error occurred during login.",
+				);
+			}
 		} finally {
 			setLoading(false);
 		}
