@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
 
@@ -29,7 +29,7 @@ interface Provider {
 }
 
 const ConfirmationPage: React.FC = () => {
-  const router = useRouter();
+ 
   const { bundle, provider, phoneNumber, transactionPin, userEmail, source } = useLocalSearchParams<{
     bundle?: string;
     provider?: string;

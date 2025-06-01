@@ -21,6 +21,11 @@ export const colors = {
 		ring: "hsl(240, 5.9%, 10%)",
 		button: "hsl(27, 52%, 17%)",
 		indicator: "hsl(27, 56.90%, 80.00%)",
+		mtnyellow: "#fdcc00",
+		airtelred: "#FF4949",
+		ninemobilegold: "#acb700",
+		ninemobileaquadeep: "#00563d",
+		glogreenapple: "#45b649",
 	},
 	dark: {
 		background: "hsl(29, 53%, 1%)",
@@ -42,5 +47,6 @@ export const colors = {
 		border: "hsl(240, 3.7%, 15.9%)",
 		input: "hsl(240, 3.7%, 15.9%)",
 		ring: "hsl(240, 4.9%, 83.9%)",
+		button: "hsl(27, 52%, 17%)",
 	},
 };

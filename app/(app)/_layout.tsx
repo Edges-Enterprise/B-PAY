@@ -150,7 +150,20 @@ function AppStack() {
 						headerShown: false, // Let BuyDataScreen.tsx handle its own header
 					}}
 				/>
-
+				<Stack.Screen
+					name="airtimeprovider"
+					options={{
+						headerTitle: "Airtime Purchase",
+						// headerShown: true, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
+				<Stack.Screen
+					name="receipt"
+					options={{
+						headerTitle: "Transaction Receipt",
+						// headerShown: true, // Let BuyDataScreen.tsx handle its own header
+					}}
+				/>
 				<Stack.Screen
 					name="fund"
 					options={{
@@ -167,28 +180,32 @@ function AppStack() {
 				<Stack.Screen
 					name="electricity"
 					options={{
-						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+						headerTitle: "Electricity Bill Payment 💡",
+						// headerShown: false, // Let BuyDataScreen.tsx handle its own header
 					}}
 				/>
 
 				<Stack.Screen
 					name="cableTv"
 					options={{
-						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+						headerTitle: "Cable & TV 📺",
+						// headerShown: false, // Let BuyDataScreen.tsx handle its own header
 					}}
 				/>
 
 				<Stack.Screen
 					name="Customer"
 					options={{
-						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+						headerTitle: "Customer Care",
+						// headerShown: false, // Let BuyDataScreen.tsx handle its own header
 					}}
 				/>
 
 				<Stack.Screen
 					name="referral"
 					options={{
-						headerShown: false, // Let BuyDataScreen.tsx handle its own header
+						headerTitle: "Refer & Earn",
+						// headerShown: false, // Let BuyDataScreen.tsx handle its own header
 					}}
 				/>
 

@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import moment from 'moment';
 import ViewShot from 'react-native-view-shot';
 import Share from 'react-native-share';
@@ -23,7 +23,7 @@ const statusColors: { [key: string]: string } = {
 };
 
 export default function ReceiptScreen() {
-  const router = useRouter();
+
   const params = useLocalSearchParams();
   const viewShotRef = useRef<ViewShot>(null);
 
@@ -106,14 +106,6 @@ export default function ReceiptScreen() {
   // Main UI (shown even if permissions are denied, since displaying the receipt doesn't require permissions)
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back-outline" size={24} color="white" />
-        </Pressable>
-        <Text style={styles.title}>Transaction Receipt</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1.0 }}>
           <View style={styles.receiptContainer}>
@@ -172,7 +164,7 @@ export default function ReceiptScreen() {
             )}
             style={styles.actionButton}
           >
-            <Ionicons name="download-outline" size={20} color="white" />
+            <Ionicons name="save" size={20} color="white" />
             <Text style={styles.actionButtonText}>Save</Text>
           </Pressable>
           <Pressable
@@ -182,7 +174,7 @@ export default function ReceiptScreen() {
             )}
             style={styles.actionButton}
           >
-            <Ionicons name="share-outline" size={20} color="white" />
+            <Ionicons name="share-social-sharp" size={20} color="white" />
             <Text style={styles.actionButtonText}>Share</Text>
           </Pressable>
         </View>
@@ -195,7 +187,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    paddingTop: Platform.OS === 'android' ? 30 : 0,
+    // paddingTop: Platform.OS === 'android' ? 30 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -257,7 +249,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2563eb',
+    backgroundColor: '#d7a77f',
     paddingVertical: 12,
     borderRadius: 8,
     marginHorizontal: 8,

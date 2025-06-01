@@ -1,6 +1,6 @@
 import { supabase } from "@/config/supabase";
 import { Session, User } from "@supabase/supabase-js";
-import { useRouter, useSegments, SplashScreen } from "expo-router";
+import { router, useSegments, SplashScreen } from "expo-router";
 import { useFonts } from "expo-font";
 import { Alert } from "react-native";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -38,7 +38,6 @@ export const SupabaseContext = createContext<SupabaseContextProps>({
 export const useSupabase = () => useContext(SupabaseContext);
 export const useAuth = () => useSupabase();
 export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
-	const router = useRouter();
 	const segments = useSegments();
 	const [user, setUser] = useState<User | null>(null);
 	const [session, setSession] = useState<Session | null>(null);

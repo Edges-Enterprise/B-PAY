@@ -13,12 +13,12 @@ type ThemeContextType = {
 };
 
 const ThemeContext = createContext<ThemeContextType>({
-  colorScheme: "light",
+  colorScheme: "dark",
   setCustomColorScheme: () => {},
 });
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const [colorScheme, setColorScheme] = useState<ColorScheme>("light");
+  const [colorScheme, setColorScheme] = useState<ColorScheme>("dark");
 
   // Load theme from AsyncStorage
   useEffect(() => {

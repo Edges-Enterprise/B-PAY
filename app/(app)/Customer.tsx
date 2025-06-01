@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Dimensions } from 'react-native';
@@ -33,7 +33,7 @@ const scaleFont = (size: number) => (width / 375) * size;
 const scaleSize = (size: number) => (width / 375) * size;
 
 const CustomerCare: React.FC = () => {
-  const router = useRouter();
+ 
   const [user, setUser] = useState<any>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -126,13 +126,13 @@ const CustomerCare: React.FC = () => {
 
   return (
     <Animated.View style={[styles.rootContainer, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {/* <StatusBar barStyle="light-content" backgroundColor="#000000" /> */}
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.innerContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerContainer}>
+        {/* <View style={styles.headerContainer}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backArrow}>←</Text>
           </Pressable>
@@ -140,13 +140,13 @@ const CustomerCare: React.FC = () => {
             <Text style={styles.title}>Customer Care</Text>
             <View style={styles.headerUnderline} />
           </View>
-        </View>
+        </View> */}
 
         <View style={styles.contentContainer}>
           <View style={styles.heroCard}>
             <Text style={styles.headline}>Need Help?</Text>
             <Text style={styles.subheadline}>
-              Submit your issue below. Our team at <Text style={styles.subheadlines}>Edgesenterprice@outlook.com </Text> will assist you.
+              Submit your issue below. Our team at <Text style={styles.subheadlines}>edgesenterprice@outlook.com </Text> will assist you.
             </Text>
 
             <TextInput
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   innerContainer: {
-    paddingTop: scaleSize(60),
+    // paddingTop: scaleSize(60),
     paddingHorizontal: scaleSize(16),
     flexGrow: 1,
     backgroundColor: '#000000',
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: scaleFont(24),
     fontWeight: '700',
-    color: '#FFD700',
+    color: '#d7a77f',
     flex: 1,
   },
   headerUnderline: {
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     color: '#FFD700',
   },
   contentContainer: {
-    marginTop: scaleSize(32),
+    marginTop: scaleSize(16),
     alignItems: 'center',
   },
   heroCard: {
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(16),
     width: '100%',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderColor: '#D7A77F',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: scaleFont(20),
     fontWeight: '700',
-    color: '#FFD700',
+    color: '#D7A77F',
     textAlign: 'center',
     marginBottom: scaleSize(8),
   },
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   ctaButton: {
-    backgroundColor: '#FFD700',
+    backgroundColor: '#744925',
     borderRadius: scaleSize(8),
     padding: scaleSize(12),
     alignItems: 'center',
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   ctaText: {
     fontSize: scaleFont(16),
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFF',
   },
   tierCard: {
     backgroundColor: 'rgba(28, 28, 30, 0.9)',
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(16),
     width: '100%',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderColor: '#D7A77F',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -319,12 +319,12 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(12),
   },
   faqItem: {
-    marginBottom: scaleSize(12),
+    marginHorizontal: scaleSize(12),
   },
   faqQuestion: {
     fontSize: scaleFont(14),
     fontWeight: '600',
-    color: '#FFD700',
+    color: '#D7A77F',
   },
   faqAnswer: {
     fontSize: scaleFont(12),

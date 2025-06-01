@@ -17,9 +17,11 @@ import {
   Keyboard,
   StatusBar,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import * as SecureStore from 'expo-secure-store';
+import { DISCO_PROVIDERS } from '@/constants/helper';
+import { Ionicons } from '@expo/vector-icons';
 
 // Get screen dimensions for responsive design
 const { width, height } = Dimensions.get('window');
@@ -54,21 +56,6 @@ interface TransactionResult {
   metadata: string;
 }
 
-// Disco providers configuration
-const DISCO_PROVIDERS: Provider[] = [
-  { id: 1, name: 'IKEDC', image: 'https://example.com/ikedc.png', code: 'ikedc', discoCode: 'ikeja_electric', apiDiscount: 97 },
-  { id: 2, name: 'AEDC', image: 'https://example.com/aedc.png', code: 'aedc', discoCode: 'abuja_electric', apiDiscount: 96 },
-  { id: 3, name: 'EKEDC', image: 'https://example.com/ekedc.png', code: 'ekedc', discoCode: 'eko_electric', apiDiscount: 97 },
-  { id: 4, name: 'KEDCO', image: 'https://example.com/kedco.png', code: 'kedc', discoCode: 'kano_electric', apiDiscount: 96 },
-  { id: 5, name: 'PHEDC', image: 'https://example.com/phedc.png', code: 'phedc', discoCode: 'portharcourt_electric', apiDiscount: 96 },
-  { id: 6, name: 'LEDC', image: 'https://example.com/ledc.png', code: 'ledc', discoCode: 'lagos_electric', apiDiscount: 96 },
-  { id: 7, name: 'KAEDC', image: 'https://example.com/kaedc.png', code: 'kaedc', discoCode: 'kaduna_electric', apiDiscount: 96 },
-  { id: 8, name: 'EEDC', image: 'https://example.com/eedc.png', code: 'eedc', discoCode: 'enugu_electric', apiDiscount: 96 },
-  { id: 9, name: 'IBEDC', image: 'https://example.com/ibedc.png', code: 'ibedc', discoCode: 'ibadan_electric', apiDiscount: 96 },
-  { id: 10, name: 'JEDC', image: 'https://example.com/jedc.png', code: 'jedc', discoCode: 'jos_electric', apiDiscount: 96 },
-  { id: 11, name: 'BEDC', image: 'https://example.com/bedc.png', code: 'bedc', discoCode: 'benin_electric', apiDiscount: 96 },
-  { id: 12, name: 'YEDC', image: 'https://example.com/yedc.png', code: 'yedc', discoCode: 'yola_electric', apiDiscount: 96 },
-];
 
 // Predefined amounts
 const BILL_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
@@ -80,7 +67,7 @@ const METER_TYPES: MeterType[] = [
 ];
 
 const ElectricityBill: React.FC = () => {
-  const router = useRouter();
+
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [meterNumber, setMeterNumber] = useState<string>('');
   const [meterType, setMeterType] = useState<string>('prepaid');
@@ -569,216 +556,245 @@ const ElectricityBill: React.FC = () => {
   };
 
   return (
-    <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="black" />
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? scaleSize(100) : 0}
-      >
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollContainer}
-          contentContainerStyle={[styles.innerContainer, { paddingBottom: keyboardHeight + scaleSize(20) }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.headerContainer}>
-            <Pressable onPress={handleBack} style={styles.backButton}>
-              <Text style={styles.backArrow}>←</Text>
-            </Pressable>
-            <Text style={styles.selectProviderTitle}>Electricity Bill Payment 💡</Text>
-          </View>
+		<View style={styles.rootContainer}>
+			<StatusBar barStyle="light-content" backgroundColor="black" />
+			<KeyboardAvoidingView
+				style={styles.container}
+				behavior={Platform.OS === "ios" ? "padding" : undefined}
+				keyboardVerticalOffset={Platform.OS === "ios" ? scaleSize(100) : 0}
+			>
+				<ScrollView
+					ref={scrollViewRef}
+					style={styles.scrollContainer}
+					contentContainerStyle={[
+						styles.innerContainer,
+						{ paddingBottom: keyboardHeight + scaleSize(20) },
+					]}
+					showsVerticalScrollIndicator={false}
+					keyboardShouldPersistTaps="handled"
+				>
+					{/* Provider List */}
+					<Text style={[styles.sectionTitle, { marginTop: scaleSize(12) }]}>
+						Select Electricity Provider
+					</Text>
+					<ScrollView
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						style={styles.providerScroll}
+						contentContainerStyle={styles.providerScrollContent}
+					>
+						{DISCO_PROVIDERS.map((provider) => (
+							<Pressable
+								key={provider.id}
+								onPress={() => handleSelectProvider(provider)}
+								style={[
+									styles.providerCard,
+									selectedProvider?.id === provider.id &&
+										styles.providerCardSelected,
+								]}
+							>
+								<Image
+									source={{ uri: provider.image }}
+									style={styles.providerLogo}
+									resizeMode="contain"
+								/>
+								<Text style={styles.providerName}>{provider.name}</Text>
+							</Pressable>
+						))}
+					</ScrollView>
 
-          {/* Provider List */}
-          <Text style={[styles.sectionTitle, { marginTop: scaleSize(12) }]}>Select Electricity Provider</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.providerScroll}
-            contentContainerStyle={styles.providerScrollContent}
-          >
-            {DISCO_PROVIDERS.map((provider) => (
-              <Pressable
-                key={provider.id}
-                onPress={() => handleSelectProvider(provider)}
-                style={[
-                  styles.providerCard,
-                  selectedProvider?.id === provider.id && styles.providerCardSelected,
-                ]}
-              >
-                <Image
-                  source={{ uri: provider.image }}
-                  style={styles.providerLogo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.providerName}>{provider.name}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+					{/* Meter Number Input */}
+					<View style={styles.inputContainer}>
+						<Text style={styles.inputLabel}>Meter Number</Text>
+						<TextInput
+							style={styles.input}
+							value={meterNumber}
+							onChangeText={setMeterNumber}
+							placeholder="Enter 11-digit meter number"
+							placeholderTextColor="#A1A1AA"
+							keyboardType="numeric"
+							maxLength={11}
+						/>
+					</View>
 
-          {/* Meter Number Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Meter Number</Text>
-            <TextInput
-              style={styles.input}
-              value={meterNumber}
-              onChangeText={setMeterNumber}
-              placeholder="Enter 11-digit meter number"
-              placeholderTextColor="#A1A1AA"
-              keyboardType="numeric"
-              maxLength={11}
-            />
-          </View>
+					{/* Meter Type Selection */}
+					<View style={styles.inputContainer}>
+						<Text style={styles.inputLabel}>Meter Type</Text>
+						<View style={styles.meterTypeContainer}>
+							{METER_TYPES.map((type) => (
+								<Pressable
+									key={type.value}
+									onPress={() => setMeterType(type.value)}
+									style={[
+										styles.meterTypeButton,
+										meterType === type.value && styles.meterTypeButtonSelected,
+									]}
+								>
+									<Text style={styles.meterTypeText}>{type.label}</Text>
+								</Pressable>
+							))}
+						</View>
+					</View>
 
-          {/* Meter Type Selection */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Meter Type</Text>
-            <View style={styles.meterTypeContainer}>
-              {METER_TYPES.map((type) => (
-                <Pressable
-                  key={type.value}
-                  onPress={() => setMeterType(type.value)}
-                  style={[
-                    styles.meterTypeButton,
-                    meterType === type.value && styles.meterTypeButtonSelected,
-                  ]}
-                >
-                  <Text style={styles.meterTypeText}>{type.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+					{/* Amount Selection */}
+					<Text style={styles.sectionTitle}>Select Amount</Text>
+					<View style={styles.amountScroll}>
+						{BILL_AMOUNTS.map((amount) => (
+							<Pressable
+								key={amount}
+								onPress={() => selectAmount(amount)}
+								style={[
+									styles.amountButton,
+									selectedAmount === amount && styles.amountButtonSelected,
+								]}
+							>
+								<Text
+									style={[
+										styles.amountText,
+										selectedAmount === amount && styles.amountTextSelected,
+									]}
+									numberOfLines={1}
+									ellipsizeMode="clip"
+								>
+									₦{amount.toLocaleString()}
+								</Text>
+							</Pressable>
+						))}
+					</View>
 
-          {/* Amount Selection */}
-          <Text style={styles.sectionTitle}>Select Amount</Text>
-          <View style={styles.amountScroll}>
-            {BILL_AMOUNTS.map((amount) => (
-              <Pressable
-                key={amount}
-                onPress={() => selectAmount(amount)}
-                style={[
-                  styles.amountButton,
-                  selectedAmount === amount && styles.amountButtonSelected,
-                ]}
-              >
-                <Text
-                  style={[styles.amountText, selectedAmount === amount && styles.amountTextSelected]}
-                  numberOfLines={1}
-                  ellipsizeMode="clip"
-                >
-                  ₦{amount.toLocaleString()}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+					{/* Amount to Pay */}
+					<View style={styles.discountBar}>
+						<Text style={styles.discountLabel}>Amount to pay</Text>
+						<Text style={styles.discountValue}>
+							₦{formatNumberWithCommas(discountedPrice)}
+						</Text>
+					</View>
 
-          {/* Amount to Pay */}
-          <View style={styles.discountBar}>
-            <Text style={styles.discountLabel}>Amount to pay</Text>
-            <Text style={styles.discountValue}>
-              ₦{formatNumberWithCommas(discountedPrice)}
-            </Text>
-          </View>
+					{/* Custom Amount Input */}
+					<View style={styles.transactionPinContainer}>
+						<Text style={styles.transactionPinLabel}>Custom Amount</Text>
+						<TextInput
+							style={[styles.input, styles.transactionPinInput]}
+							value={customAmount}
+							onChangeText={handleCustomAmount}
+							placeholder="min 1000"
+							placeholderTextColor="#A1A1AA"
+							keyboardType="numeric"
+						/>
+					</View>
 
-          {/* Custom Amount Input */}
-          <View style={styles.transactionPinContainer}>
-            <Text style={styles.transactionPinLabel}>Custom Amount</Text>
-            <TextInput
-              style={[styles.input, styles.transactionPinInput]}
-              value={customAmount}
-              onChangeText={handleCustomAmount}
-              placeholder="min 1000"
-              placeholderTextColor="#A1A1AA"
-              keyboardType="numeric"
-            />
-          </View>
+					{/* Transaction PIN Input */}
+					<View style={styles.transactionPinContainer}>
+						<Text style={styles.transactionPinLabel}>Transaction PIN</Text>
+						<TextInput
+							style={[styles.input, styles.transactionPinInput]}
+							value={transactionPin}
+							onChangeText={setTransactionPin}
+							placeholder="Enter 4-6 digit PIN"
+							placeholderTextColor="#A1A1AA"
+							keyboardType="numeric"
+							maxLength={6}
+							secureTextEntry
+						/>
+					</View>
 
-          {/* Transaction PIN Input */}
-          <View style={styles.transactionPinContainer}>
-            <Text style={styles.transactionPinLabel}>Transaction PIN</Text>
-            <TextInput
-              style={[styles.input, styles.transactionPinInput]}
-              value={transactionPin}
-              onChangeText={setTransactionPin}
-              placeholder="Enter 4-6 digit PIN"
-              placeholderTextColor="#A1A1AA"
-              keyboardType="numeric"
-              maxLength={6}
-              secureTextEntry
-            />
-          </View>
+					{/* Slide to Pay */}
+					{selectedProvider ? (
+						<View style={styles.slideTrack}>
+							<Animated.View
+								{...panResponder.panHandlers}
+								style={[
+									styles.slideTextContainer,
+									{
+										transform: [{ translateX: slideAnim }],
+									},
+								]}
+							>
+								<Text style={styles.slideText}>Slide to Pay</Text>
+								<Text style={styles.arrow}>
+									<Ionicons
+										name="arrow-forward-sharp"
+										size={24}
+										color="#D7A77F"
+									/>
+								</Text>
+							</Animated.View>
+						</View>
+					) : (
+						<View style={[styles.slideTrack, styles.slideContainerDisabled]}>
+							<View style={styles.slideTextContainer}>
+								<Text style={[styles.slideText, styles.slideTextDisabled]}>
+									Select a provider to pay
+								</Text>
+							</View>
+						</View>
+					)}
+				</ScrollView>
+			</KeyboardAvoidingView>
 
-          {/* Slide to Pay */}
-          {selectedProvider ? (
-            <View style={styles.slideTrack}>
-              <Animated.View
-                {...panResponder.panHandlers}
-                style={[
-                  styles.slideTextContainer,
-                  {
-                    transform: [{ translateX: slideAnim }],
-                  },
-                ]}
-              >
-                <Text style={styles.slideText}>Slide to Pay</Text>
-                <Text style={styles.arrow}>→</Text>
-              </Animated.View>
-            </View>
-          ) : (
-            <View style={[styles.slideTrack, styles.slideContainerDisabled]}>
-              <View style={styles.slideTextContainer}>
-                <Text style={[styles.slideText, styles.slideTextDisabled]}>Select a provider to pay</Text>
-              </View>
-            </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Transaction Status Modal */}
-      <Modal
-        visible={transactionModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeTransactionModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            {transactionStatus === 'processing' ? (
-              <>
-                <Text style={styles.modalTitle}>Processing Transaction</Text>
-                <Text style={styles.modalMessage}>Please wait while we process your payment...</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalTitle}>
-                  Transaction {transactionStatus === 'success' ? 'Successful' : 'Failed'}
-                </Text>
-                {transactionResult && (
-                  <View style={styles.transactionDetails}>
-                    <Text style={styles.detailText}>Provider: {transactionResult.provider}</Text>
-                    <Text style={styles.detailText}>Amount: {transactionResult.data}</Text>
-                    <Text style={styles.detailText}>Price: ₦{transactionResult.price}</Text>
-                    <Text style={styles.detailText}>Meter Number: {transactionResult.meterNumber}</Text>
-                    <Text style={styles.detailText}>Meter Type: {transactionResult.meterType}</Text>
-                    <Text style={styles.detailText}>Reference: {transactionResult.reference}</Text>
-                    <Text style={styles.detailText}>Date: {new Date(transactionResult.date).toLocaleString()}</Text>
-                    <Text style={styles.detailText}>Status: {transactionResult.status}</Text>
-                  </View>
-                )}
-                <Pressable
-                  style={styles.closeButton}
-                  onPress={closeTransactionModal}
-                >
-                  <Text style={styles.closeButtonText}>Close</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
+			{/* Transaction Status Modal */}
+			<Modal
+				visible={transactionModalVisible}
+				transparent
+				animationType="slide"
+				onRequestClose={closeTransactionModal}
+			>
+				<View style={styles.modalOverlay}>
+					<View style={styles.modalContainer}>
+						{transactionStatus === "processing" ? (
+							<>
+								<Text style={styles.modalTitle}>Processing Transaction</Text>
+								<Text style={styles.modalMessage}>
+									Please wait while we process your payment...
+								</Text>
+							</>
+						) : (
+							<>
+								<Text style={styles.modalTitle}>
+									Transaction{" "}
+									{transactionStatus === "success" ? "Successful" : "Failed"}
+								</Text>
+								{transactionResult && (
+									<View style={styles.transactionDetails}>
+										<Text style={styles.detailText}>
+											Provider: {transactionResult.provider}
+										</Text>
+										<Text style={styles.detailText}>
+											Amount: {transactionResult.data}
+										</Text>
+										<Text style={styles.detailText}>
+											Price: ₦{transactionResult.price}
+										</Text>
+										<Text style={styles.detailText}>
+											Meter Number: {transactionResult.meterNumber}
+										</Text>
+										<Text style={styles.detailText}>
+											Meter Type: {transactionResult.meterType}
+										</Text>
+										<Text style={styles.detailText}>
+											Reference: {transactionResult.reference}
+										</Text>
+										<Text style={styles.detailText}>
+											Date: {new Date(transactionResult.date).toLocaleString()}
+										</Text>
+										<Text style={styles.detailText}>
+											Status: {transactionResult.status}
+										</Text>
+									</View>
+								)}
+								<Pressable
+									style={styles.closeButton}
+									onPress={closeTransactionModal}
+								>
+									<Text style={styles.closeButtonText}>Close</Text>
+								</Pressable>
+							</>
+						)}
+					</View>
+				</View>
+			</Modal>
+		</View>
+	);
 };
 
 const styles = StyleSheet.create({
@@ -795,7 +811,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
   },
   innerContainer: {
-    paddingTop: scaleSize(60),
+    // paddingTop: scaleSize(60),
     paddingHorizontal: scaleSize(12),
     flexGrow: 1,
     backgroundColor: 'black',
@@ -843,7 +859,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   providerCardSelected: {
-    borderColor: '#3B82F6',
+    borderColor: '#D7A77F',
     borderWidth: 2,
     backgroundColor: 'transparent',
   },
@@ -902,7 +918,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   meterTypeButtonSelected: {
-    borderColor: '#3B82F6',
+    borderColor: '#D7A77F',
     borderWidth: 2,
     backgroundColor: 'transparent',
   },
@@ -929,7 +945,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   amountButtonSelected: {
-    borderColor: '#3B82F6',
+    borderColor: '#D7A77F',
     backgroundColor: 'transparent',
   },
   amountText: {
@@ -938,7 +954,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   amountTextSelected: {
-    color: '#3B82F6',
+    color: '#D7A77F',
   },
   discountBar: {
     flexDirection: 'row',
@@ -955,7 +971,7 @@ const styles = StyleSheet.create({
   discountValue: {
     fontSize: scaleFont(14),
     fontWeight: '600',
-    color: '#3B82F6',
+    color: '#D7A77F',
   },
   slideTrack: {
     marginTop: scaleSize(8),
@@ -969,6 +985,7 @@ const styles = StyleSheet.create({
   slideTextContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent:'space-between',
     paddingHorizontal: scaleSize(10),
   },
   slideContainerDisabled: {
@@ -977,14 +994,14 @@ const styles = StyleSheet.create({
   slideText: {
     fontSize: scaleFont(14),
     fontWeight: '600',
-    color: '#3B82F6',
+    color: '#D7A77F',
   },
   slideTextDisabled: {
     color: '#A1A1AA',
   },
   arrow: {
     fontSize: scaleFont(18),
-    color: '#3B82F6',
+    color: '#D7A77F',
   },
   modalOverlay: {
     flex: 1,

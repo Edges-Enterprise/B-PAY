@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import Animated, {
 	useSharedValue,
 	useAnimatedStyle,
@@ -47,7 +47,6 @@ export default function Settings() {
 	const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 	const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-	const router = useRouter();
 	const { user, profile, signOut } = useAuth();
 
 	const [openSection, setOpenSection] = useState(null);
@@ -207,7 +206,7 @@ export default function Settings() {
 				contentContainerStyle={[
 					{
 						paddingHorizontal: 16,
-						paddingTop: 32,
+						paddingTop: 36,
 						paddingBottom: 120,
 					},
 					{ backgroundColor: colors[colorScheme]?.background },
@@ -220,6 +219,7 @@ export default function Settings() {
 							flexDirection: "row",
 							justifyContent: "space-between",
 							alignItems: "center",
+							marginTop:12,
 							marginBottom: 24,
 						},
 						{ backgroundColor: colors[colorScheme]?.background },
@@ -402,12 +402,10 @@ export default function Settings() {
 														onValueChange={toggleNotifications}
 														trackColor={{
 															false: "#767577",
-															true: colors[colorScheme]?.primary,
+															true: "#D7A77F",
 														}}
 														thumbColor={
-															notificationsEnabled
-																? colors[colorScheme]?.indicator
-																: "#f4f3f4"
+															notificationsEnabled ? "#E9C9AF" : "#f4f3f4"
 														}
 													/>
 												)}

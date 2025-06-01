@@ -1,12 +1,12 @@
 // app/(app)/success.tsx
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 
 export default function SuccessScreen() {
   const { action, amount, method, plan } = useLocalSearchParams();
-  const router = useRouter();
+  
 
   return (
     <View style={styles.container}>

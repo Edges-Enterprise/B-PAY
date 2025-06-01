@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Pressable, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { MotiView } from 'moti';
 
 const screenWidth = Dimensions.get('window').width;
@@ -29,7 +29,7 @@ const actions = [
 ];
 
 export default function AllActionsScreen() {
-  const router = useRouter();
+
 
   const buttonSize = (screenWidth - 64) / 4; // 4 columns, 16px padding each side + 16px between
 

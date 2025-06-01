@@ -14,7 +14,7 @@ import {
 	Platform,
 	Switch,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { ScrollView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { useAuth } from "@/context/supabase-provider";
@@ -26,7 +26,6 @@ export default function SignUpScreen() {
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
 
-	const router = useRouter();
 	const { signUp } = useAuth();
 	const colorScheme = useColorScheme();
 
@@ -222,8 +221,8 @@ export default function SignUpScreen() {
 						<Switch
 							value={rememberMe}
 							onValueChange={setRememberMe}
-							trackColor={{ false: "#444", true: "#D4AF37" }}
-							thumbColor={rememberMe ? "#D4AF37" : "#ccc"}
+							thumbColor={rememberMe ? "#E9C9AF" : "#ccc"}
+							trackColor={{ false: "#444", true: "#D7A77F" }}
 						/>
 						<Text
 							style={{
@@ -253,14 +252,14 @@ export default function SignUpScreen() {
 									}
 								: {
 										backgroundColor: "transparent",
-										borderColor: "#D4AF37",
+										borderColor: "#D7A77F",
 									},
 						]}
 						onPress={handleSignUp}
 						disabled={loading || !isFormValid}
 					>
 						{loading ? (
-							<ActivityIndicator color="#D4AF37" />
+							<ActivityIndicator color="#D7A77F" />
 						) : (
 							<Text
 								style={[

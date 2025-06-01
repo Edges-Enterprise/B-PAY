@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, UnknownInputParams } from 'expo-router';
+import { router, UnknownInputParams } from 'expo-router';
 import { useAuth } from '@/context/supabase-provider';
 import PlanItemWithSwipe from '@/components/homescreen/PlanItemWithSwipe';
 import CreatePinModal from '@/components/homescreen/CreatePinModal';
@@ -45,7 +45,7 @@ const actions = [
 ];
 
 export default function HomeScreen() {
-  const router = useRouter();
+
   const { user } = useAuth();
   const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
   const username = user?.user_metadata?.username || 'Guest';
@@ -103,37 +103,81 @@ export default function HomeScreen() {
     return 'Unknown';
   };
 
+  // const fetchPurchaseHistory = async () => {
+  //   if (!user?.id) return;
+  //   try {
+  //     const { data: purchases, error } = await supabase
+  //       .from('data_purchases')
+  //       .select('plan_name, phone_number, provider, amount')
+  //       .eq('user_id', user.id)
+  //       .order('created_at', { ascending: false });
+
+  //     if (error) throw error;
+
+  //     if (purchases && purchases.length > 0) {
+  //       setHasPurchases(true);
+  //       setPhoneNumber(purchases[0].phone_number);
+  //       const pastPlans = purchases.map((p) => p.plan_name);
+  //       const similarPlans = await fetchSimilarPlans(purchases);
+  //       const uniquePlans = Array.from(new Set([...pastPlans, ...similarPlans.map((p) => p.plan_name)]));
+  //       setPopularPlans(uniquePlans);
+  //     } else {
+  //       setHasPurchases(false);
+  //       setPopularPlans([]);
+  //       setPhoneNumber(user?.user_metadata?.phone || '');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching purchase history:', error);
+  //     setHasPurchases(false);
+  //     setPopularPlans([]);
+  //     setPhoneNumber(user?.user_metadata?.phone || '');
+  //   }
+  // };
+
   const fetchPurchaseHistory = async () => {
-    if (!user?.id) return;
-    try {
-      const { data: purchases, error } = await supabase
-        .from('data_purchases')
-        .select('plan_name, phone_number, provider, amount')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+		if (!user?.email) return; // Changed from user?.id to user?.email
+		try {
+			const { data: purchases, error } = await supabase
+				.from("data_purchases")
+				.select("plan_name, phone_number, provider_name, validity") // Added validity, removed amount
+				.eq("user_email", user.email) // Changed from user_id to user_email
+				.order("created_at", { ascending: false });
 
-      if (error) throw error;
+			if (error) throw error;
 
-      if (purchases && purchases.length > 0) {
-        setHasPurchases(true);
-        setPhoneNumber(purchases[0].phone_number);
-        const pastPlans = purchases.map((p) => p.plan_name);
-        const similarPlans = await fetchSimilarPlans(purchases);
-        const uniquePlans = Array.from(new Set([...pastPlans, ...similarPlans.map((p) => p.plan_name)]));
-        setPopularPlans(uniquePlans);
-      } else {
-        setHasPurchases(false);
-        setPopularPlans([]);
-        setPhoneNumber(user?.user_metadata?.phone || '');
-      }
-    } catch (error) {
-      console.error('Error fetching purchase history:', error);
-      setHasPurchases(false);
-      setPopularPlans([]);
-      setPhoneNumber(user?.user_metadata?.phone || '');
-    }
-  };
+			if (purchases && purchases.length > 0) {
+				setHasPurchases(true);
+				setPhoneNumber(purchases[0].phone_number);
+				const pastPlans = purchases.map((p) => p.plan_name);
 
+				// Extract amount from plan_name (assuming format like "MTN 1GB – ₦300")
+				const purchasesWithAmount = purchases.map((p) => {
+					const amountMatch = p.plan_name.match(/₦(\d+)/);
+					return {
+						...p,
+						provider: p.provider_name,
+						amount: amountMatch ? parseInt(amountMatch[1]) : 300, // Default to 300 if no amount found
+					};
+				});
+
+				const similarPlans = await fetchSimilarPlans(purchasesWithAmount);
+				const uniquePlans = Array.from(
+					new Set([...pastPlans, ...similarPlans.map((p) => p.plan_name)]),
+				);
+				setPopularPlans(uniquePlans);
+			} else {
+				setHasPurchases(false);
+				setPopularPlans([]);
+				setPhoneNumber(user?.user_metadata?.phone || "");
+			}
+		} catch (error) {
+			console.error("Error fetching purchase history:", error);
+			setHasPurchases(false);
+			setPopularPlans([]);
+			setPhoneNumber(user?.user_metadata?.phone || "");
+		}
+	};
+  
   const fetchSimilarPlans = async (purchases: { provider: string; amount: number }[]): Promise<any[]> => {
     try {
       const providers = Array.from(new Set(purchases.map((p) => p.provider)));
@@ -263,15 +307,16 @@ export default function HomeScreen() {
           </View>
         </Pressable>
       </View>
-      <Text style={styles.welcomeTitle}>Welcome back</Text>
-      <Text style={styles.username}>{username} 👋</Text>
-      <Text style={styles.welcomeSubtitle}>Your business dashboard is here 🔥</Text>
+      <Text style={styles.username}>Hi {username} 👋</Text>
+      {/* <Text style={styles.welcomeTitle}>Welcome back</Text> */}
+      <Text style={styles.welcomeSubtitle}>Your dashboard is here 🔥</Text>
 
       <View style={styles.quickActionsHeader}>
         <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-        <Pressable onPress={() => router.push('../commingsoon')}>
-          <Text style={styles.moreButtonText}>More ... ></Text>
-        </Pressable>
+        {/* <Pressable onPress={() => router.push('../commingsoon')}>
+          <Ionicons name={'ellipsis-horizontal'} size={24} color={"#d7a77f"} />
+          {/* <Text style={styles.moreButtonText}>More ... ></Text> *
+        </Pressable> */}
       </View>
 
       <View style={styles.quickActionsCard}>
@@ -319,99 +364,100 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'black',
-    paddingHorizontal: 16,
-    paddingTop: StatusBar.currentHeight + 56,
-  },
-  header: {
-    position: 'absolute',
-    top: StatusBar.currentHeight || 48,
-    right: 16,
-    zIndex: 1,
-  },
-  notificationIcon: {
-    padding: 8,
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: 'red',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  welcomeTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
-  },
-  username: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
-  },
-  welcomeSubtitle: {
-    fontSize: 16,
-    color: 'gray',
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'white',
-  },
-  quickActionsHeader: {
-    marginTop: 24,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  moreButtonText: {
-    color: '#60A5FA',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  quickActionsCard: {
-    backgroundColor: '#171717',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    marginBottom: 24,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  quickActionCard: {
-    width: '30%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  quickActionTitle: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 6,
-    textAlign: 'center',
-  },
+	container: {
+		flex: 1,
+		backgroundColor: "black",
+		paddingHorizontal: 16,
+		paddingTop: StatusBar.currentHeight,
+	},
+	header: {
+		position: "absolute",
+		top: StatusBar.currentHeight || 48,
+		right: 16,
+		zIndex: 1,
+	},
+	notificationIcon: {
+		padding: 8,
+		paddingTop: StatusBar.currentHeight,
+	},
+	badge: {
+		position: "absolute",
+		top: -4,
+		right: -4,
+		backgroundColor: "red",
+		borderRadius: 10,
+		minWidth: 20,
+		height: 20,
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	badgeText: {
+		color: "white",
+		fontSize: 12,
+		fontWeight: "bold",
+	},
+	welcomeTitle: {
+		fontSize: 28,
+		fontWeight: "bold",
+		color: "white",
+		marginBottom: 4,
+	},
+	username: {
+		fontSize: 28,
+		fontWeight: "bold",
+		color: "white",
+		marginBottom: 4,
+	},
+	welcomeSubtitle: {
+		fontSize: 16,
+		color: "gray",
+		marginBottom: 24,
+	},
+	sectionTitle: {
+		fontSize: 18,
+		fontWeight: "600",
+		color: "white",
+	},
+	quickActionsHeader: {
+		marginVertical: 24,
+		paddingRight: 16,
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+	},
+	moreButtonText: {
+		color: "#60A5FA",
+		fontSize: 14,
+		fontWeight: "500",
+	},
+	quickActionsCard: {
+		backgroundColor: "#171717",
+		borderRadius: 16,
+		paddingHorizontal: 12,
+		paddingTop: 12,
+		marginBottom: 24,
+	},
+	quickActionsGrid: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+		justifyContent: "space-between",
+		paddingVertical: 8,
+	},
+	quickActionCard: {
+		width: "30%",
+		backgroundColor: "rgba(255,255,255,0.05)",
+		borderRadius: 12,
+		paddingVertical: 16,
+		paddingHorizontal: 8,
+		alignItems: "center",
+		justifyContent: "center",
+		marginBottom: 16,
+	},
+	quickActionTitle: {
+		color: "white",
+		fontSize: 10,
+		fontWeight: "500",
+		marginTop: 6,
+		textAlign: "center",
+	},
 });

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ImageBackground,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Dimensions } from 'react-native';
@@ -33,7 +33,7 @@ const scaleSize = (size: number) => (width / 375) * size;
 const targetDate = new Date('2025-06-01T00:00:00+01:00'); // June 1, 2025, 12:00 AM WAT
 
 const ComingSoon: React.FC = () => {
-  const router = useRouter();
+
   const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;

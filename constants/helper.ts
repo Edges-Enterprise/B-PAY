@@ -17,7 +17,9 @@ export const rotatingTexts = [
 export const sections = [
 	{
 		title: "Account",
-		items: ["Edit Profile", "Change Password", "Change Email"],
+		items: [
+			// "Edit Profile",
+			"Change Password", "Change Email"],
 	},
 	{
 		title: "Preferences",
@@ -42,26 +44,148 @@ export const sections = [
 		title: "Billing",
 		items: ["Manage Subscriptions", "Payment Methods", "Invoices"],
 	},
-	{ title: "Share the App" },
 	{
 		title: "Privacy",
 		items: [
 			// "Data Sharing", "Location Services", "Ad Preferences",
+			"Privacy Policy",
 			"Terms of Service",
 			"User Agreement",
-			"Privacy Policy",
 		],
 	},
 ];
 
-export const availableThemes = ["light", "dark"];
+export const availableThemes = [
+	// "light",
+	"dark"];
 
 export const NETWORK_IMAGES: { [key: string]: string } = {
-	"9MOBILE": "https://example.com/9mobile.png",
-	AIRTEL: "https://example.com/airtel.png",
-	GLO: "https://example.com/glo.png",
-	MTN: "https://example.com/mtn.png",
+	"9MOBILE": require("../assets/icons/sp-9mobile.jpeg"),
+	AIRTEL: require("../assets/icons/sp-airtel-logo.jpeg"),
+	GLO: require("../assets/icons/sp-glo_logo.png"),
+	MTN: require("../assets/icons/sp-mtn-logo.jpeg"),
 };
+
+export const DEFAULT_PROVIDER_IMAGE = require("../assets/images/icon.png");
+
+
+
+interface DiscosProvider {
+	id: number;
+	name: string;
+	image: any;
+	code: string;
+	discoCode: string;
+	apiDiscount: number;
+}
+
+// Disco providers configuration
+export const DISCO_PROVIDERS: DiscosProvider[] = [
+	{
+		id: 1,
+		name: "IKEDC",
+		image: "https://asset.brandfetch.io/idOw3g-pG6/idHFnOXwNA.png",
+		code: "ikedc",
+		discoCode: "ikeja_electric",
+		apiDiscount: 97,
+	},
+	{
+		id: 2,
+		name: "AEDC",
+		image:
+			"https://cdn.brandfetch.io/idansu164B/w/400/h/400/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "aedc",
+		discoCode: "abuja_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 3,
+		name: "EKEDC",
+		image:
+			"https://cdn.brandfetch.io/idzLCSOXXk/w/600/h/600/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "ekedc",
+		discoCode: "eko_electric",
+		apiDiscount: 97,
+	},
+	{
+		id: 4,
+		name: "KEDCO",
+		image:
+			"https://cdn.brandfetch.io/idcsdEcy1X/w/1070/h/1053/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "kedc",
+		discoCode: "kano_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 5,
+		name: "PHEDC",
+		image: "https://phed.com.ng/assets/image001.png",
+		code: "phedc",
+		discoCode: "portharcourt_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 6,
+		name: "LEDC",
+		image:
+			"https://cdn.brandfetch.io/idzLCSOXXk/w/600/h/600/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "ledc",
+		discoCode: "lagos_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 7,
+		name: "KAEDC",
+		image:
+			"https://cdn.brandfetch.io/idOe0sCI5j/w/600/h/523/theme/dark/logo.png?c=1bxideym1bCk82mxFsjUw",
+		code: "kaedc",
+		discoCode: "kaduna_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 8,
+		name: "EEDC",
+		image:
+			"https://cdn.brandfetch.io/id7rRpOe2k/w/400/h/400/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "eedc",
+		discoCode: "enugu_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 9,
+		name: "IBEDC",
+		image: "https://www.ibedc.com/assets/img/logo.png",
+		code: "ibedc",
+		discoCode: "ibadan_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 10,
+		name: "JEDC",
+		image: "https://asset.brandfetch.io/idjO0Tab3U/id4n6HL2V1.jpeg",
+		code: "jedc",
+		discoCode: "jos_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 11,
+		name: "BEDC",
+		image:
+			"https://cdn.brandfetch.io/iduapK6_IF/w/400/h/400/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
+		code: "bedc",
+		discoCode: "benin_electric",
+		apiDiscount: 96,
+	},
+	{
+		id: 12,
+		name: "YEDC",
+		image: "https://www.yedc.com.ng/assets/images/logo.png",
+		code: "yedc",
+		discoCode: "yola_electric",
+		apiDiscount: 96,
+	},
+];
+  
 
 export const CONSTANTS = {
 	COLORS: {

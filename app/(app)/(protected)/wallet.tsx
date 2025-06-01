@@ -10,7 +10,7 @@ import {
 	ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { MotiView } from "moti";
 import { colors } from "@/constants/colors";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -60,7 +60,7 @@ interface ConfirmationParams {
 }
 
 export default function WalletScreen() {
-	const router = useRouter();
+	
 	const { colorScheme } = useColorScheme();
 	const [showBalance, setShowBalance] = useState<boolean>(false);
 	const [showTransactions, setShowTransactions] = useState<boolean>(false);
@@ -85,7 +85,7 @@ export default function WalletScreen() {
 				} = await supabase.auth.getUser();
 				if (authError || !user || !user.email) {
 					console.error("User not authenticated or email missing");
-					router.replace("/login");
+					router.replace("/sign-in");
 					return;
 				}
 
@@ -134,17 +134,19 @@ export default function WalletScreen() {
 				const { data: dataPurchases } = await supabase
 					.from("data_purchases")
 					.select("id")
-					.eq("user_id", user.id)
+					.eq("user_email", user.email)
 					.limit(1);
+
 				const { data: airtimePurchases } = await supabase
 					.from("airtime_purchases")
 					.select("id")
-					.eq("user_id", user.id)
+					.eq("user_email", user.email)
 					.limit(1);
+
 				const { data: cablePurchases } = await supabase
 					.from("cable_purchases")
 					.select("id")
-					.eq("user_id", user.id)
+					.eq("user_id", user.id) // Cable purchases uses user_id, not user_email
 					.limit(1);
 
 				const hasPurchases =
@@ -157,17 +159,19 @@ export default function WalletScreen() {
 				// Fetch preferred provider
 				const { data: dataPurchasesFull, error: dataError } = await supabase
 					.from("data_purchases")
-					.select("provider")
-					.eq("user_id", user.id);
+					.select("provider_name")
+					.eq("user_email", user.email);
+
 				const { data: airtimePurchasesFull, error: airtimeError } =
 					await supabase
 						.from("airtime_purchases")
-						.select("provider")
-						.eq("user_id", user.id);
+						.select("provider_name")
+						.eq("user_email", user.email);
+
 				const { data: cablePurchasesFull, error: cableError } = await supabase
 					.from("cable_purchases")
-					.select("provider")
-					.eq("user_id", user.id);
+					.select("provider") // Changed from "provider_name" to "provider"
+					.eq("user_id", user.id); // Changed from "user_email" to "user_id"
 
 				if (dataError || airtimeError || cableError) {
 					console.error("Error fetching purchases:", {
@@ -178,9 +182,9 @@ export default function WalletScreen() {
 				}
 
 				const allProviders = [
-					...(dataPurchasesFull?.map((p) => p.provider) || []),
-					...(airtimePurchasesFull?.map((p) => p.provider) || []),
-					...(cablePurchasesFull?.map((p) => p.provider) || []),
+					...(dataPurchasesFull?.map((p) => p.provider_name) || []),
+					...(airtimePurchasesFull?.map((p) => p.provider_name) || []),
+					...(cablePurchasesFull?.map((p) => p.provider) || []), // Changed to use "provider"
 				].filter(Boolean);
 
 				const providerCounts = allProviders.reduce(
@@ -306,9 +310,9 @@ export default function WalletScreen() {
 	};
 
 	// Handle transaction history navigation
-	const handleTransactionHistoryPress = () => {
-		router.push("/(app)/(protected)/history");
-	};
+	// const handleTransactionHistoryPress = () => {
+	// 	router.push("/(app)/(protected)/history");
+	// };
 
 	return (
 		<SafeAreaView
@@ -357,7 +361,7 @@ export default function WalletScreen() {
 				<View
 					style={[
 						styles.balanceCard,
-						{ backgroundColor: colorScheme === "dark" ? "#1e40af" : "#3b82f6" },
+						{ backgroundColor: colorScheme === "dark" ? "#744925" : "#3b82f6" },
 					]}
 				>
 					<View style={styles.balanceHeader}>
@@ -367,16 +371,16 @@ export default function WalletScreen() {
 								{ color: "rgba(255,255,255,0.7)" },
 							]}
 						>
-							Current Balance
+							Wallet Balance
 						</Text>
 						<View style={styles.headerActions}>
-							<Pressable
+							{/* <Pressable
 								onPress={handleTransactionHistoryPress}
 								style={styles.historyButton}
 							>
 								<Ionicons name="time-outline" size={20} color="white" />
 								<Text style={styles.historyButtonText}>History</Text>
-							</Pressable>
+							</Pressable> */}
 							<Pressable onPress={() => setShowBalance(!showBalance)}>
 								<Ionicons
 									name={showBalance ? "eye-outline" : "eye-off-outline"}
@@ -403,7 +407,7 @@ export default function WalletScreen() {
 						style={[
 							styles.fundButton,
 							{
-								backgroundColor: colorScheme === "dark" ? "#1d4ed8" : "#2563eb",
+								backgroundColor: colorScheme === "dark" ? "#744925" : "#2563eb",
 							},
 						]}
 					>

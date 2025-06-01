@@ -9,19 +9,19 @@ import {
 	ActivityIndicator,
 	Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { NETWORK_IMAGES } from "@/constants/helper";
+import { router } from "expo-router";
+import { DEFAULT_PROVIDER_IMAGE, NETWORK_IMAGES } from "@/constants/helper";
 
-// Define the Provider interface
+// Define the Provider interface - image should be any (require object)
 interface Provider {
 	id: number;
 	name: string;
-	image: string;
+	image: any; // require() returns a number/object, not string
 	code: string;
 }
 
 const ServiceProviderScreen: React.FC = () => {
-	const router = useRouter();
+	
 	const [providers, setProviders] = useState<Provider[]>([]);
 	const [loading, setLoading] = useState(true);
 
@@ -53,9 +53,9 @@ const ServiceProviderScreen: React.FC = () => {
 							id: plans[0].network, // Use network ID from the first plan
 							name: networkName,
 							image:
-								NETWORK_IMAGES[networkName] ||
-								"https://example.com/default.png", // Placeholder image
-							code: networkName.toLowerCase(), // Use network name as code (lowercase)
+								NETWORK_IMAGES[networkName as keyof typeof NETWORK_IMAGES] ||
+								DEFAULT_PROVIDER_IMAGE,
+							code: networkName.toLowerCase(),
 						};
 					}
 				}
@@ -82,10 +82,27 @@ const ServiceProviderScreen: React.FC = () => {
 	}, []);
 
 	const selectProvider = (provider: Provider) => {
+		// Create a serializable version of the provider for navigation
+		const serializableProvider = {
+			id: provider.id,
+			name: provider.name,
+			code: provider.code,
+			// Convert require() image to a network name identifier
+			imageKey:
+				Object.keys(NETWORK_IMAGES).find(
+					(key) =>
+						NETWORK_IMAGES[key as keyof typeof NETWORK_IMAGES] ===
+						provider.image,
+				) || "DEFAULT",
+		};
+
+		console.log("Selecting provider:", provider.name);
+		console.log("Serializable provider:", serializableProvider);
+
 		router.push({
 			pathname: "/(app)/serviceprovider",
 			params: {
-				provider: JSON.stringify(provider),
+				provider: JSON.stringify(serializableProvider),
 			},
 		});
 	};
@@ -107,14 +124,25 @@ const ServiceProviderScreen: React.FC = () => {
 					{providers.map((provider) => (
 						<Pressable
 							key={provider.id}
-							onPress={() => selectProvider(provider)}
+							onPress={() => {
+								console.log("Provider card pressed:", provider.name);
+								selectProvider(provider);
+							}}
 							style={styles.providerCard}
 						>
 							<View style={styles.providerCardContent}>
 								<Image
-									source={{ uri: provider.image }}
+									source={provider.image}
 									style={styles.providerLogoLarge}
 									resizeMode="contain"
+									onError={(error) => {
+										console.log(
+											"Image loading error for",
+											provider.name,
+											":",
+											error.nativeEvent.error,
+										);
+									}}
 								/>
 								<Text style={styles.providerCardName}>{provider.name}</Text>
 							</View>

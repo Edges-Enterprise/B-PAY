@@ -17,7 +17,7 @@ import {
   Keyboard,
   StatusBar,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import * as SecureStore from 'expo-secure-store';
 
@@ -56,9 +56,10 @@ interface TransactionResult {
 
 // Cable TV providers (static)
 const PROVIDER_IMAGES: { [key: string]: string } = {
-  DSTV: 'https://example.com/dstv-logo.png',
-  GOTV: 'https://example.com/gotv-logo.png',
-  STARTIMES: 'https://example.com/startimes-logo.png',
+	DSTV: "https://cdn.brandfetch.io/idBvCNxfgy/w/800/h/494/theme/dark/logo.webp?c=1bxideym1bCk82mxFsjUw",
+	GOTV: "https://cdn.brandfetch.io/idWUs_RbuC/w/820/h/154/theme/dark/logo.png?c=1bxideym1bCk82mxFsjUw",
+	STARTIMES:
+		"https://cdn.brandfetch.io/idcUkVgdCp/w/225/h/225/theme/dark/icon.jpeg?c=1bxideym1bCk82mxFsjUw",
 };
 
 const PROVIDER_CONFIG: { [key: string]: { code: string; apiDiscount: number } } = {
@@ -105,7 +106,7 @@ const cleanPlanName = (name: string): string => {
 };
 
 const CableTV: React.FC = () => {
-  const router = useRouter();
+ 
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [smartCardNumber, setSmartCardNumber] = useState<string>('');
   const [isSmartCardValid, setIsSmartCardValid] = useState<boolean>(false);
@@ -714,7 +715,7 @@ const CableTV: React.FC = () => {
 
   return (
     <Animated.View style={[styles.rootContainer, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {/* <StatusBar barStyle="light-content" backgroundColor="#000000" /> */}
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -727,7 +728,7 @@ const CableTV: React.FC = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.headerContainer}>
+          {/* <View style={styles.headerContainer}>
             <Pressable onPress={handleBack} style={styles.backButton}>
               <Text style={styles.backArrow}>←</Text>
             </Pressable>
@@ -735,7 +736,7 @@ const CableTV: React.FC = () => {
               <Text style={styles.selectProviderTitle}>Cable TV Subscription 📺</Text>
               <View style={styles.headerUnderline} />
             </View>
-          </View>
+          </View> */}
 
           {/* Provider List */}
           <Text style={[styles.sectionTitle, { marginTop: scaleSize(12) }]}>Select Cable TV Provider</Text>
@@ -934,7 +935,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   innerContainer: {
-    paddingTop: scaleSize(60),
+    // paddingTop: scaleSize(60),
     paddingHorizontal: scaleSize(16),
     flexGrow: 1,
     backgroundColor: '#000000',
@@ -985,14 +986,14 @@ const styles = StyleSheet.create({
     height: scaleSize(80),
     marginBottom: scaleSize(12),
     justifyContent: 'center',
-    shadowColor: '#FFD700',
+    shadowColor: '#d7a77f',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.9,
     shadowRadius: 4,
     elevation: 4,
   },
   providerCardSelected: {
-    borderColor: '#FFD700',
+    borderColor: '#D7A77F',
     borderWidth: 2,
     backgroundColor: '#2A2A2C',
     transform: [{ scale: 1.05 }],
@@ -1001,7 +1002,7 @@ const styles = StyleSheet.create({
     width: scaleSize(40),
     height: scaleSize(40),
     borderRadius: scaleSize(20),
-    borderColor: '#FFD700',
+    borderColor: '#D7A77F',
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1083,7 +1084,7 @@ const styles = StyleSheet.create({
     height: scaleSize(65),
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#DAA520',
+    borderColor: '#D7A77F',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1110,7 +1111,7 @@ const styles = StyleSheet.create({
   amountPrice: {
     fontSize: scaleFont(12),
     fontWeight: '700',
-    color: '#FFD700',
+    color: '#D7A77F',
     marginVertical: scaleSize(2),
     textAlign: 'center',
   },

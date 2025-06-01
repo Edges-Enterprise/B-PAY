@@ -53,7 +53,7 @@ export default function HistoryScreen() {
 					authError?.message,
 				);
 				Alert.alert("Error", "Please log in to view your transaction history.");
-				router.replace("/login");
+				router.replace("/sign-in");
 				return;
 			}
 
@@ -247,13 +247,13 @@ const styles = StyleSheet.create({
 	filterButton: {
 		paddingHorizontal: 12,
 		paddingVertical: 6,
-		borderRadius: 9999,
+		borderRadius: 8,
 		borderWidth: 1,
 		borderColor: "#4b5563",
 	},
 	activeFilterButton: {
-		backgroundColor: "#2563eb",
-		borderColor: "#2563eb",
+		backgroundColor: "#744925",
+		borderColor: "#744925",
 	},
 	filterButtonText: {
 		fontSize: 14,
