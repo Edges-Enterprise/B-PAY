@@ -15,18 +15,17 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { ScrollView } from "react-native-gesture-handler";
-import { useColorScheme } from "@/lib/useColorScheme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/context/supabase-provider";
 
 export default function SignUpScreen() {
+	const { signUp } = useAuth();
 	const [username, setUsername] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
 
-	const { signUp } = useAuth();
-	const colorScheme = useColorScheme();
 
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -61,12 +60,20 @@ export default function SignUpScreen() {
 		try {
 			console.log("SignUp started with:", { username, email, rememberMe });
 
-			await signUp(username, email, password);
+			await signUp(username, email, password, rememberMe);
+
+			// Save credentials if Remember Me is enabled
+			// if (rememberMe) {
+			// 	await AsyncStorage.setItem(
+			// 		"userCredentials",
+			// 		JSON.stringify({ email, password }),
+			// 	);
+			// }
 
 			setUsername("");
 			setEmail("");
 			setPassword("");
-			setRememberMe(false);
+			// setRememberMe(false);
 		} catch (err: unknown) {
 			const error = err as Error;
 			console.error("SignUp error:", error);

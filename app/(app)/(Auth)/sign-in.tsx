@@ -20,7 +20,7 @@ export default function SignInScreen() {
 	const [password, setPassword] = useState("");
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
-	
+
 	const { user, signInWithPassword } = useAuth();
 
 	// Check if both email and password are filled
@@ -32,22 +32,38 @@ export default function SignInScreen() {
 		}
 	}, [user]);
 
+	// useEffect(() => {
+	// 	const loadSavedCredentials = async () => {
+	// 		try {
+	// 			const saved = await AsyncStorage.getItem("userCredentials");
+	// 			if (saved) {
+	// 				const { email, password } = JSON.parse(saved);
+	// 				setEmail(email);
+	// 				setPassword(password);
+	// 				setRememberMe(true);
+	// 			}
+	// 		} catch (error) {
+	// 			console.error("Failed to load saved credentials:", error);
+	// 		}
+	// 	};
+
+	// 	loadSavedCredentials();
+	// }, []);
+
+	// Update the loadSavedCredentials useEffect
 	useEffect(() => {
-		const loadSavedCredentials = async () => {
+		const loadRememberMePreference = async () => {
 			try {
-				const saved = await AsyncStorage.getItem("userCredentials");
-				if (saved) {
-					const { email, password } = JSON.parse(saved);
-					setEmail(email);
-					setPassword(password);
-					setRememberMe(true);
+				const savedRememberMe = await AsyncStorage.getItem("@rememberMe");
+				if (savedRememberMe !== null) {
+					setRememberMe(savedRememberMe === "true");
 				}
 			} catch (error) {
-				console.error("Failed to load saved credentials:", error);
+				console.error("Failed to load rememberMe preference:", error);
 			}
 		};
 
-		loadSavedCredentials();
+		loadRememberMePreference();
 	}, []);
 
 	const handleSignIn = async () => {
@@ -58,16 +74,16 @@ export default function SignInScreen() {
 
 		setLoading(true);
 		try {
-			await signInWithPassword(email, password);
+			await signInWithPassword(email, password, rememberMe);
 
-			if (rememberMe) {
-				await AsyncStorage.setItem(
-					"userCredentials",
-					JSON.stringify({ email, password }),
-				);
-			} else {
-				await AsyncStorage.removeItem("userCredentials");
-			}
+			// if (rememberMe) {
+			// 	await AsyncStorage.setItem(
+			// 		"userCredentials",
+			// 		JSON.stringify({ email, password }),
+			// 	);
+			// } else {
+			// 	await AsyncStorage.removeItem("userCredentials");
+			// }
 
 			router.replace("/(app)/(protected)");
 		} catch (err: unknown) {

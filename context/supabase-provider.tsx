@@ -1,9 +1,11 @@
 import { supabase } from "@/config/supabase";
 import { Session, User } from "@supabase/supabase-js";
-import { router, useSegments, SplashScreen } from "expo-router";
 import { useFonts } from "expo-font";
-import { Alert } from "react-native";
+import { router, useSegments, SplashScreen } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
+import { Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,8 +22,17 @@ type SupabaseContextProps = {
 	user: User | null;
 	session: Session | null;
 	initialized?: boolean;
-	signUp: (username: string, email: string, password: string) => Promise<any>;
-	signInWithPassword: (email: string, password: string) => Promise<void>;
+	signUp: (
+		username: string,
+		email: string,
+		password: string,
+		rememberMe?: boolean,
+	) => Promise<any>;
+	signInWithPassword: (
+		email: string,
+		password: string,
+		rememberMe?: boolean,
+	) => Promise<void>;
 	signOut: () => Promise<void>;
 	deleteOwnAccount: () => Promise<void>;
 };
@@ -62,7 +73,12 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 		"ShadowLight-Regular": require("../assets/fonts/ShadowsIntoLight-Regular.ttf"),
 	});
 
-	const signUp = async (username: string, email: string, password: string) => {
+	const signUp = async (
+		username: string,
+		email: string,
+		password: string,
+		rememberMe: boolean = false,
+	) => {
 		try {
 			const { data, error } = await supabase.auth.signUp({
 				email: email.trim(),
@@ -88,6 +104,9 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 				throw new Error("Failed to save user profile.");
 			}
 
+			// Store rememberMe preference
+			await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
+
 			setUser(data.user);
 			setSession(data.session);
 			Alert.alert("Success", "Account created successfully.");
@@ -97,7 +116,11 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 		}
 	};
 
-	const signInWithPassword = async (email: string, password: string) => {
+	const signInWithPassword = async (
+		email: string,
+		password: string,
+		rememberMe: boolean = false,
+	) => {
 		try {
 			const { data, error } = await supabase.auth.signInWithPassword({
 				email,
@@ -108,9 +131,17 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 			if (!data || !data.user || !data.session) {
 				throw new Error("Invalid login response from Supabase");
 			}
+
+			// Store rememberMe preference
+			await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
+
 			setUser(data.user);
 			setSession(data.session);
-			router.replace("/(app)/(protected)");
+			// router.replace("/(app)/(protected)");
+			// Only auto-redirect if rememberMe is true
+			if (rememberMe) {
+				router.replace("/(app)/(protected)");
+			}
 		} catch (err: any) {
 			Alert.alert("Sign In Error", err.message || "Failed to sign in.");
 			throw err;
@@ -162,26 +193,62 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	};
 
 	// Load session on mount
+	// useEffect(() => {
+	// 	(async () => {
+	// 		const {
+	// 			data: { session },
+	// 		} = await supabase.auth.getSession();
+	// 		setSession(session);
+	// 		setUser(session?.user || null);
+	// 		setInitialized(true);
+	// 	})();
+
+	// 	const { data: listener } = supabase.auth.onAuthStateChange(
+	// 		(_event, session) => {
+	// 			setSession(session);
+	// 			setUser(session?.user || null);
+	// 		},
+	// 	);
+
+	// 	return () => {
+	// 		listener.subscription?.unsubscribe();
+	// 	};
+	// }, []);
+
 	useEffect(() => {
-		(async () => {
-			const {
-				data: { session },
-			} = await supabase.auth.getSession();
-			setSession(session);
-			setUser(session?.user || null);
-			setInitialized(true);
-		})();
+		const initializeAuth = async () => {
+			try {
+				const {
+					data: { session },
+				} = await supabase.auth.getSession();
+				const rememberMe = await AsyncStorage.getItem("@rememberMe");
 
-		const { data: listener } = supabase.auth.onAuthStateChange(
-			(_event, session) => {
-				setSession(session);
-				setUser(session?.user || null);
-			},
-		);
-
-		return () => {
-			listener.subscription?.unsubscribe();
+				if (session && rememberMe === "true") {
+					setSession(session);
+					setUser(session.user);
+					router.replace("/(app)/(protected)");
+				}
+			} finally {
+				setInitialized(true);
+			}
 		};
+
+		initializeAuth();
+
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange(async (event, session) => {
+			const rememberMe = await AsyncStorage.getItem("@rememberMe");
+			if (session && rememberMe === "true") {
+				setSession(session);
+				setUser(session.user);
+			} else if (!session) {
+				setSession(null);
+				setUser(null);
+			}
+		});
+
+		return () => subscription?.unsubscribe();
 	}, []);
 
 	// Fetch user profile when user changes
