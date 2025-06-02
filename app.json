@@ -42,6 +42,8 @@
           "image": "./assets/images/splash-dark.png"
         }
       },
+      "jsEngine": "hermes",
+      "enableProguardInReleaseBuilds": true,
       "package": "com.edgesnetwork.app"
     },
     "experiments": {
