@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
 	View,
 	Text,
@@ -7,79 +7,27 @@ import {
 	ScrollView,
 	StyleSheet,
 	ActivityIndicator,
-	Alert,
 } from "react-native";
 import { router } from "expo-router";
-import { DEFAULT_PROVIDER_IMAGE, NETWORK_IMAGES } from "@/constants/helper";
+import { NETWORK_IMAGES } from "@/constants/helper";
+import { useProviders } from "@/hooks/useBuyProvider"; // Adjust the import path as needed
 
-// Define the Provider interface - image should be any (require object)
+// Define the Provider interface
 interface Provider {
 	id: number;
 	name: string;
-	image: any; // require() returns a number/object, not string
+	image: any;
 	code: string;
 }
 
 const ServiceProviderScreen: React.FC = () => {
-	
-	const [providers, setProviders] = useState<Provider[]>([]);
-	const [loading, setLoading] = useState(true);
-
-	const fetchProviders = async () => {
-		try {
-			const response = await fetch("https://ebenkdata.com/api/network/", {
-				headers: {
-					Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
-				},
-			});
-
-			if (!response.ok) {
-				throw new Error(`Failed to fetch providers: ${response.status}`);
-			}
-
-			const data = await response.json();
-			console.log("API Response:", data);
-
-			// Transform the API response into an array of Provider objects
-			const providerMap: { [key: string]: Provider } = {};
-
-			// Iterate through each network plan array
-			Object.keys(data).forEach((networkKey) => {
-				const plans = data[networkKey];
-				if (Array.isArray(plans) && plans.length > 0) {
-					const networkName = plans[0].plan_network; // e.g., 9MOBILE, AIRTEL, GLO, MTN
-					if (!providerMap[networkName]) {
-						providerMap[networkName] = {
-							id: plans[0].network, // Use network ID from the first plan
-							name: networkName,
-							image:
-								NETWORK_IMAGES[networkName as keyof typeof NETWORK_IMAGES] ||
-								DEFAULT_PROVIDER_IMAGE,
-							code: networkName.toLowerCase(),
-						};
-					}
-				}
-			});
-
-			// Convert providerMap to array
-			const providerArray = Object.values(providerMap);
-			setProviders(providerArray);
-
-			if (providerArray.length === 0) {
-				Alert.alert("Error", "No valid providers found in the response.");
-			}
-		} catch (error) {
-			console.error("Fetch error:", error);
-			Alert.alert("Error", "Could not load data providers.");
-			setProviders([]);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	useEffect(() => {
-		fetchProviders();
-	}, []);
+	const {
+		data: providers = [],
+		isLoading,
+		error,
+		isRefetching,
+		refetch,
+	} = useProviders();
 
 	const selectProvider = (provider: Provider) => {
 		// Create a serializable version of the provider for navigation
@@ -107,14 +55,32 @@ const ServiceProviderScreen: React.FC = () => {
 		});
 	};
 
+	// Handle error state
+	if (error) {
+		return (
+			<View style={styles.container}>
+				<Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
+				<View style={styles.errorContainer}>
+					<Text style={styles.errorText}>Failed to load providers</Text>
+					<Pressable style={styles.retryButton} onPress={() => refetch()}>
+						<Text style={styles.retryButtonText}>Retry</Text>
+					</Pressable>
+				</View>
+			</View>
+		);
+	}
+
 	return (
 		<ScrollView style={styles.container}>
-			<Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
+			<View style={styles.headerContainer}>
+				<Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
+				{isRefetching && <ActivityIndicator size="small" color="#D7A77F" />}
+			</View>
 
-			{loading ? (
+			{isLoading ? (
 				<ActivityIndicator
 					size="large"
-					color="#00ff99"
+					color="#D7A77F"
 					style={{ marginTop: 50 }}
 				/>
 			) : providers.length === 0 ? (
@@ -158,14 +124,19 @@ const styles = StyleSheet.create({
 	container: {
 		flex: 1,
 		backgroundColor: "black",
-		paddingTop: 48,
+		paddingTop: 56,
 		paddingHorizontal: 16,
+	},
+	headerContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginBottom: 24,
 	},
 	selectProviderTitle: {
 		fontSize: 20,
 		fontWeight: "bold",
 		color: "white",
-		marginBottom: 24,
 	},
 	providerGrid: {
 		flexDirection: "row",
@@ -199,6 +170,26 @@ const styles = StyleSheet.create({
 		color: "white",
 		textAlign: "center",
 		marginTop: 50,
+	},
+	errorContainer: {
+		alignItems: "center",
+		marginTop: 50,
+	},
+	errorText: {
+		fontSize: 16,
+		color: "#ff6b6b",
+		textAlign: "center",
+		marginBottom: 16,
+	},
+	retryButton: {
+		backgroundColor: "#00ff99",
+		paddingHorizontal: 20,
+		paddingVertical: 10,
+		borderRadius: 8,
+	},
+	retryButtonText: {
+		color: "black",
+		fontWeight: "600",
 	},
 });
 
