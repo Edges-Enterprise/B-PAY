@@ -17,13 +17,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { MotiView } from "moti";
 import { supabase } from "@/config/supabase";
 import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from "@/constants/helper";
-
-// Import modals
 import PurchaseModal from "@/components/homescreen/PurchaseModal";
 import TransactionStatusModal from "@/components/homescreen/TransactionStatusModal";
 import CreatePinModal from "@/components/homescreen/CreatePinModal";
 
-// Define types
 interface DataBundle {
   id: number;
   data: string;
@@ -55,20 +52,14 @@ const BuyDataScreen: React.FC = () => {
 
   try {
     if (providerParam) {
-      const serializableProvider = JSON.parse(
-        providerParam as string,
-      ) as SerializableProvider;
-      // Convert back to Provider with actual image
+      const serializableProvider = JSON.parse(providerParam as string) as SerializableProvider;
       selectedProvider = {
         id: serializableProvider.id,
         name: serializableProvider.name,
         code: serializableProvider.code,
-        image:
-          serializableProvider.imageKey !== "DEFAULT"
-            ? NETWORK_IMAGES[
-                serializableProvider.imageKey as keyof typeof NETWORK_IMAGES
-              ]
-            : DEFAULT_PROVIDER_IMAGE,
+        image: serializableProvider.imageKey !== "DEFAULT"
+          ? NETWORK_IMAGES[serializableProvider.imageKey as keyof typeof NETWORK_IMAGES]
+          : DEFAULT_PROVIDER_IMAGE,
       };
     }
   } catch (error) {
@@ -80,28 +71,22 @@ const BuyDataScreen: React.FC = () => {
 
   const [expandedCategory, setExpandedCategory] = useState<string>("Daily Plans");
   const [selectedPlanType, setSelectedPlanType] = useState<string>("Gifting");
-  const [lastPurchasedNumber, setLastPurchasedNumber] =
-    useState<string>("08012345678");
+  const [lastPurchasedNumber, setLastPurchasedNumber] = useState<string>("08012345678");
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [transactionModalVisible, setTransactionModalVisible] =
-    useState<boolean>(false);
-  const [createPinModalVisible, setCreatePinModalVisible] =
-    useState<boolean>(false);
+  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
+  const [createPinModalVisible, setCreatePinModalVisible] = useState<boolean>(false);
   const [selectedBundle, setSelectedBundle] = useState<DataBundle | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [transactionPin, setTransactionPin] = useState<string>("");
   const [networkProvider, setNetworkProvider] = useState<string>("");
-  const [transactionStatus, setTransactionStatus] = useState<
-    "processing" | "success" | "failed"
-  >("processing");
+  const [transactionStatus, setTransactionStatus] = useState<"processing" | "success" | "failed">("processing");
   const [showTransactionPin, setShowTransactionPin] = useState<boolean>(false);
-  const [hasTransactionPin, setHasTransactionPin] = useState<boolean>(true);
+  const [hasTransactionPin, setHasTransactionPin] = useState<boolean>(false); // Default to false
   const [newPin, setNewPin] = useState<string>("");
   const [confirmPin, setConfirmPin] = useState<string>("");
   const [showNewPin, setShowNewPin] = useState<boolean>(false);
   const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
-  const [lastPurchasedBundle, setLastPurchasedBundle] =
-    useState<DataBundle | null>(null);
+  const [lastPurchasedBundle, setLastPurchasedBundle] = useState<DataBundle | null>(null);
   const [lastPurchaseTime, setLastPurchaseTime] = useState<string | null>(null);
   const [balance, setBalance] = useState<number>(0);
   const [userEmail, setUserEmail] = useState<string>("");
@@ -112,6 +97,35 @@ const BuyDataScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [referenceId, setReferenceId] = useState<string>("");
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  // Check if user has a transaction PIN
+  const checkTransactionPin = async (email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('transaction_pin')
+        .eq('email', email)
+        .single();
+
+      console.log('Check PIN Result:', { email, data, error });
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No profile exists
+          setHasTransactionPin(false);
+          return false;
+        }
+        throw error;
+      }
+
+      setHasTransactionPin(!!data?.transaction_pin);
+      return !!data?.transaction_pin;
+    } catch (error) {
+      console.error('Error checking transaction PIN:', error);
+      Alert.alert('Error', 'Failed to verify profile. Please try again.');
+      return false;
+    }
+  };
 
   // Generate referenceId
   const generateReferenceId = async () => {
@@ -141,9 +155,7 @@ const BuyDataScreen: React.FC = () => {
   const parseSearchQuery = (query: string) => {
     const normalizedQuery = query.toLowerCase().trim();
     const dataMatch = normalizedQuery.match(/(\d*\.?\d*)\s*(gb|mb)/i);
-    const validityMatch = normalizedQuery.match(
-      /(\d+)\s*(day|days|month|months|week|weeks)/i,
-    );
+    const validityMatch = normalizedQuery.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
     const planTypeMatch = normalizedQuery.match(/(sme|gifting|corporate)/i);
 
     return {
@@ -159,33 +171,22 @@ const BuyDataScreen: React.FC = () => {
   const filterBundlesBySearch = (query: string) => {
     if (!query) return null;
 
-    const { dataAmount, dataUnit, validityDays, validityUnit, planType } =
-      parseSearchQuery(query);
+    const { dataAmount, dataUnit, validityDays, validityUnit, planType } = parseSearchQuery(query);
     return bundles
       .filter((bundle) => {
         let matches = true;
 
-        // Match data amount
         if (dataAmount && dataUnit) {
-          const bundleDataValue = parseFloat(
-            bundle.data.match(/[\d.]+/)?.[0] || "0",
-          );
+          const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
           const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-          const bundleDataInMB =
-            bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-          const searchDataInMB =
-            dataUnit === "GB" ? dataAmount * 1000 : dataAmount;
-          matches =
-            matches &&
-            Math.abs(bundleDataInMB - searchDataInMB) <= searchDataInMB * 0.2;
+          const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
+          const searchDataInMB = dataUnit === "GB" ? dataAmount * 1000 : dataAmount;
+          matches = matches && Math.abs(bundleDataInMB - searchDataInMB) <= searchDataInMB * 0.2;
         }
 
-        // Match validity and category
         if (validityDays && validityUnit) {
           const bundleDaysMatch = bundle.validity.match(/\d+/);
-          const bundleDays = bundleDaysMatch
-            ? parseInt(bundleDaysMatch[0], 10)
-            : 0;
+          const bundleDays = bundleDaysMatch ? parseInt(bundleDaysMatch[0], 10) : 0;
           const bundleValidityLower = bundle.validity.toLowerCase();
 
           if (validityUnit.includes("day")) {
@@ -196,32 +197,26 @@ const BuyDataScreen: React.FC = () => {
             } else {
               matches = matches && bundle.category === "Monthly Plans";
             }
-            matches =
-              matches &&
-              Math.abs(bundleDays - validityDays) <= validityDays * 0.2;
+            matches = matches && Math.abs(bundleDays - validityDays) <= validityDays * 0.2;
           } else if (validityUnit.includes("week")) {
             const searchDays = validityDays * 7;
             matches = matches && bundle.category === "Weekly Plans";
-            matches =
-              matches && Math.abs(bundleDays - searchDays) <= searchDays * 0.2;
+            matches = matches && Math.abs(bundleDays - searchDays) <= searchDays * 0.2;
           } else if (validityUnit.includes("month")) {
             const searchDays = validityDays * 30;
             matches = matches && bundle.category === "Monthly Plans";
-            matches =
-              matches &&
-              (bundleDays === searchDays ||
-                bundleValidityLower.includes(`${validityDays} month`) ||
-                bundleValidityLower.includes(`${searchDays} days`));
+            matches = matches && (
+              bundleDays === searchDays ||
+              bundleValidityLower.includes(`${validityDays} month`) ||
+              bundleValidityLower.includes(`${searchDays} days`)
+            );
           }
         }
 
-        // Match plan type (from search query or selectedPlanType)
         if (planType) {
           matches = matches && bundle.planType.toLowerCase() === planType;
         } else {
-          matches =
-            matches &&
-            bundle.planType.toLowerCase() === selectedPlanType.toLowerCase();
+          matches = matches && bundle.planType.toLowerCase() === selectedPlanType.toLowerCase();
         }
 
         return matches;
@@ -234,9 +229,7 @@ const BuyDataScreen: React.FC = () => {
     if (searchQuery) {
       const searchResults = filterBundlesBySearch(searchQuery);
       if (searchResults) {
-        return Array.from(
-          new Set(searchResults.map((bundle) => bundle.planType)),
-        ).sort();
+        return Array.from(new Set(searchResults.map((bundle) => bundle.planType))).sort();
       }
       return ["SME", "Gifting", "Corporate"];
     }
@@ -248,46 +241,30 @@ const BuyDataScreen: React.FC = () => {
     if (expandedCategory === "Hot" && lastPurchasedBundle) {
       const hotBundles = bundles.filter((bundle) => {
         try {
-          const isSamePlanType =
-            bundle.planType === lastPurchasedBundle.planType;
-          const isSameCategory =
-            bundle.category === lastPurchasedBundle.category;
-          const lastDataValue = parseFloat(
-            lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0",
-          );
+          const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
+          const isSameCategory = bundle.category === lastPurchasedBundle.category;
+          const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
           const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
-          const lastDataInMB =
-            lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
-          const bundleDataValue = parseFloat(
-            bundle.data.match(/[\d.]+/)?.[0] || "0",
-          );
+          const lastDataInMB = lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
+          const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
           const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-          const bundleDataInMB =
-            bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-          const isSimilarDataAmount =
-            bundleDataInMB >= lastDataInMB * 0.5 &&
-            bundleDataInMB <= lastDataInMB * 1.5;
+          const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
+          const isSimilarDataAmount = bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
           return isSamePlanType && isSameCategory && isSimilarDataAmount;
         } catch (error) {
           console.error("Error processing bundle:", bundle, error);
           return false;
         }
       });
-      return Array.from(
-        new Set(hotBundles.map((bundle) => bundle.planType)),
-      ).sort();
+      return Array.from(new Set(hotBundles.map((bundle) => bundle.planType))).sort();
     }
 
     return Array.from(
-      new Set(
-        bundles
-          .filter((bundle) => bundle.category === expandedCategory)
-          .map((bundle) => bundle.planType),
-      ),
+      new Set(bundles.filter((bundle) => bundle.category === expandedCategory).map((bundle) => bundle.planType))
     ).sort();
   }, [bundles, expandedCategory, searchQuery, lastPurchasedBundle]);
 
-  // Fetch user data, wallet balance, provider data plans, and last purchased bundle
+  // Fetch user data, wallet balance, provider data plans, last purchased bundle, and check PIN
   useEffect(() => {
     const fetchData = async () => {
       if (!selectedProvider) {
@@ -299,15 +276,15 @@ const BuyDataScreen: React.FC = () => {
 
       try {
         // Fetch user and wallet balance
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user || !user.email) {
           throw new Error("User not authenticated or email missing");
         }
 
         setUserEmail(user.email);
+
+        // Check if user has a transaction PIN
+        await checkTransactionPin(user.email);
 
         const { data: wallet, error: walletError } = await supabase
           .from("wallets")
@@ -319,7 +296,27 @@ const BuyDataScreen: React.FC = () => {
           throw walletError;
         }
 
-        setBalance(wallet?.balance || 0);
+        const newBalance = wallet?.balance || 0;
+        console.log('Fetched Wallet Balance:', { balance: newBalance, userEmail: user.email });
+        setBalance(newBalance);
+
+        // Set up real-time subscription for wallet balance
+        const subscription = supabase
+          .channel(`wallet-changes:${user.email}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'wallets',
+              filter: `user_email=eq.${user.email}`,
+            },
+            (payload) => {
+              console.log('Real-time Wallet Balance Update:', payload);
+              setBalance(payload.new.balance);
+            }
+          )
+          .subscribe();
 
         // Fetch last purchased bundle for the phone number
         const { data: transactions, error: txError } = await supabase
@@ -430,30 +427,16 @@ const BuyDataScreen: React.FC = () => {
 
         setBundles(fetchedBundles);
 
-        const uniqueCategories = Array.from(
-          new Set(fetchedBundles.map((bundle) => bundle.category)),
-        );
-        const categoryOrder = [
-          "Daily Plans",
-          "Weekly Plans",
-          "Monthly Plans",
-          "Weekend Plans",
-          "Night Plans",
-          "Unlimited Plans",
-        ];
-        uniqueCategories.sort(
-          (a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b),
-        );
+        const uniqueCategories = Array.from(new Set(fetchedBundles.map((bundle) => bundle.category)));
+        const categoryOrder = ["Daily Plans", "Weekly Plans", "Monthly Plans", "Weekend Plans", "Night Plans", "Unlimited Plans"];
+        uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
 
         let finalCategories = uniqueCategories;
         if (lastPurchasedBundle && lastPurchaseTime) {
           const purchaseDate = new Date(lastPurchaseTime);
           const currentTime = new Date();
-          const hoursDiff =
-            (currentTime.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60);
-          const dataValue = parseFloat(
-            lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0",
-          );
+          const hoursDiff = (currentTime.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60);
+          const dataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
           const unit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
           const dataInGB = unit === "GB" ? dataValue : dataValue / 1000;
 
@@ -463,11 +446,13 @@ const BuyDataScreen: React.FC = () => {
         }
 
         setCategories(finalCategories);
+
+        return () => {
+          supabase.removeChannel(subscription);
+        };
       } catch (error: any) {
         console.error("Error fetching data:", error);
-        setError(
-          `Failed to load ${selectedProvider?.name || "provider"} data plans or wallet balance.`,
-        );
+        setError(`Failed to load ${selectedProvider?.name || "provider"} data plans or wallet balance.`);
       } finally {
         setLoading(false);
       }
@@ -478,32 +463,9 @@ const BuyDataScreen: React.FC = () => {
 
   const getProviderFromPhone = (phone: string): string => {
     const prefix = phone.slice(0, 4);
-    const mtn = [
-      "0803",
-      "0806",
-      "0703",
-      "0706",
-      "0813",
-      "0816",
-      "0810",
-      "0814",
-      "0903",
-      "0906",
-      "0913",
-      "0916",
-    ];
+    const mtn = ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"];
     const glo = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
-    const airtel = [
-      "0802",
-      "0808",
-      "0708",
-      "0812",
-      "0701",
-      "0902",
-      "0907",
-      "0901",
-      "0912",
-    ];
+    const airtel = ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"];
     const nineMobile = ["0809", "0817", "0818", "0909", "0908"];
 
     if (mtn.includes(prefix)) return "MTN";
@@ -516,15 +478,13 @@ const BuyDataScreen: React.FC = () => {
   useEffect(() => {
     if (phoneNumber.length === 11 && selectedProvider) {
       const detectedProvider = getProviderFromPhone(phoneNumber);
-      setNetworkProvider(
-        detectedProvider === selectedProvider.name ? detectedProvider : "",
-      );
+      setNetworkProvider(detectedProvider === selectedProvider.name ? detectedProvider : "");
     } else {
       setNetworkProvider("");
     }
   }, [phoneNumber, selectedProvider]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!selectedBundle || !selectedProvider) {
       Alert.alert("Error", "No bundle or provider selected");
       return;
@@ -535,15 +495,14 @@ const BuyDataScreen: React.FC = () => {
       return;
     }
 
-    if (
-      !transactionPin ||
-      transactionPin.length < 4 ||
-      transactionPin.length > 6
-    ) {
-      Alert.alert(
-        "Error",
-        "Please enter a transaction PIN between 4 and 6 digits",
-      );
+    if (!hasTransactionPin) {
+      Alert.alert("Error", "Please create a transaction PIN first");
+      setCreatePinModalVisible(true);
+      return;
+    }
+
+    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
+      Alert.alert("Error", "Please enter a transaction PIN between 4 and 6 digits");
       return;
     }
 
@@ -552,25 +511,80 @@ const BuyDataScreen: React.FC = () => {
       return;
     }
 
-    // Navigate to confirmation page
-    console.log("Navigating to confirmation with referenceId:", referenceId);
-    router.push({
-      pathname: "/Confirmation",
-      params: {
-        bundle: JSON.stringify(selectedBundle),
-        provider: JSON.stringify({
-          id: selectedProvider.id,
-          name: selectedProvider.name,
-          code: selectedProvider.code,
-          image: selectedProvider.imageKey || "DEFAULT",
-        }),
-        phoneNumber,
-        transactionPin,
-        userEmail,
-        referenceId,
-      },
-    });
-    setModalVisible(false);
+    if (!userEmail) {
+      Alert.alert("Error", "User not authenticated");
+      return;
+    }
+
+    try {
+      // Verify transaction PIN
+      const { data: userData, error: pinError } = await supabase
+        .from('profiles')
+        .select('transaction_pin')
+        .eq('email', userEmail)
+        .single();
+
+      console.log('PIN Verification Result:', { userEmail, transactionPin, userData, pinError });
+
+      if (pinError) {
+        console.error('PIN verification error:', pinError);
+        if (pinError.code === 'PGRST116') {
+          Alert.alert('Error', 'No profile found. Please create a transaction PIN.');
+          setCreatePinModalVisible(true);
+        } else if (pinError.code === '42703') {
+          Alert.alert('Error', 'Profile table is missing transaction_pin column. Please contact support.');
+        } else if (pinError.code === '42P01') {
+          Alert.alert('Error', 'Profile table not found. Please contact support.');
+        } else {
+          Alert.alert('Error', 'Failed to verify PIN.');
+        }
+        return;
+      }
+
+      if (!userData) {
+        console.log('No profile found for email:', userEmail);
+        Alert.alert('Error', 'Profile not found. Please create a transaction PIN.');
+        setCreatePinModalVisible(true);
+        return;
+      }
+
+      if (!userData.transaction_pin) {
+        console.log('No transaction PIN set for user:', { userEmail, userData });
+        Alert.alert('Error', 'No PIN set. Please create a transaction PIN.');
+        setCreatePinModalVisible(true);
+        return;
+      }
+
+      if (userData.transaction_pin !== transactionPin) {
+        console.log('PIN mismatch:', { storedPin: userData.transaction_pin, providedPin: transactionPin });
+        Alert.alert('Error', 'Invalid PIN');
+        return;
+      }
+
+      // Navigate to confirmation page
+      console.log("Navigating to confirmation with referenceId:", referenceId, "and balance:", balance);
+      router.push({
+        pathname: "/Confirmation",
+        params: {
+          bundle: JSON.stringify(selectedBundle),
+          provider: JSON.stringify({
+            id: selectedProvider.id,
+            name: selectedProvider.name,
+            code: selectedProvider.code,
+            image: selectedProvider.imageKey || "DEFAULT",
+          }),
+          phoneNumber,
+          transactionPin,
+          userEmail,
+          referenceId,
+          balance: balance.toString(),
+        },
+      });
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Error verifying PIN:', error);
+      Alert.alert('Error', 'Failed to verify PIN. Please try again.');
+    }
   };
 
   const closeTransactionModal = () => {
@@ -580,7 +594,7 @@ const BuyDataScreen: React.FC = () => {
     setSelectedBundle(null);
     setNetworkProvider("");
     setTransactionStatus("processing");
-    setReferenceId(""); // Reset referenceId after transaction
+    setReferenceId("");
   };
 
   const closePurchaseModal = () => {
@@ -589,7 +603,7 @@ const BuyDataScreen: React.FC = () => {
     setTransactionPin("");
     setSelectedBundle(null);
     setNetworkProvider("");
-    setReferenceId(""); // Reset referenceId when modal closes
+    setReferenceId("");
   };
 
   const closeCreatePinModal = () => {
@@ -598,13 +612,8 @@ const BuyDataScreen: React.FC = () => {
     setConfirmPin("");
   };
 
-  const handleCreatePin = () => {
-    if (
-      newPin.length < 4 ||
-      newPin.length > 6 ||
-      confirmPin.length < 4 ||
-      confirmPin.length > 6
-    ) {
+  const handleCreatePin = async () => {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
       Alert.alert("Error", "PIN must be between 4 and 6 digits.");
       return;
     }
@@ -614,11 +623,58 @@ const BuyDataScreen: React.FC = () => {
       return;
     }
 
-    setTransactionPin(newPin);
-    setHasTransactionPin(true);
-    setCreatePinModalVisible(false);
-    setNewPin("");
-    setConfirmPin("");
+    if (!userEmail) {
+      Alert.alert("Error", "User not authenticated");
+      return;
+    }
+
+    try {
+      // Check if profile exists
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('email', userEmail)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error checking profile:', fetchError);
+        throw fetchError;
+      }
+
+      if (existingProfile) {
+        // Update existing profile with new PIN
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ transaction_pin: newPin })
+          .eq('email', userEmail);
+
+        if (updateError) {
+          console.error('Error updating PIN:', updateError);
+          throw updateError;
+        }
+      } else {
+        // Create new profile with PIN
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({ email: userEmail, transaction_pin: newPin });
+
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
+          throw insertError;
+        }
+      }
+
+      console.log('PIN saved successfully for:', userEmail);
+      setTransactionPin(newPin);
+      setHasTransactionPin(true);
+      setCreatePinModalVisible(false);
+      setNewPin("");
+      setConfirmPin("");
+      Alert.alert('Success', 'Transaction PIN created successfully.');
+    } catch (error) {
+      console.error('Error saving PIN:', error);
+      Alert.alert('Error', 'Failed to create transaction PIN. Please try again.');
+    }
   };
 
   const goBackToProviders = () => {
@@ -631,10 +687,7 @@ const BuyDataScreen: React.FC = () => {
       .filter((bundle) => bundle.category === category)
       .map((bundle) => bundle.planType);
     const uniquePlanTypes = Array.from(new Set(newAvailablePlanTypes)).sort();
-    if (
-      uniquePlanTypes.length > 0 &&
-      !uniquePlanTypes.includes(selectedPlanType)
-    ) {
+    if (uniquePlanTypes.length > 0 && !uniquePlanTypes.includes(selectedPlanType)) {
       setSelectedPlanType(uniquePlanTypes[0]);
     }
     Animated.timing(scaleAnim, {
@@ -665,7 +718,6 @@ const BuyDataScreen: React.FC = () => {
       setSelectedBundle(bundle);
       setModalVisible(true);
     } catch (error) {
-      // Alert already shown in generateReferenceId
       setModalVisible(false);
     }
   };
@@ -766,33 +818,22 @@ const BuyDataScreen: React.FC = () => {
     let filteredBundles = bundles;
 
     filteredBundles = filteredBundles.filter(
-      (bundle) =>
-        bundle.planType.toLowerCase() === selectedPlanType.toLowerCase(),
+      (bundle) => bundle.planType.toLowerCase() === selectedPlanType.toLowerCase(),
     );
 
     if (category === "Hot" && lastPurchasedBundle) {
       return filteredBundles
         .filter((bundle) => {
           try {
-            const isSamePlanType =
-              bundle.planType === lastPurchasedBundle.planType;
-            const isSameCategory =
-              bundle.category === lastPurchasedBundle.category;
-            const lastDataValue = parseFloat(
-              lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0",
-            );
+            const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
+            const isSameCategory = bundle.category === lastPurchasedBundle.category;
+            const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
             const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
-            const lastDataInMB =
-              lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
-            const bundleDataValue = parseFloat(
-              bundle.data.match(/[\d.]+/)?.[0] || "0",
-            );
+            const lastDataInMB = lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
+            const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
             const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-            const bundleDataInMB =
-              bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-            const isSimilarDataAmount =
-              bundleDataInMB >= lastDataInMB * 0.5 &&
-              bundleDataInMB <= lastDataInMB * 1.5;
+            const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
+            const isSimilarDataAmount = bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
             return isSamePlanType && isSameCategory && isSimilarDataAmount;
           } catch (error) {
             console.error("Error processing bundle:", bundle, error);
@@ -863,17 +904,13 @@ const BuyDataScreen: React.FC = () => {
                 onPress={() => selectCategory(category)}
                 style={[
                   styles.categoryButton,
-                  expandedCategory === category
-                    ? styles.selectedCategoryButton
-                    : {},
+                  expandedCategory === category ? styles.selectedCategoryButton : {},
                 ]}
               >
                 <Text
                   style={[
                     styles.categoryButtonText,
-                    expandedCategory === category
-                      ? styles.selectedCategoryButtonText
-                      : {},
+                    expandedCategory === category ? styles.selectedCategoryButtonText : {},
                   ]}
                 >
                   {category === "Hot" ? "🔥 Hot" : category}
@@ -895,17 +932,13 @@ const BuyDataScreen: React.FC = () => {
                 onPress={() => selectPlanType(planType)}
                 style={[
                   styles.planTypeButton,
-                  selectedPlanType === planType
-                    ? styles.selectedPlanTypeButton
-                    : {},
+                  selectedPlanType === planType ? styles.selectedPlanTypeButton : {},
                 ]}
               >
                 <Text
                   style={[
                     styles.planTypeButtonText,
-                    selectedPlanType === planType
-                      ? styles.selectedPlanTypeButtonText
-                      : {},
+                    selectedPlanType === planType ? styles.selectedPlanTypeButtonText : {},
                   ]}
                 >
                   {planType}
@@ -931,9 +964,7 @@ const BuyDataScreen: React.FC = () => {
           <Text style={styles.loadingText}>No categories available</Text>
         ) : bundlesInCategory.length === 0 ? (
           <Text style={styles.loadingText}>
-            {searchQuery
-              ? "No plans match your search"
-              : "No bundles available for this category"}
+            {searchQuery ? "No plans match your search" : "No bundles available for this category"}
           </Text>
         ) : (
           <View style={styles.bundleListContainer}>
@@ -1188,18 +1219,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#A1A1AA",
     marginBottom: 4,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#A1A1AA",
-    textAlign: "center",
-    marginTop: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: "#FF4444",
-    textAlign: "center",
-    marginTop: 20,
   },
 });
 

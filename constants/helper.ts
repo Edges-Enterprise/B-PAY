@@ -185,6 +185,57 @@ export const DISCO_PROVIDERS: DiscosProvider[] = [
 		apiDiscount: 96,
 	},
 ];
+
+interface ActionItem {
+	title: string;
+	icon: IconName;
+	color: string;
+	route: string;
+}
+
+export const actions = [
+	{
+		title: "Buy Data",
+		icon: ICONS.DATA,
+		color: "#22C55E",
+		route: "/(app)/(protected)/buy" as const,
+	},
+	{
+		title: "Buy Airtime",
+		icon: ICONS.AIRTIME,
+		color: "#2563EB",
+		route: "../airtimeprovider" as const,
+	},
+	{
+		title: "Electricity",
+		icon: ICONS.ELECTRICITY,
+		color: "#EAB308",
+		route: "../electricity" as const,
+	},
+	{
+		title: "Cable TV",
+		icon: ICONS.CABLE,
+		color: "#3B82F6",
+		route: "../cableTv" as const,
+	},
+	{
+		title: "Customer Care",
+		icon: ICONS.SUPPORT,
+		color: "#3B82F6",
+		route: "../Customer" as const,
+	},
+	{
+		title: "Referral",
+		icon: ICONS.REFERRAL,
+		color: "#F59E0B",
+		route: "../referral" as const,
+	},
+] satisfies Array<{
+	title: string;
+	icon: string;
+	color: string;
+	route: `/${string}` | `../${string}`;
+}>;
   
 
 export const CONSTANTS = {
@@ -224,6 +275,7 @@ export const CONSTANTS = {
 // @/constants/app.ts
 
 import { Dimensions } from "react-native";
+import { IconName, ICONS } from "./homeindex";
 
 const { width, height } = Dimensions.get("window");
 

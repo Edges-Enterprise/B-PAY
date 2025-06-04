@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +9,7 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -72,195 +74,204 @@ export default function WalletScreen() {
   const [preferredProvider, setPreferredProvider] = useState<string>("MTN");
   const [hasPriorPurchase, setHasPriorPurchase] = useState<boolean>(false);
   const [loadingBalance, setLoadingBalance] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Function to fetch user and wallet data
+  const fetchUserAndWallet = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user || !user.email) {
+        console.error("User not authenticated or email missing");
+        router.replace("/sign-in");
+        return;
+      }
+
+      setUserEmail(user.email);
+      setUserId(user.id);
+      setTransactionPin(user.user_metadata?.transaction_pin || "");
+
+      // Fetch wallet balance
+      const fetchBalance = async () => {
+        try {
+          setLoadingBalance(true);
+          console.log('Fetching balance for userEmail:', user.email);
+          const { data: wallet, error } = await supabase
+            .from("wallets")
+            .select("balance")
+            .eq("user_email", user.email)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('Supabase wallet fetch error:', error);
+            throw error;
+          }
+
+          const newBalance = wallet?.balance || 0;
+          console.log('Fetched Wallet Balance:', { userEmail: user.email, balance: newBalance });
+          setBalance(newBalance);
+        } catch (error) {
+          console.error('Error fetching balance:', error);
+          setBalance(0);
+        } finally {
+          setLoadingBalance(false);
+        }
+      };
+
+      await fetchBalance();
+
+      // Fetch transactions
+      const fetchTransactions = async () => {
+        try {
+          const { data: txData, error: txError } = await supabase
+            .from("transactions")
+            .select("amount, status, metadata, created_at")
+            .eq("user_email", user.email)
+            .eq("env", "live")
+            .eq("status", "success")
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (txError) throw txError;
+
+          const formattedTransactions: Transaction[] = txData.map((tx) => ({
+            type: "Wallet Funding",
+            amount: tx.amount,
+            method: tx.metadata?.payment_method || "Unknown",
+            date: new Date(tx.created_at).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }),
+          }));
+
+          setTransactions(formattedTransactions);
+        } catch (error) {
+          console.error('Error fetching transactions:', error);
+        }
+      };
+
+      await fetchTransactions();
+
+      // Fetch purchase history
+      const { data: dataPurchases } = await supabase
+        .from("data_purchases")
+        .select("id")
+        .eq("user_email", user.email)
+        .limit(1);
+
+      const { data: airtimePurchases } = await supabase
+        .from("airtime_purchases")
+        .select("id")
+        .eq("user_email", user.email)
+        .limit(1);
+
+      const { data: cablePurchases } = await supabase
+        .from("cable_purchases")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1);
+
+      const hasPurchases =
+        (dataPurchases?.length > 0 ||
+          airtimePurchases?.length > 0 ||
+          cablePurchases?.length > 0) &&
+        !!user.user_metadata?.transaction_pin;
+      setHasPriorPurchase(hasPurchases);
+
+      const { data: dataPurchasesFull, error: dataError } = await supabase
+        .from("data_purchases")
+        .select("provider_name")
+        .eq("user_email", user.email);
+
+      const { data: airtimePurchasesFull, error: airtimeError } = await supabase
+        .from("airtime_purchases")
+        .select("provider_name")
+        .eq("user_email", user.email);
+
+      const { data: cablePurchasesFull, error: cableError } = await supabase
+        .from("cable_purchases")
+        .select("provider")
+        .eq("user_id", user.id);
+
+      if (dataError || airtimeError || cableError) {
+        console.error("Error fetching purchases:", { dataError, airtimeError, cableError });
+      }
+
+      const allProviders = [
+        ...(dataPurchasesFull?.map((p) => p.provider_name) || []),
+        ...(airtimePurchasesFull?.map((p) => p.provider_name) || []),
+        ...(cablePurchasesFull?.map((p) => p.provider) || []),
+      ].filter(Boolean);
+
+      const providerCounts = allProviders.reduce(
+        (acc, provider) => {
+          acc[provider] = (acc[provider] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const topProvider =
+        Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "MTN";
+      setPreferredProvider(topProvider);
+      console.log("Preferred provider set:", topProvider);
+    } catch (error) {
+      console.error("Error fetching wallet data or preferences:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchUserAndWallet = async () => {
-      try {
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError || !user || !user.email) {
-          console.error("User not authenticated or email missing");
-          router.replace("/sign-in");
-          return;
-        }
-
-        setUserEmail(user.email);
-        setUserId(user.id);
-        setTransactionPin(user.user_metadata?.transaction_pin || "");
-
-        // Fetch wallet balance directly from wallets table
-        const fetchBalance = async () => {
-          try {
-            setLoadingBalance(true);
-            console.log('Fetching balance for userEmail:', user.email);
-            const { data: wallet, error } = await supabase
-              .from("wallets")
-              .select("balance")
-              .eq("user_email", user.email)
-              .single();
-
-            if (error && error.code !== 'PGRST116') {
-              console.error('Supabase wallet fetch error:', error);
-              throw error;
-            }
-
-            const newBalance = wallet?.balance || 0;
-            console.log('Fetched Wallet Balance:', { userEmail: user.email, balance: newBalance });
-            setBalance(newBalance);
-          } catch (error) {
-            console.error('Error fetching balance:', error);
-            setBalance(0); // Fallback to 0 if fetch fails
-          } finally {
-            setLoadingBalance(false);
-          }
-        };
-
-        await fetchBalance();
-
-        // Real-time subscription for wallet balance
-        const walletSubscription = supabase
-          .channel(`wallet-changes:${user.email}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'wallets',
-              filter: `user_email=eq.${user.email}`,
-            },
-            async (payload) => {
-              console.log('Wallet Balance Update:', payload);
-              setBalance(payload.new.balance);
-            }
-          )
-          .subscribe();
-
-        // Fetch transactions and set up real-time subscription
-        const fetchTransactions = async () => {
-          try {
-            const { data: txData, error: txError } = await supabase
-              .from("transactions")
-              .select("amount, status, metadata, created_at")
-              .eq("user_email", user.email)
-              .eq("env", "live")
-              .eq("status", "success")
-              .order("created_at", { ascending: false })
-              .limit(5);
-
-            if (txError) throw txError;
-
-            const formattedTransactions: Transaction[] = txData.map((tx) => ({
-              type: "Wallet Funding",
-              amount: tx.amount,
-              method: tx.metadata?.payment_method || "Unknown",
-              date: new Date(tx.created_at).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }),
-            }));
-
-            setTransactions(formattedTransactions);
-          } catch (error) {
-            console.error('Error fetching transactions:', error);
-          }
-        };
-
-        await fetchTransactions();
-
-        const txSubscription = supabase
-          .channel(`tx-changes:${user.email}`)
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'transactions',
-              filter: `user_email=eq.${user.email}`,
-            },
-            async () => {
-              console.log('Transaction table updated, re-fetching transactions');
-              await fetchTransactions();
-            }
-          )
-          .subscribe();
-
-        const { data: dataPurchases } = await supabase
-          .from("data_purchases")
-          .select("id")
-          .eq("user_email", user.email)
-          .limit(1);
-
-        const { data: airtimePurchases } = await supabase
-          .from("airtime_purchases")
-          .select("id")
-          .eq("user_email", user.email)
-          .limit(1);
-
-        const { data: cablePurchases } = await supabase
-          .from("cable_purchases")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1);
-
-        const hasPurchases =
-          (dataPurchases?.length > 0 ||
-            airtimePurchases?.length > 0 ||
-            cablePurchases?.length > 0) &&
-          !!user.user_metadata?.transaction_pin;
-        setHasPriorPurchase(hasPurchases);
-
-        const { data: dataPurchasesFull, error: dataError } = await supabase
-          .from("data_purchases")
-          .select("provider_name")
-          .eq("user_email", user.email);
-
-        const { data: airtimePurchasesFull, error: airtimeError } = await supabase
-          .from("airtime_purchases")
-          .select("provider_name")
-          .eq("user_email", user.email);
-
-        const { data: cablePurchasesFull, error: cableError } = await supabase
-          .from("cable_purchases")
-          .select("provider")
-          .eq("user_id", user.id);
-
-        if (dataError || airtimeError || cableError) {
-          console.error("Error fetching purchases:", { dataError, airtimeError, cableError });
-        }
-
-        const allProviders = [
-          ...(dataPurchasesFull?.map((p) => p.provider_name) || []),
-          ...(airtimePurchasesFull?.map((p) => p.provider_name) || []),
-          ...(cablePurchasesFull?.map((p) => p.provider) || []),
-        ].filter(Boolean);
-
-        const providerCounts = allProviders.reduce(
-          (acc, provider) => {
-            acc[provider] = (acc[provider] || 0) + 1;
-            return acc;
-          },
-          {} as Record<string, number>,
-        );
-
-        const topProvider =
-          Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "MTN";
-        setPreferredProvider(topProvider);
-        console.log("Preferred provider set:", topProvider);
-
-        return () => {
-          supabase.removeChannel(walletSubscription);
-          supabase.removeChannel(txSubscription);
-        };
-      } catch (error) {
-        console.error("Error fetching wallet data or preferences:", error);
-      }
-    };
-
     fetchUserAndWallet();
-  }, []);
+
+    // Real-time subscription for wallet balance
+    const walletSubscription = supabase
+      .channel(`wallet-changes:${userEmail}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_email=eq.${userEmail}`,
+        },
+        async (payload) => {
+          console.log('Wallet Balance Update:', payload);
+          setBalance(payload.new.balance);
+          // Trigger immediate refresh on update
+          await fetchUserAndWallet();
+        }
+      )
+      .subscribe();
+
+    // Real-time subscription for transactions
+    const txSubscription = supabase
+      .channel(`tx-changes:${userEmail}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_email=eq.${userEmail}`,
+        },
+        async () => {
+          console.log('Transaction table updated, re-fetching transactions');
+          await fetchUserAndWallet();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(walletSubscription);
+      supabase.removeChannel(txSubscription);
+    };
+  }, [fetchUserAndWallet, userEmail]);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
@@ -360,6 +371,11 @@ export default function WalletScreen() {
     });
   };
 
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(() => {
+    fetchUserAndWallet();
+  }, [fetchUserAndWallet]);
+
   return (
     <SafeAreaView
       style={[
@@ -378,6 +394,14 @@ export default function WalletScreen() {
       <ScrollView
         contentContainerStyle={styles.inner}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colorScheme === "dark" ? "#744925" : "#3b82f6"]}
+            tintColor={colorScheme === "dark" ? "#744925" : "#3b82f6"}
+          />
+        }
       >
         <Text
           style={[

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
@@ -27,7 +27,7 @@ interface Provider {
 }
 
 const ConfirmationPage: React.FC = () => {
-  const { bundle, provider, phoneNumber, transactionPin, userEmail, source, referenceId } = useLocalSearchParams<{
+  const { bundle, provider, phoneNumber, transactionPin, userEmail, source, referenceId, balance: balanceParam } = useLocalSearchParams<{
     bundle?: string;
     provider?: string;
     phoneNumber?: string;
@@ -35,14 +35,17 @@ const ConfirmationPage: React.FC = () => {
     userEmail?: string;
     source?: string;
     referenceId?: string;
+    balance?: string;
   }>();
 
   let selectedBundle: Bundle | null = null;
   let selectedProvider: Provider | null = null;
+  let initialBalance: number = 0;
 
   try {
     selectedBundle = bundle ? JSON.parse(bundle) : null;
     selectedProvider = provider ? JSON.parse(provider) : null;
+    initialBalance = balanceParam ? parseFloat(balanceParam) : 0;
   } catch (error) {
     console.error('Error parsing params:', error);
     Alert.alert('Error', 'Invalid purchase data');
@@ -52,8 +55,7 @@ const ConfirmationPage: React.FC = () => {
 
   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
-  const [balance, setBalance] = useState<number>(0);
-  const [loadingBalance, setLoadingBalance] = useState<boolean>(true);
+  const [balance, setBalance] = useState<number>(initialBalance);
   const [editablePhoneNumber, setEditablePhoneNumber] = useState<string>(phoneNumber || '');
   const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false);
   const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider?.name || '');
@@ -84,35 +86,7 @@ const ConfirmationPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchBalance = async () => {
-      try {
-        setLoadingBalance(true);
-        console.log(`Fetching balance for userEmail: ${userEmail}`);
-        const { data: wallet, error } = await supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_email', userEmail as string)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          throw error;
-        }
-
-        const newBalance = wallet?.balance || 0;
-        console.log('Updated Wallet Balance:', { balance: newBalance, userEmail });
-        setBalance(newBalance);
-      } catch (error) {
-        console.error('Error fetching balance:', error);
-        Alert.alert('Error', 'Failed to fetch wallet balance');
-        setBalance(0);
-      } finally {
-        setLoadingBalance(false);
-      }
-    };
-
     if (userEmail) {
-      fetchBalance();
-
       const subscription = supabase
         .channel(`wallet-changes:${userEmail}`)
         .on(
@@ -218,38 +192,35 @@ const ConfirmationPage: React.FC = () => {
       return;
     }
 
-    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-      Alert.alert('Error', 'Invalid transaction PIN');
-      return;
-    }
-
     if (!referenceId) {
       console.log('Purchase blocked: No referenceId provided');
       Alert.alert('Error', 'Transaction reference not provided');
-      setLoadingBalance(false);
       return;
     }
 
-    if (loadingBalance) {
-      Alert.alert('Error', 'Balance is still loading. Please wait.');
+    if (!userEmail) {
+      console.log('Purchase blocked: No userEmail provided');
+      Alert.alert('Error', 'User email not provided');
       return;
     }
 
     try {
-      setLoadingBalance(true);
-      const { data: wallet, error } = await supabase
+      setTransactionModalVisible(true);
+      setTransactionStatus('processing');
+
+      // Verify balance
+      const { data: wallet, error: walletError } = await supabase
         .from('wallets')
         .select('balance')
-        .eq('user_email', userEmail as string)
+        .eq('user_email', userEmail)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw new Error('Failed to fetch wallet balance');
+      if (walletError && walletError.code !== 'PGRST116') {
+        console.error('Wallet query error:', walletError);
+        throw new Error('Failed to verify wallet balance');
       }
 
       const currentBalance = wallet?.balance || 0;
-      setBalance(currentBalance);
-
       const basePrice = selectedBundle.amount || selectedBundle.price || 0;
 
       console.log('Purchase Details:', {
@@ -262,35 +233,21 @@ const ConfirmationPage: React.FC = () => {
 
       if (currentBalance < basePrice) {
         Alert.alert('Error', `Insufficient wallet balance. Required: ₦${formatNumberWithCommas(basePrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}. Please top up your wallet.`);
-        setLoadingBalance(false);
+        setTransactionModalVisible(false);
         return;
       }
-
-      // Verify transaction PIN
-      const { data: userData, error: pinError } = await supabase
-        .from('users')
-        .select('transaction_pin')
-        .eq('email', userEmail as string)
-        .single();
-
-      if (pinError || !userData || userData.transaction_pin !== transactionPin) {
-        Alert.alert('Error', 'Invalid transaction PIN');
-        setTransactionStatus('failed');
-        setLoadingBalance(false);
-        return;
-      }
-
-      setTransactionModalVisible(true);
-      setTransactionStatus('processing');
 
       // Deduct base price from wallet
       const newBalance = currentBalance - basePrice;
       const { error: walletUpdateError } = await supabase
         .from('wallets')
         .update({ balance: newBalance })
-        .eq('user_email', userEmail as string);
+        .eq('user_email', userEmail);
 
-      if (walletUpdateError) throw walletUpdateError;
+      if (walletUpdateError) {
+        console.error('Wallet update error:', walletUpdateError);
+        throw walletUpdateError;
+      }
 
       setBalance(newBalance);
 
@@ -312,7 +269,10 @@ const ConfirmationPage: React.FC = () => {
       });
 
       const ebenkdataData = await ebenkdataResponse.json();
+      console.log('Ebenkdata API Response:', ebenkdataData);
+
       if (ebenkdataData.status !== 'success') {
+        console.error('Ebenkdata error:', ebenkdataData.message);
         throw new Error('Ebenkdata purchase failed: ' + (ebenkdataData.message || 'Unknown error'));
       }
 
@@ -321,9 +281,9 @@ const ConfirmationPage: React.FC = () => {
         : basePrice;
       setActualPrice(actualCost);
 
-      // Record transaction with updated metadata
+      // Record transaction
       const transactionData = {
-        user_email: userEmail as string,
+        user_email: userEmail,
         amount: -basePrice,
         reference: referenceId,
         status: 'success',
@@ -346,6 +306,12 @@ const ConfirmationPage: React.FC = () => {
             },
           ],
           payment_method: 'Wallet',
+          phone_number: editablePhoneNumber,
+          provider: selectedProvider.name,
+          purchase: purchaseDescription,
+          validity: selectedBundle.validity || 'N/A',
+          type: selectedBundle.type || 'data',
+          actual_cost: actualCost,
         },
       };
 
@@ -353,13 +319,16 @@ const ConfirmationPage: React.FC = () => {
         .from('transactions')
         .insert(transactionData);
 
-      if (txError) throw txError;
+      if (txError) {
+        console.error('Transaction insert error:', txError);
+        throw txError;
+      }
 
       setTransactionStatus('success');
 
       Alert.alert(
         'Success',
-        `Successfully purchased ${selectedBundle.type === 'airtime' ? `Airtime ₦${formatNumberWithCommas(basePrice)}` : selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Airtime sent to ${editablePhoneNumber}.`
+        `Successfully purchased ${purchaseDescription} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${editablePhoneNumber}.`
       );
 
       router.push({
@@ -367,7 +336,7 @@ const ConfirmationPage: React.FC = () => {
         params: {
           id: referenceId,
           provider: selectedProvider.name,
-          data: selectedBundle.type === 'airtime' ? `Airtime ₦${basePrice}` : selectedBundle.data,
+          data: purchaseDescription,
           price: actualCost.toString(),
           date: new Date().toISOString(),
           status: 'Success',
@@ -384,14 +353,14 @@ const ConfirmationPage: React.FC = () => {
     } catch (error) {
       console.error('Error initiating purchase:', error);
       setTransactionStatus('failed');
-      if (currentBalance !== undefined) {
+      // Revert wallet balance if deducted
+      if (typeof currentBalance === 'number') {
         await supabase
           .from('wallets')
           .update({ balance: currentBalance })
-          .eq('user_email', userEmail as string);
+          .eq('user_email', userEmail);
       }
       setTransactionModalVisible(false);
-      setLoadingBalance(false);
       Alert.alert('Error', 'Failed to initiate purchase. Please try again.');
     }
   };
@@ -408,8 +377,8 @@ const ConfirmationPage: React.FC = () => {
     setIsEditingPhone(!isEditingPhone);
   };
 
-  if (!selectedBundle || !selectedProvider || !phoneNumber || !referenceId) {
-    console.log('Missing required params:', { selectedBundle, selectedProvider, phoneNumber, referenceId });
+  if (!selectedBundle || !selectedProvider || !phoneNumber || !referenceId || !balanceParam) {
+    console.log('Missing required params:', { selectedBundle, selectedProvider, phoneNumber, referenceId, balance });
     Alert.alert('Error', 'Missing required purchase information');
     router.back();
     return null;
@@ -449,13 +418,11 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>₦{formatNumberWithCommas(basePrice)}</Text>
+            <Text style={styles.detailValue}>₦${formatNumberWithCommas(basePrice)}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Wallet Balance</Text>
-            <Text style={styles.detailValue}>
-              {loadingBalance ? 'Loading...' : `₦${formatNumberWithCommas(balance)}`}
-            </Text>
+            <Text style={styles.detailValue}>₦${formatNumberWithCommas(balance)}</Text>
           </View>
           {selectedBundle.validity && (
             <View style={styles.detailRow}>
@@ -507,13 +474,11 @@ const ConfirmationPage: React.FC = () => {
             {...panResponder.panHandlers}
             style={[
               styles.slideContainer,
-              { transform: [{ translateX: slideAnim }], opacity: loadingBalance ? 0.5 : 1 },
+              { transform: [{ translateX: slideAnim }] },
             ]}
           >
             <View style={styles.slideTextContainer}>
-              <Text style={styles.slideText}>
-                {loadingBalance ? 'Loading Balance...' : 'Slide to Purchase'}
-              </Text>
+              <Text style={styles.slideText}>Slide to Purchase</Text>
               <Ionicons name="arrow-forward" size={20} color="#3B82F6" />
             </View>
           </Animated.View>
@@ -527,12 +492,6 @@ const ConfirmationPage: React.FC = () => {
         phoneNumber={editablePhoneNumber}
         networkProvider={networkProvider}
       />
-      {loadingBalance && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Processing...</Text>
-        </View>
-      )}
     </View>
   );
 };
@@ -660,22 +619,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#3B82F6',
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  loadingText: {
-    color: 'white',
-    marginTop: 10,
-    fontSize: 16,
   },
 });
 

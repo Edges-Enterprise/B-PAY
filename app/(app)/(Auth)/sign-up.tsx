@@ -6,7 +6,6 @@ import {
 	StatusBar,
 	TouchableOpacity,
 	ActivityIndicator,
-	StyleSheet,
 	Text,
 	Animated,
 	Alert,
@@ -16,18 +15,19 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { ScrollView } from "react-native-gesture-handler";
-import { useColorScheme } from "@/lib/useColorScheme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/context/supabase-provider";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function SignUpScreen() {
+	const { signUp } = useAuth();
 	const [username, setUsername] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
 
-	const { signUp } = useAuth();
-	const colorScheme = useColorScheme();
 
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -62,13 +62,14 @@ export default function SignUpScreen() {
 		try {
 			console.log("SignUp started with:", { username, email, rememberMe });
 
-			await signUp(username, email, password);
+			await signUp(username, email, password, rememberMe);
 
 			setUsername("");
 			setEmail("");
 			setPassword("");
-			setRememberMe(false);
-		} catch (error) {
+			// setRememberMe(false);
+		} catch (err: unknown) {
+			const error = err as Error;
 			console.error("SignUp error:", error);
 			if (error.message.includes("User already registered")) {
 				Alert.alert("Sign Up Error", "This email is already registered.");
@@ -81,7 +82,8 @@ export default function SignUpScreen() {
 	return (
 		<KeyboardAvoidingView
 			style={{ flex: 1, backgroundColor: "#000" }}
-			behavior={Platform.OS === "ios" ? "padding" : undefined}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
 		>
 			<StatusBar
 				translucent
@@ -97,7 +99,7 @@ export default function SignUpScreen() {
 				contentContainerStyle={{
 					flexGrow: 1,
 					justifyContent: "center",
-					paddingBottom: 40,
+					paddingBottom: 20,
 				}}
 				keyboardShouldPersistTaps="handled"
 			>
@@ -191,10 +193,14 @@ export default function SignUpScreen() {
 							backgroundColor: "#222",
 							borderRadius: 8,
 							marginBottom: 20,
+							flexDirection: "row",
+							alignItems: "center", // Add this
+							paddingRight: 10,
 						}}
 					>
 						<TextInput
 							style={{
+								flex: 1,
 								height: 50,
 								paddingHorizontal: 10,
 								fontSize: 16,
@@ -202,11 +208,21 @@ export default function SignUpScreen() {
 							}}
 							placeholder="Password"
 							placeholderTextColor="#aaa"
-							secureTextEntry
+							secureTextEntry={!showPassword}
 							autoCapitalize="none"
 							value={password}
 							onChangeText={setPassword}
 						/>
+						<TouchableOpacity
+							style={{ padding: 8 }}
+							onPress={() => setShowPassword(!showPassword)}
+						>
+							<Ionicons
+								name={showPassword ? "eye-sharp" : "eye-off-sharp"}
+								size={24}
+								color="#aaa"
+							/>
+						</TouchableOpacity>
 					</View>
 
 					<View

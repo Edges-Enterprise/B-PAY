@@ -10,17 +10,20 @@ import {
 	Switch,
 	ScrollView,
 	StatusBar,
+	KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/context/supabase-provider";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function SignInScreen() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
-	
+
 	const { user, signInWithPassword } = useAuth();
 
 	// Check if both email and password are filled
@@ -32,22 +35,38 @@ export default function SignInScreen() {
 		}
 	}, [user]);
 
+	// useEffect(() => {
+	// 	const loadSavedCredentials = async () => {
+	// 		try {
+	// 			const saved = await AsyncStorage.getItem("userCredentials");
+	// 			if (saved) {
+	// 				const { email, password } = JSON.parse(saved);
+	// 				setEmail(email);
+	// 				setPassword(password);
+	// 				setRememberMe(true);
+	// 			}
+	// 		} catch (error) {
+	// 			console.error("Failed to load saved credentials:", error);
+	// 		}
+	// 	};
+
+	// 	loadSavedCredentials();
+	// }, []);
+
+	// Update the loadSavedCredentials useEffect
 	useEffect(() => {
-		const loadSavedCredentials = async () => {
+		const loadRememberMePreference = async () => {
 			try {
-				const saved = await AsyncStorage.getItem("userCredentials");
-				if (saved) {
-					const { email, password } = JSON.parse(saved);
-					setEmail(email);
-					setPassword(password);
-					setRememberMe(true);
+				const savedRememberMe = await AsyncStorage.getItem("@rememberMe");
+				if (savedRememberMe !== null) {
+					setRememberMe(savedRememberMe === "true");
 				}
 			} catch (error) {
-				console.error("Failed to load saved credentials:", error);
+				console.error("Failed to load rememberMe preference:", error);
 			}
 		};
 
-		loadSavedCredentials();
+		loadRememberMePreference();
 	}, []);
 
 	const handleSignIn = async () => {
@@ -58,41 +77,34 @@ export default function SignInScreen() {
 
 		setLoading(true);
 		try {
-			const { user, error } = await signInWithPassword(email, password);
-
-			if (error) {
-				if (error.message.includes("Email not confirmed")) {
-					Alert.alert(
-						"Email Not Verified",
-						"Please check your email for verification instructions.",
-					);
-					return;
-				}
-				throw error;
-			}
-
-			if (rememberMe) {
-				await AsyncStorage.setItem(
-					"userCredentials",
-					JSON.stringify({ email, password }),
-				);
-			} else {
-				await AsyncStorage.removeItem("userCredentials");
-			}
+			await signInWithPassword(email, password, rememberMe);
 
 			router.replace("/(app)/(protected)");
-		} catch (error) {
-			Alert.alert(
-				"Login Error",
-				error.message || "An error occurred during login.",
-			);
+		} catch (err: unknown) {
+			const error = err as Error;
+			// Handle specific error cases
+			if (error.message && error.message.includes("Email not confirmed")) {
+				Alert.alert(
+					"Email Not Verified",
+					"Please check your email for verification instructions.",
+				);
+			} else {
+				Alert.alert(
+					"Login Error",
+					error.message || "An error occurred during login.",
+				);
+			}
 		} finally {
 			setLoading(false);
 		}
 	};
 
 	return (
-		<View style={{ flex: 1, backgroundColor: "black" }}>
+		<KeyboardAvoidingView
+			style={{ flex: 1, backgroundColor: "black" }}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
+		>
 			<StatusBar
 				translucent
 				backgroundColor="transparent"
@@ -107,7 +119,7 @@ export default function SignInScreen() {
 				contentContainerStyle={{
 					flexGrow: 1,
 					justifyContent: "center",
-					paddingBottom: 40,
+					paddingBottom: 20,
 				}}
 				keyboardShouldPersistTaps="handled"
 			>
@@ -132,24 +144,39 @@ export default function SignInScreen() {
 						/>
 					</View>
 
-					<View style={styles.inputContainer}>
+					<View
+						style={[
+							styles.inputContainer,
+							{ flexDirection: "row", alignItems: "center", paddingRight: 10 },
+						]}
+					>
 						<TextInput
-							style={styles.input}
+							style={[styles.input, { flex: 1 }]} // Add flex: 1 here
 							placeholder="Password"
 							placeholderTextColor="#aaa"
-							secureTextEntry
+							secureTextEntry={!showPassword}
 							autoCapitalize="none"
 							value={password}
 							onChangeText={setPassword}
 							onSubmitEditing={handleSignIn}
 						/>
+						<TouchableOpacity
+							style={styles.eyeIcon}
+							onPress={() => setShowPassword(!showPassword)}
+						>
+							<Ionicons
+								name={showPassword ? "eye-sharp" : "eye-off-sharp"}
+								size={24}
+								color="#aaa"
+							/>
+						</TouchableOpacity>
 					</View>
 
 					<View style={styles.rememberMeContainer}>
 						<Switch
 							value={rememberMe}
 							onValueChange={setRememberMe}
-							thumbColor={rememberMe ? "#523721" : "#666"}
+							thumbColor={rememberMe ? "#E9C9AF" : "#666"}
 							trackColor={{ false: "#444", true: "#D7A77F" }}
 						/>
 						<Text style={styles.rememberMeText}>Remember me</Text>
@@ -185,7 +212,7 @@ export default function SignInScreen() {
 					</View>
 				</View>
 			</ScrollView>
-		</View>
+		</KeyboardAvoidingView>
 	);
 }
 
@@ -218,12 +245,16 @@ const styles = StyleSheet.create({
 		backgroundColor: "#333",
 		borderRadius: 8,
 		marginBottom: 20,
+		
 	},
 	input: {
 		height: 50,
 		paddingHorizontal: 10,
 		color: "#fff",
 		fontSize: 16,
+	},
+	eyeIcon: {
+		padding: 8,
 	},
 	rememberMeContainer: {
 		flexDirection: "row",
