@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
 
-// Define shared bundle interface
+// Define interfaces
 interface Bundle {
   id: number;
   variation_code: string;
   description?: string;
-  // Properties for AirtimeBundle
   amount?: number;
   type?: string;
-  // Properties for DataBundle
   data?: string;
   price?: number;
   validity?: string;
@@ -29,14 +27,14 @@ interface Provider {
 }
 
 const ConfirmationPage: React.FC = () => {
- 
-  const { bundle, provider, phoneNumber, transactionPin, userEmail, source } = useLocalSearchParams<{
+  const { bundle, provider, phoneNumber, transactionPin, userEmail, source, referenceId } = useLocalSearchParams<{
     bundle?: string;
     provider?: string;
     phoneNumber?: string;
     transactionPin?: string;
     userEmail?: string;
     source?: string;
+    referenceId?: string;
   }>();
 
   let selectedBundle: Bundle | null = null;
@@ -55,17 +53,18 @@ const ConfirmationPage: React.FC = () => {
   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [balance, setBalance] = useState<number>(0);
-  const [referenceId, setReferenceId] = useState<string>('');
+  const [loadingBalance, setLoadingBalance] = useState<boolean>(true);
   const [editablePhoneNumber, setEditablePhoneNumber] = useState<string>(phoneNumber || '');
   const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false);
   const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider?.name || '');
-  const [actualPrice, setActualPrice] = useState<number | null>(null); // State for actual price
+  const [actualPrice, setActualPrice] = useState<number | null>(null);
 
-  // Animation for slide to purchase
   const slideAnim = useRef(new Animated.Value(0)).current;
-
-  // Pulse animation for Edit text
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const providerImageMap: Record<string, string> = {
+    '27': 'https://example.com/images/glo.png',
+  };
 
   useEffect(() => {
     Animated.loop(
@@ -84,51 +83,11 @@ const ConfirmationPage: React.FC = () => {
     ).start();
   }, []);
 
-  // Fetch user UUID and generate referenceId
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error || !user || !user.id) {
-          throw new Error('User not authenticated or UUID missing');
-        }
-        const newReferenceId = `VTUNetwork_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-        setReferenceId(newReferenceId);
-      } catch (error) {
-        console.error('Error fetching user UUID:', error);
-        Alert.alert('Error', 'Failed to generate transaction reference');
-        router.back();
-      }
-    };
-
-    fetchUser();
-  }, []);
-
-  // Slide to purchase gesture
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx > 0) {
-          slideAnim.setValue(gestureState.dx);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx > 100) {
-          handlePurchase();
-        }
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
-
-  // Fetch wallet balance
   useEffect(() => {
     const fetchBalance = async () => {
       try {
+        setLoadingBalance(true);
+        console.log(`Fetching balance for userEmail: ${userEmail}`);
         const { data: wallet, error } = await supabase
           .from('wallets')
           .select('balance')
@@ -139,19 +98,72 @@ const ConfirmationPage: React.FC = () => {
           throw error;
         }
 
-        setBalance(wallet?.balance || 0);
+        const newBalance = wallet?.balance || 0;
+        console.log('Updated Wallet Balance:', { balance: newBalance, userEmail });
+        setBalance(newBalance);
       } catch (error) {
         console.error('Error fetching balance:', error);
         Alert.alert('Error', 'Failed to fetch wallet balance');
+        setBalance(0);
+      } finally {
+        setLoadingBalance(false);
       }
     };
 
     if (userEmail) {
       fetchBalance();
+
+      const subscription = supabase
+        .channel(`wallet-changes:${userEmail}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'wallets',
+            filter: `user_email=eq.${userEmail}`,
+          },
+          (payload) => {
+            console.log('Real-time Wallet Balance Update:', payload);
+            setBalance(payload.new.balance);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(subscription);
+      };
     }
   }, [userEmail]);
 
-  // Detect network provider based on phone number
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gestureState) => {
+        console.log('PanResponder move:', { dx: gestureState.dx });
+        if (gestureState.dx > 0) {
+          slideAnim.setValue(gestureState.dx);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        console.log('PanResponder released:', { dx: gestureState.dx });
+        if (gestureState.dx > 100) {
+          if (!referenceId) {
+            console.log('Purchase blocked: Reference ID not provided');
+            Alert.alert('Error', 'Transaction reference not provided.');
+          } else {
+            console.log('Initiating purchase with referenceId:', referenceId);
+            handlePurchase();
+          }
+        }
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
   const getProviderFromPhone = (phone: string): string => {
     if (phone.length !== 11) return selectedProvider?.name || '';
     const prefix = phone.slice(0, 4);
@@ -170,13 +182,12 @@ const ConfirmationPage: React.FC = () => {
     setNetworkProvider(getProviderFromPhone(editablePhoneNumber));
   }, [editablePhoneNumber]);
 
-  // Validate and auto-save phone number when 11 digits
   const handlePhoneNumberChange = (text: string) => {
     setEditablePhoneNumber(text);
     if (text.length === 11 && /^\d{11}$/.test(text)) {
       const providerFromNumber = getProviderFromPhone(text);
       if (providerFromNumber.toUpperCase() === selectedProvider?.name.toUpperCase()) {
-        setIsEditingPhone(false); // Auto-save
+        setIsEditingPhone(false);
       } else {
         Alert.alert(
           'Invalid Phone Number',
@@ -188,7 +199,6 @@ const ConfirmationPage: React.FC = () => {
     }
   };
 
-  // Format number with commas
   const formatNumberWithCommas = (number: number | undefined | null): string => {
     if (number === undefined || number === null) {
       return 'N/A';
@@ -197,6 +207,7 @@ const ConfirmationPage: React.FC = () => {
   };
 
   const handlePurchase = async () => {
+    console.log('Purchase initiated:', { referenceId, basePrice: selectedBundle?.amount || selectedBundle?.price || 0, userEmail });
     if (!selectedBundle || !selectedProvider) {
       Alert.alert('Error', 'No bundle or provider selected');
       return;
@@ -207,24 +218,55 @@ const ConfirmationPage: React.FC = () => {
       return;
     }
 
-    if (!transactionPin || (transactionPin as string).length < 4 || (transactionPin as string).length > 6) {
+    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
       Alert.alert('Error', 'Invalid transaction PIN');
       return;
     }
 
-    const purchaseAmount = selectedBundle.amount || selectedBundle.price || 0;
-    if (balance < purchaseAmount) {
-      Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
-      return;
-    }
-
     if (!referenceId) {
-      Alert.alert('Error', 'Transaction reference not generated');
+      console.log('Purchase blocked: No referenceId provided');
+      Alert.alert('Error', 'Transaction reference not provided');
+      setLoadingBalance(false);
       return;
     }
 
-    // Verify transaction PIN
+    if (loadingBalance) {
+      Alert.alert('Error', 'Balance is still loading. Please wait.');
+      return;
+    }
+
     try {
+      setLoadingBalance(true);
+      const { data: wallet, error } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_email', userEmail as string)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw new Error('Failed to fetch wallet balance');
+      }
+
+      const currentBalance = wallet?.balance || 0;
+      setBalance(currentBalance);
+
+      const basePrice = selectedBundle.amount || selectedBundle.price || 0;
+
+      console.log('Purchase Details:', {
+        walletBalance: currentBalance,
+        basePrice,
+        selectedBundle,
+        userEmail,
+        referenceId,
+      });
+
+      if (currentBalance < basePrice) {
+        Alert.alert('Error', `Insufficient wallet balance. Required: ₦${formatNumberWithCommas(basePrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}. Please top up your wallet.`);
+        setLoadingBalance(false);
+        return;
+      }
+
+      // Verify transaction PIN
       const { data: userData, error: pinError } = await supabase
         .from('users')
         .select('transaction_pin')
@@ -234,160 +276,98 @@ const ConfirmationPage: React.FC = () => {
       if (pinError || !userData || userData.transaction_pin !== transactionPin) {
         Alert.alert('Error', 'Invalid transaction PIN');
         setTransactionStatus('failed');
-        return;
-      }
-    } catch (error) {
-      console.error('PIN verification error:', error);
-      Alert.alert('Error', 'Failed to verify transaction PIN');
-      setTransactionStatus('failed');
-      return;
-    }
-
-    setTransactionModalVisible(true);
-    setTransactionStatus('processing');
-
-    try {
-      // Record pending transaction in Supabase
-      const transactionData = {
-        user_email: userEmail as string,
-        amount: -purchaseAmount,
-        reference: referenceId,
-        status: 'pending',
-        metadata: {
-          purchase: selectedBundle.type === 'airtime'
-            ? `Airtime ₦${formatNumberWithCommas(selectedBundle.amount)} on ${selectedProvider.name}`
-            : `${selectedBundle.data} on ${selectedProvider.name}`,
-          phone_number: editablePhoneNumber,
-          validity: selectedBundle.validity || 'N/A',
-          type: selectedBundle.type || 'data',
-          custom_fields: [
-            {
-              display_name: 'Mobile Payment',
-              variable_name: 'mobile_payment',
-              value: 'VTU.ng',
-            },
-          ],
-        },
-      };
-
-      const { data: pendingTx, error: pendingTxError } = await supabase
-        .from('transactions')
-        .insert(transactionData)
-        .select('id, created_at')
-        .single();
-
-      if (pendingTxError) {
-        console.error('Pending transaction insert error:', pendingTxError.message);
-        throw new Error('Failed to record pending transaction');
-      }
-
-      // Purchase with VTU.ng API
-      const networkIdMap: { [key: string]: string } = {
-        MTN: 'mtn',
-        GLO: 'glo',
-        AIRTEL: 'airtel',
-        '9MOBILE': 'etisalat',
-      };
-      const networkId = networkIdMap[selectedProvider.name.toUpperCase()] || 'mtn';
-
-      const apiUrl = `https://vtu.ng/wp-json/api/v1/airtime?username=b.uche@fudutsinma.edu.ng&password=@Password7492&phone=${editablePhoneNumber}&network_id=${networkId}&amount=${purchaseAmount}`;
-
-      const purchaseResponse = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const purchaseData = await purchaseResponse.json();
-      console.log('VTU.ng API Response:', purchaseData);
-
-      if (purchaseData.code !== 'success') {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        setTransactionStatus('failed');
-        Alert.alert('Error', `Airtime purchase failed: ${purchaseData.message || 'Unknown error'}`);
+        setLoadingBalance(false);
         return;
       }
 
-      // Extract actual price from API response
-      const actualCost = purchaseData.data?.amount
-        ? parseFloat(purchaseData.data.amount.replace('NGN', ''))
-        : purchaseAmount;
-      setActualPrice(actualCost);
+      setTransactionModalVisible(true);
+      setTransactionStatus('processing');
 
-      // Update transaction metadata with actual cost
-      const { error: updateTxError } = await supabase
-        .from('transactions')
-        .update({
-          metadata: {
-            ...transactionData.metadata,
-            actual_cost: actualCost,
-          },
-        })
-        .eq('id', pendingTx.id);
-
-      if (updateTxError) {
-        console.error('Transaction metadata update error:', updateTxError.message);
-      }
-
-      // Update wallet balance
-      const newBalance = balance - purchaseAmount;
+      // Deduct base price from wallet
+      const newBalance = currentBalance - basePrice;
       const { error: walletUpdateError } = await supabase
         .from('wallets')
         .update({ balance: newBalance })
         .eq('user_email', userEmail as string);
 
-      if (walletUpdateError) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        throw new Error('Failed to update wallet balance');
-      }
+      if (walletUpdateError) throw walletUpdateError;
 
-      // Mark transaction as successful
-      const { error: successUpdateError } = await supabase
-        .from('transactions')
-        .update({ status: 'success' })
-        .eq('id', pendingTx.id);
-
-      if (successUpdateError) {
-        console.error('Success transaction update error:', successUpdateError.message);
-        throw new Error('Failed to update transaction status');
-      }
-
-      // Update state and show success
       setBalance(newBalance);
-      setTransactionStatus('success');
 
-      // Log transaction details for debugging
-      console.log('Transaction successful:', {
-        transactionId: pendingTx.id,
-        provider: selectedProvider.name,
-        purchase: selectedBundle.type === 'airtime' ? `Airtime ₦${purchaseAmount}` : selectedBundle.data,
-        phoneNumber: editablePhoneNumber,
-        totalAmount: purchaseAmount,
-        actualCost,
-        reference: referenceId,
-        type: selectedBundle.type || 'data',
+      // Call Ebenkdata API with base price
+      const ebenkdataResponse = await fetch('https://ebenkdata.com/api/purchase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
+        },
+        body: JSON.stringify({
+          provider: selectedProvider.name,
+          phone: editablePhoneNumber,
+          amount: basePrice,
+          type: selectedBundle.type || 'data',
+          plan: selectedBundle.data || `Airtime ₦${basePrice}`,
+          reference: referenceId,
+        }),
       });
 
-      // Success message
+      const ebenkdataData = await ebenkdataResponse.json();
+      if (ebenkdataData.status !== 'success') {
+        throw new Error('Ebenkdata purchase failed: ' + (ebenkdataData.message || 'Unknown error'));
+      }
+
+      const actualCost = ebenkdataData.data?.actual_amount
+        ? parseFloat(ebenkdataData.data.actual_amount)
+        : basePrice;
+      setActualPrice(actualCost);
+
+      // Record transaction with updated metadata
+      const transactionData = {
+        user_email: userEmail as string,
+        amount: -basePrice,
+        reference: referenceId,
+        status: 'success',
+        env: 'live',
+        metadata: {
+          fees: {
+            vat: 10,
+            total_fee: 50,
+            net_amount: basePrice - 50,
+            transfer_fee: 10,
+            api_network_fee: 20,
+            wallet_management_fee: 10,
+          },
+          payment_date: new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }),
+          custom_fields: [
+            {
+              value: 'Edges Network',
+              display_name: 'Mobile Payment',
+              variable_name: 'mobile_payment',
+            },
+          ],
+          payment_method: 'Wallet',
+        },
+      };
+
+      const { error: txError } = await supabase
+        .from('transactions')
+        .insert(transactionData);
+
+      if (txError) throw txError;
+
+      setTransactionStatus('success');
+
       Alert.alert(
         'Success',
-        `Successfully purchased ${selectedBundle.type === 'airtime' ? `Airtime ₦${formatNumberWithCommas(purchaseAmount)}` : selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Airtime sent to ${editablePhoneNumber}.`
+        `Successfully purchased ${selectedBundle.type === 'airtime' ? `Airtime ₦${formatNumberWithCommas(basePrice)}` : selectedBundle.data} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Airtime sent to ${editablePhoneNumber}.`
       );
 
-      // Navigate to success screen
       router.push({
         pathname: '/success',
         params: {
-          id: pendingTx.id,
+          id: referenceId,
           provider: selectedProvider.name,
-          data: selectedBundle.type === 'airtime' ? `Airtime ₦${purchaseAmount}` : selectedBundle.data,
+          data: selectedBundle.type === 'airtime' ? `Airtime ₦${basePrice}` : selectedBundle.data,
           price: actualCost.toString(),
           date: new Date().toISOString(),
           status: 'Success',
@@ -402,9 +382,17 @@ const ConfirmationPage: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Error processing purchase:', error);
+      console.error('Error initiating purchase:', error);
       setTransactionStatus('failed');
-      Alert.alert('Error', 'Failed to process purchase. Please try again.');
+      if (currentBalance !== undefined) {
+        await supabase
+          .from('wallets')
+          .update({ balance: currentBalance })
+          .eq('user_email', userEmail as string);
+      }
+      setTransactionModalVisible(false);
+      setLoadingBalance(false);
+      Alert.alert('Error', 'Failed to initiate purchase. Please try again.');
     }
   };
 
@@ -417,18 +405,17 @@ const ConfirmationPage: React.FC = () => {
   };
 
   const toggleEditPhone = () => {
-    if (isEditingPhone) {
-      setIsEditingPhone(false);
-    } else {
-      setIsEditingPhone(true);
-    }
+    setIsEditingPhone(!isEditingPhone);
   };
 
-  if (!selectedBundle || !selectedProvider || !phoneNumber) {
+  if (!selectedBundle || !selectedProvider || !phoneNumber || !referenceId) {
+    console.log('Missing required params:', { selectedBundle, selectedProvider, phoneNumber, referenceId });
+    Alert.alert('Error', 'Missing required purchase information');
+    router.back();
     return null;
   }
 
-  const purchaseAmount = selectedBundle.amount || selectedBundle.price || 0;
+  const basePrice = selectedBundle.amount || selectedBundle.price || 0;
   const purchaseDescription = selectedBundle.type === 'airtime'
     ? `Airtime ₦${formatNumberWithCommas(selectedBundle.amount)}`
     : selectedBundle.data || 'N/A';
@@ -445,9 +432,14 @@ const ConfirmationPage: React.FC = () => {
               <Ionicons name="arrow-back" size={24} color="white" />
             </Pressable>
             <Image
-              source={{ uri: selectedProvider.image || 'https://via.placeholder.com/40' }}
+              source={{
+                uri: selectedProvider.image && providerImageMap[selectedProvider.image]
+                  ? providerImageMap[selectedProvider.image]
+                  : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI3AAAAABJRU5ErkJggg==',
+              }}
               style={styles.providerLogo}
               resizeMode="contain"
+              onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
             />
             <Text style={styles.providerName}>{selectedProvider.name}</Text>
           </View>
@@ -457,12 +449,12 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>₦{formatNumberWithCommas(purchaseAmount)}</Text>
+            <Text style={styles.detailValue}>₦{formatNumberWithCommas(basePrice)}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Actual Price</Text>
+            <Text style={styles.detailLabel}>Wallet Balance</Text>
             <Text style={styles.detailValue}>
-              {actualPrice !== null ? `₦${formatNumberWithCommas(actualPrice)}` : 'Pending purchase'}
+              {loadingBalance ? 'Loading...' : `₦${formatNumberWithCommas(balance)}`}
             </Text>
           </View>
           {selectedBundle.validity && (
@@ -513,10 +505,15 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <Animated.View
             {...panResponder.panHandlers}
-            style={[styles.slideContainer, { transform: [{ translateX: slideAnim }] }]}
+            style={[
+              styles.slideContainer,
+              { transform: [{ translateX: slideAnim }], opacity: loadingBalance ? 0.5 : 1 },
+            ]}
           >
             <View style={styles.slideTextContainer}>
-              <Text style={styles.slideText}>Slide to Purchase</Text>
+              <Text style={styles.slideText}>
+                {loadingBalance ? 'Loading Balance...' : 'Slide to Purchase'}
+              </Text>
               <Ionicons name="arrow-forward" size={20} color="#3B82F6" />
             </View>
           </Animated.View>
@@ -530,6 +527,12 @@ const ConfirmationPage: React.FC = () => {
         phoneNumber={editablePhoneNumber}
         networkProvider={networkProvider}
       />
+      {loadingBalance && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Processing...</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -556,6 +559,10 @@ const styles = StyleSheet.create({
     top: 15,
     right: 8,
     padding: 4,
+    zIndex: 10,
+    accessible: true,
+    accessibilityLabel: 'Close confirmation page',
+    accessibilityRole: 'button',
   },
   providerInfo: {
     flexDirection: 'row',
@@ -623,7 +630,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
     textAlign: 'right',
-    width: 110, // Fixed width to prevent overflow
+    width: 110,
   },
   editText: {
     fontSize: 16,
@@ -634,18 +641,41 @@ const styles = StyleSheet.create({
   },
   slideContainer: {
     marginTop: 16,
-    overflow: 'hidden',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 8,
+    overflow: 'visible',
+    zIndex: 10,
+    accessible: true,
+    accessibilityLabel: 'Slide to confirm purchase',
+    accessibilityRole: 'button',
   },
   slideTextContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
   },
   slideText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#3B82F6',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 10,
+    fontSize: 16,
   },
 });
 
