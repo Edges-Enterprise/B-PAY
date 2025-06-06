@@ -1,307 +1,455 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-	View,
-	Text,
-	FlatList,
-	Pressable,
-	RefreshControl,
-	StyleSheet,
-	Alert,
+  SafeAreaView,
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Alert,
+  Modal,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import moment from "moment";
+import moment from "moment-timezone";
 import { supabase } from "@/config/supabase";
 
 interface HistoryItem {
-	id: string;
-	provider: string;
-	data: string;
-	price: number;
-	date: string;
-	status: "Success" | "Failed" | "Pending";
-	phoneNumber: string;
-	reference: string;
-	metadata: any;
+  id: string;
+  provider: string;
+  data: string;
+  price: number;
+  date: string;
+  status: "Success" | "Failed" | "Pending" | "Unknown";
+  phoneNumber: string;
+  reference: string;
+  metadata: {
+    payment_date?: string;
+    payment_method?: string;
+    phone_number?: string;
+    fees?: {
+      transfer_fee: number;
+      wallet_management_fee: number;
+      api_network_fee: number;
+      vat: number;
+      total_fee: number;
+      net_amount: number;
+    };
+    provider?: string;
+    purchase?: string;
+    validity?: string;
+    actual_cost?: number;
+    plan_id?: number;
+    network_id?: number;
+    sold_at?: number;
+    bought_at?: number;
+    profit?: number;
+  };
+  type: string;
 }
 
 const statusColors: { [key: string]: string } = {
-	Success: "#22c55e",
-	Failed: "#ef4444",
-	Pending: "#eab308",
+  Success: "#22c55e",
+  Failed: "#ef4444",
+  Pending: "#eab308",
+  Unknown: "#888",
 };
 
 export default function HistoryScreen() {
+  const [filter, setFilter] = useState<"All" | "Success" | "Failed" | "Pending">("All");
+  const [refreshing, setRefreshing] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [selectedTransaction, setSelectedTransaction] = useState<HistoryItem | null>(null);
 
-	const [filter, setFilter] = useState<
-		"All" | "Success" | "Failed" | "Pending"
-	>("All");
-	const [refreshing, setRefreshing] = useState(false);
-	const [history, setHistory] = useState<HistoryItem[]>([]);
-	const [userEmail, setUserEmail] = useState<string>("");
+  const fetchHistory = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user || !user.email) {
+        console.error("User not authenticated or email missing:", authError?.message);
+        Alert.alert("Error", "Please log in to view your transaction history.");
+        router.replace("/sign-in");
+        return;
+      }
 
-	const fetchHistory = useCallback(async () => {
-		try {
-			setRefreshing(true);
-			const {
-				data: { user },
-				error: authError,
-			} = await supabase.auth.getUser();
-			if (authError || !user || !user.email) {
-				console.error(
-					"User not authenticated or email missing:",
-					authError?.message,
-				);
-				Alert.alert("Error", "Please log in to view your transaction history.");
-				router.replace("/sign-in");
-				return;
-			}
+      console.log("Authenticated user email:", user.email);
+      setUserEmail(user.email);
 
-			console.log("Authenticated user email:", user.email);
-			setUserEmail(user.email);
+      const { data: txData, error: txError } = await supabase
+        .from("transactions")
+        .select(`
+          id,
+          amount,
+          status,
+          metadata,
+          created_at,
+          reference,
+          type,
+          user_email,
+          data_purchases (
+            plan_name,
+            provider_name,
+            phone_number,
+            created_at
+          )
+        `)
+        .eq("user_email", user.email)
+        .order("created_at", { ascending: false });
 
-			const { data: txData, error: txError } = await supabase
-				.from("transactions")
-				.select("id, amount, status, metadata, created_at, reference")
-				.eq("user_email", user.email)
-				.order("created_at", { ascending: false });
+      if (txError) {
+        console.error("Transaction fetch error:", txError.message);
+        throw new Error("Failed to fetch transaction history");
+      }
 
-			if (txError) {
-				console.error("Transaction fetch error:", txError.message);
-				throw new Error("Failed to fetch transaction history");
-			}
+      if (txData.length === 0) {
+        console.log("No transactions found for user:", user.email);
+        Alert.alert("No Transactions", "No transactions found for this account.");
+        setHistory([]);
+        return;
+      }
 
-			console.log("Fetched transactions:", JSON.stringify(txData, null, 2));
+      console.log("Raw transaction data:", JSON.stringify(txData, null, 2));
 
-			if (txData.length === 0) {
-				Alert.alert(
-					"No Transactions",
-					"No transactions found for this account.",
-				);
-			}
+      const formattedHistory: HistoryItem[] = txData.map((tx) => {
+        let provider = "Not Specified";
+        let data = "Not Specified";
+        let phoneNumber = "Not Available";
 
-			const formattedHistory: HistoryItem[] = txData.map((tx) => {
-				let provider = "Unknown";
-				let data = "Unknown";
-				let phoneNumber = tx.metadata?.phone_number || "N/A";
+        const transactionType = tx.type ? tx.type.toLowerCase().trim() : "unknown";
+        console.log(`Transaction ID: ${tx.id}, Type: ${transactionType}, Data Purchases: ${JSON.stringify(tx.data_purchases)}`);
 
-				if (tx.metadata?.purchase) {
-					const purchase = tx.metadata.purchase;
-					const [dataPart, providerPart] = purchase.split(" on ");
-					data = dataPart || "Data Purchase";
-					provider = providerPart || "Unknown";
-				} else if (tx.metadata?.payment_method) {
-					data = "Wallet Funding";
-					provider = tx.metadata.payment_method || "Unknown";
-				}
+        if (transactionType === "data") {
+          // Prefer data_purchases fields, fallback to metadata
+          provider = (tx.data_purchases?.provider_name || tx.metadata?.provider || provider) as string;
+          data = (tx.data_purchases?.plan_name || tx.metadata?.purchase || data) as string;
+          phoneNumber = (tx.data_purchases?.phone_number || tx.metadata?.phone_number || phoneNumber) as string;
+        } else if (transactionType === "deposit") {
+          data = "Wallet Funding";
+          provider = tx.metadata?.payment_method || "Paystack";
+          phoneNumber = tx.metadata?.phone_number || phoneNumber;
+        } else {
+          data = transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
+          provider = tx.metadata?.provider || provider;
+          phoneNumber = tx.metadata?.phone_number || phoneNumber;
+        }
 
-				const normalizedStatus = tx.status.toLowerCase();
-				const status =
-					normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+        const normalizedStatus = tx.status ? tx.status.toLowerCase() : "unknown";
+        const status = ["success", "failed", "pending"].includes(normalizedStatus)
+          ? (normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)) as "Success" | "Failed" | "Pending"
+          : "Unknown";
 
-				return {
-					id: tx.id,
-					provider,
-					data,
-					price: Math.abs(tx.amount),
-					date: tx.created_at,
-					status: (["success", "failed", "pending"].includes(normalizedStatus)
-						? status
-						: "Unknown") as "Success" | "Failed" | "Pending",
-					phoneNumber,
-					reference: tx.reference || "N/A",
-					metadata: tx.metadata || {},
-				};
-			});
+        return {
+          id: tx.id,
+          provider,
+          data,
+          price: Math.abs(tx.amount || 0),
+          date: tx.created_at,
+          status,
+          phoneNumber,
+          reference: tx.reference || "Not Available",
+          metadata: tx.metadata || {},
+          type: tx.type || "Unknown",
+        };
+      });
 
-			setHistory(formattedHistory);
-		} catch (error) {
-			console.error("Error fetching history:", error);
-			Alert.alert(
-				"Error",
-				"Failed to load purchase history. Please try again.",
-			);
-		} finally {
-			setRefreshing(false);
-		}
-	}, []);
+      console.log("Formatted history:", JSON.stringify(formattedHistory, null, 2));
+      setHistory(formattedHistory);
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      Alert.alert("Error", "Failed to load transaction history. Please try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
-	useEffect(() => {
-		fetchHistory();
-	}, [fetchHistory]);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
-	const onRefresh = useCallback(() => {
-		fetchHistory();
-	}, [fetchHistory]);
+  const onRefresh = useCallback(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
-	const filteredHistory =
-		filter === "All" ? history : history.filter((h) => h.status === filter);
+  const filteredHistory =
+    filter === "All" ? history : history.filter((h) => h.status === filter);
 
-	const handleTransactionPress = (item: HistoryItem) => {
-		try {
-			router.push({
-				pathname: "/receipt", // Corrected route
-				params: {
-					id: item.id,
-					provider: item.provider,
-					data: item.data,
-					price: item.price.toString(),
-					date: item.date,
-					status: item.status,
-					phoneNumber: item.phoneNumber,
-					reference: item.reference,
-					metadata: JSON.stringify(item.metadata),
-				},
-			});
-		} catch (error) {
-			console.error("Navigation error:", error);
-			Alert.alert("Error", "Failed to navigate to receipt. Please try again.");
-		}
-	};
+  const formatAmount = (amount: number) => {
+    return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+  };
 
-	const renderItem = ({ item }: { item: HistoryItem }) => (
-		<Pressable
-			onPress={() => handleTransactionPress(item)}
-			style={styles.historyItem}
-		>
-			<View style={styles.historyItemHeader}>
-				<Text style={styles.historyTitle}>
-					{item.provider} - {item.data}
-				</Text>
-				<Text
-					style={[styles.historyStatus, { color: statusColors[item.status] }]}
-				>
-					{item.status}
-				</Text>
-			</View>
-			<Text style={styles.historyPrice}>₦{item.price}</Text>
-			<Text style={styles.historyPhone}>Phone: {item.phoneNumber}</Text>
-			<Text style={styles.historyDate}>
-				Date: {moment(item.date).format("MMM D, YYYY h:mm A")}
-			</Text>
-		</Pressable>
-	);
+  const renderReceipt = () => {
+    if (!selectedTransaction) return null;
+    const { price, reference, metadata, date, status, provider, phoneNumber, type, data } = selectedTransaction;
+    const fees = metadata.fees || {};
 
-	return (
-		<View style={styles.container}>
-			<Text style={styles.heading}>Purchase History</Text>
-			<View style={styles.filterTabs}>
-				{["All", "Success", "Failed", "Pending"].map((item) => (
-					<Pressable
-						key={item}
-						onPress={() => setFilter(item as typeof filter)}
-						style={[
-							styles.filterButton,
-							filter === item && styles.activeFilterButton,
-						]}
-					>
-						<Text
-							style={[
-								styles.filterButtonText,
-								filter === item && styles.activeFilterButtonText,
-							]}
-						>
-							{item}
-						</Text>
-					</Pressable>
-				))}
-			</View>
-			{filteredHistory.length > 0 ? (
-				<FlatList
-					data={filteredHistory}
-					keyExtractor={(item) => item.id}
-					renderItem={renderItem}
-					contentContainerStyle={{ paddingBottom: 40 }}
-					refreshControl={
-						<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-					}
-				/>
-			) : (
-				<View style={styles.emptyState}>
-					<Ionicons name="document-text-outline" size={48} color="#777" />
-					<Text style={styles.emptyStateText}>No history to show</Text>
-				</View>
-			)}
-		</View>
-	);
+    return (
+      <Modal
+        visible={!!selectedTransaction}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setSelectedTransaction(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.receiptContainer}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => setSelectedTransaction(null)}
+            >
+              <Ionicons name="close" size={24} color="#FFF" />
+            </Pressable>
+            <ScrollView>
+              <Text style={styles.receiptTitle}>
+                {type.toLowerCase() === "deposit" ? "Deposit Receipt" : "Purchase Receipt"}
+              </Text>
+              <View style={styles.receiptDivider} />
+              <Text style={styles.receiptField}>Reference: {reference}</Text>
+              {type.toLowerCase() === "deposit" ? (
+                <>
+                  <Text style={styles.receiptField}>Amount Paid: {formatAmount(price)}</Text>
+                  <Text style={styles.receiptField}>Fees:</Text>
+                  <Text style={styles.receiptSubField}>
+                    - Transfer Fee: {formatAmount(fees.transfer_fee || 0)}
+                  </Text>
+                  <Text style={styles.receiptSubField}>
+                    - Wallet Management Fee: {formatAmount(fees.wallet_management_fee || 0)}
+                  </Text>
+                  <Text style={styles.receiptSubField}>
+                    - API & Network Fee: {formatAmount(fees.api_network_fee || 0)}
+                  </Text>
+                  <Text style={styles.receiptSubField}>
+                    - VAT: {formatAmount(fees.vat || 0)}
+                  </Text>
+                  <Text style={styles.receiptField}>
+                    Total Fees: {formatAmount(fees.total_fee || 0)}
+                  </Text>
+                  <Text style={styles.receiptField}>
+                    Amount Credited: {formatAmount(fees.net_amount || price)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.receiptField}>Plan: {data}</Text>
+                  <Text style={styles.receiptField}>Provider: {provider}</Text>
+                  <Text style={styles.receiptField}>Amount: {formatAmount(price)}</Text>
+                  <Text style={styles.receiptField}>Phone Number: {phoneNumber}</Text>
+                  <Text style={styles.receiptField}>Validity: {metadata.validity || "N/A"}</Text>
+                </>
+              )}
+              <Text style={styles.receiptField}>
+                Date: {moment(date).tz("Africa/Lagos").format("MMM D, YYYY h:mm A")}
+              </Text>
+              <Text style={styles.receiptField}>Status: {status}</Text>
+              <Text style={styles.receiptField}>Payment Method: {metadata.payment_method || "Not Available"}</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderItem = ({ item }: { item: HistoryItem }) => (
+    <Pressable
+      onPress={() => setSelectedTransaction(item)}
+      style={styles.historyItem}
+    >
+      <View style={styles.historyItemHeader}>
+        <Text style={styles.historyTitle}>
+          {item.provider} - {item.data}
+        </Text>
+        <Text
+          style={[styles.historyStatus, { color: statusColors[item.status] }]}
+        >
+          {item.status}
+        </Text>
+      </View>
+      <Text style={styles.historyPrice}>{formatAmount(item.price)}</Text>
+      <Text style={styles.historyPhone}>Phone: {item.phoneNumber}</Text>
+      <Text style={styles.historyDate}>
+        Date: {moment(item.date).tz("Africa/Lagos").format("MMM D, YYYY h:mm A")}
+      </Text>
+    </Pressable>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()}>
+          <Ionicons name="arrow-back-outline" size={24} color="white" />
+        </Pressable>
+        <Text style={styles.title}>Transaction History</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <View style={styles.filterTabs}>
+        {["All", "Success", "Failed", "Pending"].map((item) => (
+          <Pressable
+            key={item}
+            onPress={() => setFilter(item as typeof filter)}
+            style={[
+              styles.filterButton,
+              filter === item && styles.activeFilterButton,
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterButtonText,
+                filter === item && styles.activeFilterButtonText,
+              ]}
+            >
+              {item}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <FlatList
+        data={filteredHistory}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="document-text-outline" size={48} color="#888" />
+            <Text style={styles.emptyStateText}>No history to show</Text>
+          </View>
+        }
+      />
+      {renderReceipt()}
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: "#000",
-		paddingTop: 48,
-		paddingHorizontal: 16,
-	},
-	heading: {
-		color: "#fff",
-		fontSize: 24,
-		fontWeight: "bold",
-		marginBottom: 16,
-	},
-	filterTabs: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		marginBottom: 16,
-	},
-	filterButton: {
-		paddingHorizontal: 12,
-		paddingVertical: 6,
-		borderRadius: 8,
-		borderWidth: 1,
-		borderColor: "#4b5563",
-	},
-	activeFilterButton: {
-		backgroundColor: "#744925",
-		borderColor: "#744925",
-	},
-	filterButtonText: {
-		fontSize: 14,
-		color: "#d1d5db",
-	},
-	activeFilterButtonText: {
-		color: "#fff",
-	},
-	historyItem: {
-		backgroundColor: "#1f2937",
-		padding: 16,
-		borderRadius: 12,
-		marginBottom: 16,
-	},
-	historyItemHeader: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		marginBottom: 8,
-	},
-	historyTitle: {
-		color: "#fff",
-		fontWeight: "bold",
-	},
-	historyStatus: {
-		fontSize: 12,
-		fontWeight: "bold",
-	},
-	historyPrice: {
-		color: "#d1d5db",
-	},
-	historyPhone: {
-		color: "#9ca3af",
-		fontSize: 14,
-	},
-	historyDate: {
-		color: "#6b7280",
-		fontSize: 12,
-		marginTop: 4,
-	},
-	emptyState: {
-		flex: 1,
-		justifyContent: "center",
-		alignItems: "center",
-		marginTop: 80,
-	},
-	emptyStateText: {
-		color: "#9ca3af",
-		marginTop: 8,
-	},
+  container: {
+    flex: 1,
+    backgroundColor: "#1A2526",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginTop: 40,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  filterTabs: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3A4A4B",
+    backgroundColor: "#2A3A3B",
+  },
+  activeFilterButton: {
+    backgroundColor: "#00FF00",
+    borderColor: "#00FF00",
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: "#fff",
+  },
+  activeFilterButtonText: {
+    color: "#000",
+    fontWeight: "bold",
+  },
+  historyItem: {
+    backgroundColor: "#2A3A3B",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  historyItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  historyTitle: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  historyStatus: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  historyPrice: {
+    color: "#fff",
+    fontSize: 14,
+  },
+  historyPhone: {
+    color: "#888",
+    fontSize: 14,
+  },
+  historyDate: {
+    color: "#888",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 80,
+  },
+  emptyStateText: {
+    color: "#888",
+    marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  receiptContainer: {
+    backgroundColor: "#2A3A3B",
+    borderRadius: 8,
+    padding: 16,
+    width: "90%",
+    maxHeight: "80%",
+  },
+  closeButton: {
+    alignSelf: "flex-end",
+  },
+  receiptTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#FFF",
+    marginBottom: 8,
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: "#888",
+    marginVertical: 8,
+  },
+  receiptField: {
+    fontSize: 14,
+    color: "#FFF",
+    marginBottom: 4,
+  },
+  receiptSubField: {
+    fontSize: 14,
+    color: "#FFF",
+    marginLeft: 16,
+    marginBottom: 4,
+  },
 });

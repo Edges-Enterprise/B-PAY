@@ -122,6 +122,7 @@ function AppStack() {
 				/>
 
 				<Stack.Screen name="commingsoon" options={{ headerShown: false }} />
+				<Stack.Screen name="(Auth)" options={{ headerShown: false }} />
 
 				<Stack.Screen
 					name="Confirmation"

@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
+import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from '@/constants/helper';
 
 // Define interfaces
 interface Bundle {
   id: number;
   variation_code: string;
   description?: string;
-  amount?: number;
-  type?: string;
+  amount?: number | null;
+  name?: string;
   data?: string;
-  price?: number;
+  price: number;
   validity?: string;
   category?: string;
   planType?: string;
@@ -22,52 +23,121 @@ interface Bundle {
 interface Provider {
   id: number;
   name: string;
-  image: string;
+  image?: string;
   code: string;
+  imageKey?: string;
 }
 
 const ConfirmationPage: React.FC = () => {
-  const { bundle, provider, phoneNumber, transactionPin, userEmail, source, referenceId, balance: balanceParam } = useLocalSearchParams<{
-    bundle?: string;
-    provider?: string;
-    phoneNumber?: string;
-    transactionPin?: string;
-    userEmail?: string;
-    source?: string;
-    referenceId?: string;
-    balance?: string;
+  const {
+    bundle,
+    provider,
+    phoneNumber,
+    transactionPin,
+    userEmail,
+    referenceId,
+    balance,
+    networkId,
+    planId,
+  } = useLocalSearchParams<{
+    bundle: string;
+    provider: string;
+    phoneNumber: string;
+    transactionPin: string;
+    userEmail: string;
+    referenceId: string;
+    balance: string;
+    networkId: string;
+    planId: string;
   }>();
 
-  let selectedBundle: Bundle | null = null;
-  let selectedProvider: Provider | null = null;
-  let initialBalance: number = 0;
-
-  try {
-    selectedBundle = bundle ? JSON.parse(bundle) : null;
-    selectedProvider = provider ? JSON.parse(provider) : null;
-    initialBalance = balanceParam ? parseFloat(balanceParam) : 0;
-  } catch (error) {
-    console.error('Error parsing params:', error);
-    Alert.alert('Error', 'Invalid purchase data');
-    router.back();
-    return null;
-  }
-
+  const [selectedBundle, setSelectedBundle] = useState<Bundle>(JSON.parse(bundle));
+  const [selectedProvider, setSelectedProvider] = useState<Provider>(JSON.parse(provider));
+  const [parsedNetworkId, setParsedNetworkId] = useState<number>(parseInt(networkId, 10));
+  const [parsedPlanId, setParsedPlanId] = useState<number>(parseInt(planId, 10));
+  const [balanceValue, setBalanceValue] = useState<number>(parseFloat(balance));
+  const [editableMobileNumber, setEditableMobileNumber] = useState<string>(phoneNumber);
+  const [isEditingMobile, setIsEditingMobile] = useState<boolean>(false);
+  const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider.name);
   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
-  const [balance, setBalance] = useState<number>(initialBalance);
-  const [editablePhoneNumber, setEditablePhoneNumber] = useState<string>(phoneNumber || '');
-  const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false);
-  const [networkProvider, setNetworkProvider] = useState<string>(selectedProvider?.name || '');
-  const [actualPrice, setActualPrice] = useState<number | null>(null);
+  const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(true);
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const providerImageMap: Record<string, string> = {
-    '27': 'https://example.com/images/glo.png',
-  };
+  // Log initial parameters
+  useEffect(() => {
+    console.log('Received navigation params:', {
+      bundle: selectedBundle,
+      provider: selectedProvider,
+      phoneNumber,
+      transactionPin,
+      userEmail,
+      referenceId,
+      balance: balanceValue,
+      networkId: parsedNetworkId,
+      planId: parsedPlanId,
+    });
+  }, []);
 
+  // Fetch wallet balance and set up real-time subscription
+  useEffect(() => {
+    if (!userEmail) return;
+
+    const fetchWalletBalance = async () => {
+      try {
+        const { data: wallet, error } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_email', userEmail)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching wallet balance:', error);
+        } else {
+          const walletBalance = wallet?.balance ?? balanceValue;
+          setBalanceValue(walletBalance);
+          console.log('Fetched wallet balance:', walletBalance);
+        }
+      } catch (err) {
+        console.error('Error in fetchWalletBalance:', err);
+      } finally {
+        setIsBalanceLoading(false);
+      }
+    };
+
+    fetchWalletBalance();
+
+    const subscription = supabase
+      .channel(`wallet-changes:${userEmail}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_email=eq.${userEmail}`,
+        },
+        (payload) => {
+          console.log('Real-time Wallet Balance Update:', payload);
+          setBalanceValue(payload.new.balance ?? balanceValue);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.error('Subscription error:', err);
+        }
+        console.log('Subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(subscription);
+      console.log('Subscription cleaned up');
+    };
+  }, [userEmail, balanceValue]);
+
+  // Pulse animation for edit button
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -85,50 +155,58 @@ const ConfirmationPage: React.FC = () => {
     ).start();
   }, []);
 
+  // Update network provider when mobile number changes
+  const updateNetworkProvider = useCallback(
+    (mobile: string) => {
+      if (mobile.length !== 11) {
+        setNetworkProvider(selectedProvider.name);
+        return;
+      }
+      const prefix = mobile.slice(0, 4);
+      const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
+      const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
+      const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
+      const etisalat = ['0809', '0817', '0818', '0909', '0908'];
+      if (mtn.includes(prefix)) {
+        setNetworkProvider('MTN');
+      } else if (glo.includes(prefix)) {
+        setNetworkProvider('GLO');
+      } else if (airtel.includes(prefix)) {
+        setNetworkProvider('AIRTEL');
+      } else if (etisalat.includes(prefix)) {
+        setNetworkProvider('9MOBILE');
+      } else {
+        setNetworkProvider(selectedProvider.name);
+      }
+    },
+    [selectedProvider]
+  );
+
   useEffect(() => {
-    if (userEmail) {
-      const subscription = supabase
-        .channel(`wallet-changes:${userEmail}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'wallets',
-            filter: `user_email=eq.${userEmail}`,
-          },
-          (payload) => {
-            console.log('Real-time Wallet Balance Update:', payload);
-            setBalance(payload.new.balance);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(subscription);
-      };
+    if (editableMobileNumber) {
+      const timeoutId = setTimeout(() => {
+        updateNetworkProvider(editableMobileNumber);
+      }, 300);
+      return () => clearTimeout(timeoutId);
     }
-  }, [userEmail]);
+  }, [editableMobileNumber, updateNetworkProvider]);
 
+  // PanResponder for slide-to-purchase
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+      },
       onPanResponderMove: (_, gestureState) => {
-        console.log('PanResponder move:', { dx: gestureState.dx });
         if (gestureState.dx > 0) {
           slideAnim.setValue(gestureState.dx);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        console.log('PanResponder released:', { dx: gestureState.dx });
         if (gestureState.dx > 100) {
-          if (!referenceId) {
-            console.log('Purchase blocked: Reference ID not provided');
-            Alert.alert('Error', 'Transaction reference not provided.');
-          } else {
-            console.log('Initiating purchase with referenceId:', referenceId);
-            handlePurchase();
-          }
+          console.log('Slide to purchase triggered', { referenceId });
+          handlePurchase();
         }
         Animated.spring(slideAnim, {
           toValue: 0,
@@ -138,72 +216,28 @@ const ConfirmationPage: React.FC = () => {
     })
   ).current;
 
-  const getProviderFromPhone = (phone: string): string => {
-    if (phone.length !== 11) return selectedProvider?.name || '';
-    const prefix = phone.slice(0, 4);
-    const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
-    const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
-    const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
-    const etisalat = ['0809', '0817', '0818', '0909', '0908'];
-    if (mtn.includes(prefix)) return 'MTN';
-    if (glo.includes(prefix)) return 'GLO';
-    if (airtel.includes(prefix)) return 'AIRTEL';
-    if (etisalat.includes(prefix)) return '9MOBILE';
-    return selectedProvider?.name || '';
-  };
-
-  useEffect(() => {
-    setNetworkProvider(getProviderFromPhone(editablePhoneNumber));
-  }, [editablePhoneNumber]);
-
-  const handlePhoneNumberChange = (text: string) => {
-    setEditablePhoneNumber(text);
+  const handleMobileNumberChange = (text: string) => {
+    setEditableMobileNumber(text);
     if (text.length === 11 && /^\d{11}$/.test(text)) {
-      const providerFromNumber = getProviderFromPhone(text);
-      if (providerFromNumber.toUpperCase() === selectedProvider?.name.toUpperCase()) {
-        setIsEditingPhone(false);
+      if (networkProvider.toUpperCase() === selectedProvider.name.toUpperCase()) {
+        setIsEditingMobile(false);
       } else {
         Alert.alert(
-          'Invalid Phone Number',
-          `The phone number does not match the provider (${selectedProvider?.name}). Please enter a valid ${selectedProvider?.name} number.`
+          'Invalid Mobile Number',
+          `The mobile number does not match the provider (${selectedProvider.name}). Please enter a valid ${selectedProvider.name} number.`,
         );
-        setEditablePhoneNumber(phoneNumber || '');
-        setIsEditingPhone(false);
+        setEditableMobileNumber(phoneNumber);
+        setIsEditingMobile(false);
       }
     }
   };
 
-  const formatNumberWithCommas = (number: number | undefined | null): string => {
-    if (number === undefined || number === null) {
-      return 'N/A';
-    }
+  const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
   const handlePurchase = async () => {
-    console.log('Purchase initiated:', { referenceId, basePrice: selectedBundle?.amount || selectedBundle?.price || 0, userEmail });
-    if (!selectedBundle || !selectedProvider) {
-      Alert.alert('Error', 'No bundle or provider selected');
-      return;
-    }
-
-    if (!editablePhoneNumber || editablePhoneNumber.length !== 11 || !/^\d{11}$/.test(editablePhoneNumber)) {
-      Alert.alert('Error', 'Invalid phone number');
-      return;
-    }
-
-    if (!referenceId) {
-      console.log('Purchase blocked: No referenceId provided');
-      Alert.alert('Error', 'Transaction reference not provided');
-      return;
-    }
-
-    if (!userEmail) {
-      console.log('Purchase blocked: No userEmail provided');
-      Alert.alert('Error', 'User email not provided');
-      return;
-    }
-
+    let currentBalance: number | undefined;
     try {
       setTransactionModalVisible(true);
       setTransactionStatus('processing');
@@ -216,23 +250,27 @@ const ConfirmationPage: React.FC = () => {
         .single();
 
       if (walletError && walletError.code !== 'PGRST116') {
-        console.error('Wallet query error:', walletError);
-        throw new Error('Failed to verify wallet balance');
+        throw new Error(`Failed to fetch wallet balance: ${walletError.message}`);
       }
 
-      const currentBalance = wallet?.balance || 0;
-      const basePrice = selectedBundle.amount || selectedBundle.price || 0;
+      currentBalance = wallet?.balance ?? balanceValue;
+      const basePrice = selectedBundle.price || selectedBundle.amount || 0;
 
-      console.log('Purchase Details:', {
-        walletBalance: currentBalance,
+      console.log('Purchase details:', {
+        currentBalance,
         basePrice,
-        selectedBundle,
-        userEmail,
+        mobile_number: editableMobileNumber,
+        networkId: parsedNetworkId,
+        planId: parsedPlanId,
         referenceId,
+        userEmail,
       });
 
       if (currentBalance < basePrice) {
-        Alert.alert('Error', `Insufficient wallet balance. Required: ₦${formatNumberWithCommas(basePrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}. Please top up your wallet.`);
+        Alert.alert(
+          'Error',
+          `Insufficient wallet balance. Required: ₦${formatNumberWithCommas(basePrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}. Please top up your wallet.`,
+        );
         setTransactionModalVisible(false);
         return;
       }
@@ -245,41 +283,41 @@ const ConfirmationPage: React.FC = () => {
         .eq('user_email', userEmail);
 
       if (walletUpdateError) {
-        console.error('Wallet update error:', walletUpdateError);
-        throw walletUpdateError;
+        throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
       }
 
-      setBalance(newBalance);
+      setBalanceValue(newBalance);
 
-      // Call Ebenkdata API with base price
-      const ebenkdataResponse = await fetch('https://ebenkdata.com/api/purchase', {
+      // Call Ebenkdata API
+      const requestBody = {
+        network: parsedNetworkId,
+        mobile_number: editableMobileNumber,
+        plan: parsedPlanId,
+        Ported_number: true,
+      };
+
+      console.log('Ebenkdata API request:', requestBody);
+
+      const ebenkdataResponse = await fetch('https://ebenkdata.com/api/data/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
         },
-        body: JSON.stringify({
-          provider: selectedProvider.name,
-          phone: editablePhoneNumber,
-          amount: basePrice,
-          type: selectedBundle.type || 'data',
-          plan: selectedBundle.data || `Airtime ₦${basePrice}`,
-          reference: referenceId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const ebenkdataData = await ebenkdataResponse.json();
-      console.log('Ebenkdata API Response:', ebenkdataData);
+      const responseText = await ebenkdataResponse.text();
+      console.log('Ebenkdata API response:', {
+        status: ebenkdataResponse.status,
+        responseText: responseText.slice(0, 100),
+      });
 
-      if (ebenkdataData.status !== 'success') {
-        console.error('Ebenkdata error:', ebenkdataData.message);
-        throw new Error('Ebenkdata purchase failed: ' + (ebenkdataData.message || 'Unknown error'));
+      if (!ebenkdataResponse.ok) {
+        throw new Error(`Ebenkdata API request failed: ${ebenkdataResponse.status} ${responseText.slice(0, 100)}`);
       }
 
-      const actualCost = ebenkdataData.data?.actual_amount
-        ? parseFloat(ebenkdataData.data.actual_amount)
-        : basePrice;
-      setActualPrice(actualCost);
+      const actualCost = basePrice;
 
       // Record transaction
       const transactionData = {
@@ -306,12 +344,6 @@ const ConfirmationPage: React.FC = () => {
             },
           ],
           payment_method: 'Wallet',
-          phone_number: editablePhoneNumber,
-          provider: selectedProvider.name,
-          purchase: purchaseDescription,
-          validity: selectedBundle.validity || 'N/A',
-          type: selectedBundle.type || 'data',
-          actual_cost: actualCost,
         },
       };
 
@@ -320,15 +352,14 @@ const ConfirmationPage: React.FC = () => {
         .insert(transactionData);
 
       if (txError) {
-        console.error('Transaction insert error:', txError);
-        throw txError;
+        throw new Error(`Transaction recording failed: ${txError.message}`);
       }
 
       setTransactionStatus('success');
 
       Alert.alert(
         'Success',
-        `Successfully purchased ${purchaseDescription} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${editablePhoneNumber}.`
+        `Successfully purchased ${selectedBundle.data || `Plan ID ${parsedPlanId}`} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${editableMobileNumber}.`,
       );
 
       router.push({
@@ -336,32 +367,31 @@ const ConfirmationPage: React.FC = () => {
         params: {
           id: referenceId,
           provider: selectedProvider.name,
-          data: purchaseDescription,
+          data: selectedBundle.data || `Plan ID ${parsedPlanId}`,
           price: actualCost.toString(),
           date: new Date().toISOString(),
           status: 'Success',
-          phoneNumber: editablePhoneNumber,
+          phoneNumber: editableMobileNumber,
           reference: referenceId,
           metadata: JSON.stringify({
             validity: selectedBundle.validity || 'N/A',
             payment_method: 'Wallet',
-            type: selectedBundle.type || 'data',
+            type: selectedBundle.planType || 'data',
             actual_cost: actualCost,
           }),
         },
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error initiating purchase:', error);
       setTransactionStatus('failed');
-      // Revert wallet balance if deducted
-      if (typeof currentBalance === 'number') {
+      if (currentBalance !== undefined) {
         await supabase
           .from('wallets')
           .update({ balance: currentBalance })
           .eq('user_email', userEmail);
       }
       setTransactionModalVisible(false);
-      Alert.alert('Error', 'Failed to initiate purchase. Please try again.');
+      Alert.alert('Error', `Failed to initiate purchase: ${error.message || 'Please try again.'}`);
     }
   };
 
@@ -373,21 +403,15 @@ const ConfirmationPage: React.FC = () => {
     setTransactionModalVisible(false);
   };
 
-  const toggleEditPhone = () => {
-    setIsEditingPhone(!isEditingPhone);
+  const toggleEditMobile = () => {
+    setIsEditingMobile(!isEditingMobile);
   };
 
-  if (!selectedBundle || !selectedProvider || !phoneNumber || !referenceId || !balanceParam) {
-    console.log('Missing required params:', { selectedBundle, selectedProvider, phoneNumber, referenceId, balance });
-    Alert.alert('Error', 'Missing required purchase information');
-    router.back();
-    return null;
-  }
-
-  const basePrice = selectedBundle.amount || selectedBundle.price || 0;
-  const purchaseDescription = selectedBundle.type === 'airtime'
-    ? `Airtime ₦${formatNumberWithCommas(selectedBundle.amount)}`
-    : selectedBundle.data || 'N/A';
+  const basePrice = selectedBundle.price || selectedBundle.amount || 0;
+  const purchaseDescription = selectedBundle.data || `Plan ID ${parsedPlanId}`;
+  const providerImage = selectedProvider.imageKey && NETWORK_IMAGES[selectedProvider.imageKey as keyof typeof NETWORK_IMAGES]
+    ? NETWORK_IMAGES[selectedProvider.imageKey as keyof typeof NETWORK_IMAGES]
+    : DEFAULT_PROVIDER_IMAGE;
 
   return (
     <View style={styles.container}>
@@ -401,11 +425,7 @@ const ConfirmationPage: React.FC = () => {
               <Ionicons name="arrow-back" size={24} color="white" />
             </Pressable>
             <Image
-              source={{
-                uri: selectedProvider.image && providerImageMap[selectedProvider.image]
-                  ? providerImageMap[selectedProvider.image]
-                  : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI3AAAAABJRU5ErkJggg==',
-              }}
+              source={providerImage}
               style={styles.providerLogo}
               resizeMode="contain"
               onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
@@ -413,16 +433,18 @@ const ConfirmationPage: React.FC = () => {
             <Text style={styles.providerName}>{selectedProvider.name}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{selectedBundle.type === 'airtime' ? 'Airtime Amount' : 'Data Plan'}</Text>
+            <Text style={styles.detailLabel}>Data Plan</Text>
             <Text style={styles.detailValue}>{purchaseDescription}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>₦${formatNumberWithCommas(basePrice)}</Text>
+            <Text style={styles.detailValue}>₦{formatNumberWithCommas(basePrice)}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Wallet Balance</Text>
-            <Text style={styles.detailValue}>₦${formatNumberWithCommas(balance)}</Text>
+            <Text style={styles.detailValue}>
+              {isBalanceLoading ? 'Loading...' : `₦${formatNumberWithCommas(balanceValue)}`}
+            </Text>
           </View>
           {selectedBundle.validity && (
             <View style={styles.detailRow}>
@@ -431,14 +453,14 @@ const ConfirmationPage: React.FC = () => {
             </View>
           )}
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Phone Number</Text>
-            {isEditingPhone ? (
+            <Text style={styles.detailLabel}>Mobile Number</Text>
+            {isEditingMobile ? (
               <View style={styles.phoneContainer}>
                 <TextInput
                   style={styles.phoneInput}
-                  value={editablePhoneNumber}
-                  onChangeText={handlePhoneNumberChange}
-                  placeholder="Enter 11-digit phone number"
+                  value={editableMobileNumber}
+                  onChangeText={handleMobileNumberChange}
+                  placeholder="Enter 11-digit mobile number"
                   placeholderTextColor="#A1A1AA"
                   keyboardType="numeric"
                   maxLength={11}
@@ -447,12 +469,12 @@ const ConfirmationPage: React.FC = () => {
               </View>
             ) : (
               <View style={styles.phoneContainer}>
-                <Pressable onPress={toggleEditPhone}>
+                <Pressable onPress={toggleEditMobile}>
                   <Animated.Text style={[styles.editText, { opacity: pulseAnim }]}>
                     Edit
                   </Animated.Text>
                 </Pressable>
-                <Text style={styles.phoneNumberText}>{editablePhoneNumber}</Text>
+                <Text style={styles.phoneNumberText}>{editableMobileNumber}</Text>
               </View>
             )}
           </View>
@@ -472,10 +494,7 @@ const ConfirmationPage: React.FC = () => {
           </View>
           <Animated.View
             {...panResponder.panHandlers}
-            style={[
-              styles.slideContainer,
-              { transform: [{ translateX: slideAnim }] },
-            ]}
+            style={[styles.slideContainer, { transform: [{ translateX: slideAnim }] }]}
           >
             <View style={styles.slideTextContainer}>
               <Text style={styles.slideText}>Slide to Purchase</Text>
@@ -489,7 +508,7 @@ const ConfirmationPage: React.FC = () => {
         onClose={closeTransactionModal}
         transactionStatus={transactionStatus}
         selectedPlan={selectedBundle}
-        phoneNumber={editablePhoneNumber}
+        phoneNumber={editableMobileNumber}
         networkProvider={networkProvider}
       />
     </View>
@@ -500,11 +519,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 48,
+    width: '100%',
   },
   card: {
     backgroundColor: '#2D2D2D',
@@ -564,6 +586,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   referenceId: {
+    flexWrap: 'wrap',
     numberOfLines: 2,
     ellipsizeMode: 'tail',
   },

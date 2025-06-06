@@ -556,412 +556,417 @@ import PlanItemWithSwipe from "@/components/homescreen/PlanItemWithSwipe";
 import CreatePinModal from "@/components/homescreen/CreatePinModal";
 import { useFont } from "@/context/font-context";
 import {
-	usePurchaseHistory,
-	useNotificationCount,
-	useSimilarPlans,
-	useCreateTransactionPin,
-	useNotificationSubscription,
+  usePurchaseHistory,
+  useNotificationCount,
+  useCreateTransactionPin,
+  useNotificationSubscription,
 } from "@/hooks/useHomeScreenData";
 import { actions } from "@/constants/helper";
 
 // Define types for ConfirmationPage compatibility
 interface DataBundle {
-	id: number;
-	data: string;
-	price: number;
-	validity: string;
-	category: string;
-	description?: string;
-	variation_code: string;
-	planType: string;
+  id: number;
+  data: string;
+  price: number;
+  validity: string;
+  category: string;
+  description?: string;
+  variation_code: string;
+  planType: string;
 }
 
 interface Provider {
-	id: number;
-	name: string;
-	image: string;
-	code: string;
+  id: number;
+  name: string;
+  image: string;
+  code: string;
 }
 
 interface ConfirmationParams {
-	bundle?: string;
-	provider?: string;
-	phoneNumber?: string;
-	userEmail?: string;
-	transactionPin?: string;
-	source?: string;
+  bundle?: string;
+  provider?: string;
+  phoneNumber?: string;
+  userEmail?: string;
+  transactionPin?: string;
+  source?: string;
+  networkId?: string;
+  planId?: string;
 }
 
 export default function HomeScreen() {
-	const { selectedFont } = useFont();
-	const { user } = useAuth();
+  const { selectedFont } = useFont();
+  const { user } = useAuth();
 
-	const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
-	const username = user?.user_metadata?.username || "Guest";
+  const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
+  const username = user?.user_metadata?.username || "Guest";
+  const userEmail = user?.email || "";
 
-	// Modal states
-	const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
-	const [newPin, setNewPin] = useState("");
-	const [confirmPin, setConfirmPin] = useState("");
-	const [showNewPin, setShowNewPin] = useState(false);
-	const [showConfirmPin, setShowConfirmPin] = useState(false);
+  // Modal states
+  const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
-	// Custom hooks for data fetching
-	const {
-		data: purchaseHistory = [],
-		isLoading: isPurchaseHistoryLoading,
-		error: purchaseHistoryError,
-	} = usePurchaseHistory();
+  // Fetch recent purchases (all users, last 24 hours)
+  const {
+    data: purchaseHistory = [],
+    isLoading: isPurchaseHistoryLoading,
+    error: purchaseHistoryError,
+  } = usePurchaseHistory();
 
-	const { data: notificationCount = 0, isLoading: isNotificationCountLoading } =
-		useNotificationCount();
+  const { data: notificationCount = 0, isLoading: isNotificationCountLoading } =
+    useNotificationCount();
 
-	// Set up real-time notification subscription
-	useNotificationSubscription();
+  // Set up real-time notification subscription
+  useNotificationSubscription();
 
-	// Process purchase history data
-	const purchasesWithAmount = purchaseHistory.map((p) => {
-		const amountMatch = p.plan_name.match(/₦(\d+)/);
-		return {
-			...p,
-			provider: p.provider_name,
-			amount: amountMatch ? parseInt(amountMatch[1]) : 300,
-		};
-	});
+  // Process purchase history data
+  const popularPlans = purchaseHistory.map((p) => {
+    const amountMatch = p.plan_name?.match(/₦(\d+)/);
+    return {
+      plan_name: p.plan_name || "Unknown Plan",
+      provider: p.provider_name || getProviderFromPlan(p.plan_name || ""),
+      amount: amountMatch ? parseInt(amountMatch[1], 10) : 300,
+      validity: p.validity || "N/A",
+      phone_number: p.phone_number || "",
+      network_id: p.network?.toString() || "0",
+      plan_id: p.plan?.toString() || "0",
+    };
+  });
 
-	const { data: similarPlans = [], isLoading: isSimilarPlansLoading } =
-		useSimilarPlans(purchasesWithAmount);
+  console.log("Popular Plans (from purchase history):", popularPlans);
 
-	// Create PIN mutation
-	const createPinMutation = useCreateTransactionPin();
+  // Create PIN mutation
+  const createPinMutation = useCreateTransactionPin();
 
-	// Computed values
-	const hasPurchases = purchaseHistory.length > 0;
-	const phoneNumber = hasPurchases
-		? purchaseHistory[0].phone_number
-		: user?.user_metadata?.phone || "";
+  // Computed values
+  const hasPlans = popularPlans.length > 0;
+  const phoneNumber = hasPlans
+    ? popularPlans[0].phone_number
+    : user?.user_metadata?.phone || "";
 
-	const pastPlans = purchaseHistory.map((p) => p.plan_name);
-	const popularPlans = Array.from(
-		new Set([...pastPlans, ...similarPlans.map((p) => p.plan_name)]),
-	);
+  // Utility functions
+  const getProviderFromPlan = (plan: string): string => {
+    const planUpper = plan.toUpperCase();
+    if (planUpper.includes("MTN")) return "MTN";
+    if (planUpper.includes("GLO")) return "GLO";
+    if (planUpper.includes("AIRTEL")) return "AIRTEL";
+    if (planUpper.includes("9MOBILE") || planUpper.includes("ETISALAT"))
+      return "9MOBILE";
+    return "Unknown";
+  };
 
-	// Utility functions
-	const getProviderFromPlan = (plan: string): string => {
-		const planUpper = plan.toUpperCase();
-		if (planUpper.includes("MTN")) return "MTN";
-		if (planUpper.includes("GLO")) return "GLO";
-		if (planUpper.includes("AIRTEL")) return "AIRTEL";
-		if (planUpper.includes("9MOBILE") || planUpper.includes("ETISALAT"))
-			return "9MOBILE";
-		return "Unknown";
-	};
+  const closeCreatePinModal = () => {
+    setCreatePinModalVisible(false);
+    setNewPin("");
+    setConfirmPin("");
+  };
 
-	const closeCreatePinModal = () => {
-		setCreatePinModalVisible(false);
-		setNewPin("");
-		setConfirmPin("");
-	};
+  const handleCreatePin = async () => {
+    if (
+      newPin.length < 4 ||
+      newPin.length > 6 ||
+      confirmPin.length < 4 ||
+      confirmPin.length > 6
+    ) {
+      alert("PIN must be between 4 and 6 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      alert("PINs do not match.");
+      return;
+    }
 
-	const handleCreatePin = async () => {
-		if (
-			newPin.length < 4 ||
-			newPin.length > 6 ||
-			confirmPin.length < 4 ||
-			confirmPin.length > 6
-		) {
-			alert("PIN must be between 4 and 6 digits.");
-			return;
-		}
-		if (newPin !== confirmPin) {
-			alert("PINs do not match.");
-			return;
-		}
+    try {
+      await createPinMutation.mutateAsync(newPin);
+      closeCreatePinModal();
+    } catch (error) {
+      alert("Failed to save PIN. Please try again.");
+    }
+  };
 
-		try {
-			await createPinMutation.mutateAsync(newPin);
-			closeCreatePinModal();
-		} catch (error) {
-			alert("Failed to save PIN. Please try again.");
-		}
-	};
+  const handleSwipePurchase = (plan: { plan_name: string; provider: string; amount: number; validity: string; phone_number: string; network_id: string; plan_id: string }) => {
+    console.log("handleSwipePurchase called with plan:", plan);
+    if (!hasTransactionPin) {
+      setCreatePinModalVisible(true);
+      return;
+    }
 
-	const handleSwipePurchase = (plan: string) => {
-		console.log("handleSwipePurchase called with plan:", plan);
-		if (!hasTransactionPin) {
-			setCreatePinModalVisible(true);
-			return;
-		}
+    const bundle: DataBundle = {
+      id: Date.now(),
+      data: plan.plan_name,
+      price: plan.amount,
+      validity: plan.validity,
+      category: "Data",
+      description: plan.plan_name,
+      variation_code: `data_${plan.plan_name.toLowerCase().replace(/\s/g, "_")}`,
+      planType: "Data Plan",
+    };
 
-		const providerName = getProviderFromPlan(plan);
-		const prefilledPhone = phoneNumber || user?.user_metadata?.phone || "";
+    const provider: Provider = {
+      id: Date.now(),
+      name: plan.provider,
+      image: "",
+      code: plan.provider.toLowerCase(),
+    };
 
-		const bundle: DataBundle = {
-			id: Date.now(),
-			data: plan.split(" – ")[0],
-			price: parseInt(plan.match(/₦(\d+)/)?.[1] || "0"),
-			validity: "30 days",
-			category: "Data",
-			description: "Data Bundle",
-			variation_code: "data_" + plan.toLowerCase().replace(/\s/g, "_"),
-			planType: "Data Plan",
-		};
+    const params: ConfirmationParams = {
+      bundle: JSON.stringify(bundle),
+      provider: JSON.stringify(provider),
+      phoneNumber: plan.phone_number || phoneNumber,
+      userEmail: userEmail,
+      transactionPin: user?.user_metadata?.transaction_pin,
+      source: "index",
+      networkId: plan.network_id,
+      planId: plan.plan_id,
+    };
 
-		const provider: Provider = {
-			id: 1,
-			name: providerName,
-			image: "",
-			code: providerName.toLowerCase(),
-		};
+    console.log("Navigating to Confirmation with params:", params);
 
-		const params: ConfirmationParams = {
-			bundle: JSON.stringify(bundle),
-			provider: JSON.stringify(provider),
-			phoneNumber: prefilledPhone,
-			userEmail: user?.email,
-			transactionPin: user?.user_metadata?.transaction_pin,
-			source: "index",
-		};
+    router.push({
+      pathname: "../Confirmation",
+      params: params as UnknownInputParams,
+    });
+  };
 
-		console.log("Navigating to Confirmation with params:", params);
-
-		router.push({
-			pathname: "../Confirmation",
-			params: params as UnknownInputParams,
-		});
-	};
-
-	// Handle loading states
-	if (isPurchaseHistoryLoading && user?.email) {
-		return (
-			<View style={[styles.container, styles.centerContent]}>
-        {/* <Text style={styles.loadingText}>Loading your dashboard...</Text> */}
+  // Handle loading states
+  if (isPurchaseHistoryLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator color="#D7A77F" />
-			</View>
-		);
-	}
+        <Text style={styles.loadingText}>Loading popular plans...</Text>
+      </View>
+    );
+  }
 
-	// Handle errors
-	if (purchaseHistoryError) {
-		console.error("Purchase history error:", purchaseHistoryError);
-	}
+  // Handle errors
+  if (purchaseHistoryError) {
+    console.error("Purchase history error:", purchaseHistoryError);
+  }
 
-	return (
-		<View style={styles.container}>
-			<StatusBar
-				translucent
-				backgroundColor="transparent"
-				barStyle="light-content"
-			/>
-			<View style={styles.header}>
-				<Pressable
-					onPress={() => router.push("../notifications")}
-					style={styles.notificationIcon}
-				>
-					<View>
-						<Ionicons name="notifications-outline" size={24} color="white" />
-						{notificationCount > 0 && (
-							<View style={styles.badge}>
-								<Text style={styles.badgeText}>
-									{notificationCount > 99 ? "99+" : notificationCount}
-								</Text>
-							</View>
-						)}
-					</View>
-				</Pressable>
-			</View>
+  return (
+    <View style={styles.container}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.push("../notifications")}
+          style={styles.notificationIcon}
+        >
+          <View>
+            <Ionicons name="notifications-outline" size={24} color="white" />
+            {notificationCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {notificationCount > 99 ? "99+" : notificationCount}
+                </Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
+      </View>
 
-			<View
-				style={{
-					flexDirection: "row",
-					gap: 8,
-					alignItems: "center",
-					marginTop: 14,
-				}}
-			>
-				<Text
-					style={{
-						fontFamily: selectedFont,
-						fontSize: 20,
-						fontWeight: "600",
-						color: "white",
-					}}
-				>
-					Hi,
-				</Text>
-				<Text style={[styles.username, { textTransform: "capitalize" }]}>
-					{username} 👋
-				</Text>
-			</View>
-			<Text style={styles.welcomeSubtitle}>Your dashboard is here 🔥</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 8,
+          alignItems: "center",
+          marginTop: 14,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: selectedFont,
+            fontSize: 20,
+            fontWeight: "600",
+            color: "white",
+          }}
+        >
+          Hi,
+        </Text>
+        <Text style={[styles.username, { textTransform: "capitalize" }]}>
+          {username} 👋
+        </Text>
+      </View>
+      <Text style={styles.welcomeSubtitle}>Your dashboard is here 🔥</Text>
 
-			<View style={styles.quickActionsHeader}>
-				<Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-			</View>
+      <View style={styles.quickActionsHeader}>
+        <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
+      </View>
 
-			<View style={styles.quickActionsCard}>
-				<View style={styles.quickActionsGrid}>
-					{actions.map((action, index) => (
-						<Pressable
-							key={index}
-							onPress={() => router.push(action.route)}
-							style={styles.quickActionCard}
-						>
-							<Ionicons name={action.icon} size={24} color={action.color} />
-							<Text style={styles.quickActionTitle}>
-								{action.title.length > 12
-									? action.title.slice(0, 11) + "..."
-									: action.title}
-							</Text>
-						</Pressable>
-					))}
-				</View>
-			</View>
+      <View style={styles.quickActionsCard}>
+        <View style={styles.quickActionsGrid}>
+          {actions.map((action, index) => (
+            <Pressable
+              key={index}
+              onPress={() => router.push(action.route)}
+              style={styles.quickActionCard}
+            >
+              <Ionicons name={action.icon} size={24} color={action.color} />
+              <Text style={styles.quickActionTitle}>
+                {action.title.length > 12
+                  ? action.title.slice(0, 11) + "..."
+                  : action.title}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
-			{hasPurchases && popularPlans.length > 0 && (
-				<>
-					<View style={styles.popularPlansHeader}>
-						<Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
-						{isSimilarPlansLoading && (
-              <Text style={styles.loadingIndicator}>
-                <ActivityIndicator color="#D7A77F" />
-								Loading recommendations...
-							</Text>
-						)}
-					</View>
-					{popularPlans.map((plan, index) => (
-						<PlanItemWithSwipe
-							key={`${plan}-${index}`}
-							plan={plan}
-							index={index}
-							onSwipePurchase={() => handleSwipePurchase(plan)}
-						/>
-					))}
-				</>
-			)}
+      <View style={styles.popularPlansHeader}>
+        <Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
+      </View>
 
-			<CreatePinModal
-				visible={createPinModalVisible}
-				onClose={closeCreatePinModal}
-				newPin={newPin}
-				setNewPin={setNewPin}
-				confirmPin={confirmPin}
-				setConfirmPin={setConfirmPin}
-				showNewPin={showNewPin}
-				setShowNewPin={setShowNewPin}
-				showConfirmPin={showConfirmPin}
-				setShowConfirmPin={setShowConfirmPin}
-				onSave={handleCreatePin}
-				isLoading={createPinMutation.isPending}
-			/>
-		</View>
-	);
+      {hasPlans ? (
+        popularPlans.map((plan, index) => (
+          <PlanItemWithSwipe
+            key={`${plan.plan_name}-${index}`}
+            plan={plan.plan_name}
+            index={index}
+            onSwipePurchase={() => handleSwipePurchase(plan)}
+          />
+        ))
+      ) : (
+        <View style={styles.noPlansContainer}>
+          <Text style={styles.noPlansText}>
+            No recent purchases found in the last 24 hours.
+          </Text>
+        </View>
+      )}
+
+      <CreatePinModal
+        visible={createPinModalVisible}
+        onClose={closeCreatePinModal}
+        newPin={newPin}
+        setNewPin={setNewPin}
+        confirmPin={confirmPin}
+        setConfirmPin={setConfirmPin}
+        showNewPin={showNewPin}
+        setShowNewPin={setShowNewPin}
+        showConfirmPin={showConfirmPin}
+        setShowConfirmPin={setShowConfirmPin}
+        onSave={handleCreatePin}
+        isLoading={createPinMutation.isPending}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: "black",
-		paddingHorizontal: 16,
-		paddingTop: StatusBar.currentHeight,
-	},
-	centerContent: {
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	loadingText: {
-		color: "white",
-		fontSize: 16,
-		fontWeight: "500",
-	},
-	loadingIndicator: {
-		color: "#60A5FA",
-		fontSize: 12,
-		fontStyle: "italic",
-	},
-	header: {
-		position: "absolute",
-		top: StatusBar.currentHeight || 48,
-		right: 16,
-		zIndex: 1,
-	},
-	notificationIcon: {
-		padding: 8,
-		paddingTop: StatusBar.currentHeight,
-	},
-	badge: {
-		position: "absolute",
-		top: -4,
-		right: -4,
-		backgroundColor: "red",
-		borderRadius: 10,
-		minWidth: 20,
-		height: 20,
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	badgeText: {
-		color: "white",
-		fontSize: 12,
-		fontWeight: "bold",
-	},
-	username: {
-		fontSize: 20,
-		fontWeight: "600",
-		color: "white",
-		marginBottom: 4,
-	},
-	welcomeSubtitle: {
-		fontSize: 16,
-		color: "gray",
-		marginBottom: 24,
-	},
-	sectionTitle: {
-		fontSize: 18,
-		fontWeight: "600",
-		color: "white",
-	},
-	quickActionsHeader: {
-		marginVertical: 24,
-		paddingRight: 16,
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-	},
-	popularPlansHeader: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		marginBottom: 16,
-	},
-	quickActionsCard: {
-		backgroundColor: "#171717",
-		borderRadius: 16,
-		paddingHorizontal: 12,
-		paddingTop: 12,
-		marginBottom: 24,
-	},
-	quickActionsGrid: {
-		flexDirection: "row",
-		flexWrap: "wrap",
-		justifyContent: "space-between",
-		paddingVertical: 8,
-	},
-	quickActionCard: {
-		width: "30%",
-		backgroundColor: "rgba(255,255,255,0.05)",
-		borderRadius: 12,
-		paddingVertical: 16,
-		paddingHorizontal: 8,
-		alignItems: "center",
-		justifyContent: "center",
-		marginBottom: 16,
-	},
-	quickActionTitle: {
-		color: "white",
-		fontSize: 10,
-		fontWeight: "500",
-		marginTop: 6,
-		textAlign: "center",
-	},
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+    paddingHorizontal: 16,
+    paddingTop: StatusBar.currentHeight,
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "500",
+    marginTop: 8,
+  },
+  header: {
+    position: "absolute",
+    top: StatusBar.currentHeight || 48,
+    right: 16,
+    zIndex: 1,
+  },
+  notificationIcon: {
+    padding: 8,
+    paddingTop: StatusBar.currentHeight,
+  },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "red",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  badgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  username: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "white",
+    marginBottom: 4,
+  },
+  welcomeSubtitle: {
+    fontSize: 16,
+    color: "gray",
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "white",
+  },
+  quickActionsHeader: {
+    marginVertical: 24,
+    paddingRight: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  popularPlansHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  quickActionsCard: {
+    backgroundColor: "#171717",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    marginBottom: 24,
+  },
+  quickActionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+  },
+  quickActionCard: {
+    width: "30%",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  quickActionTitle: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "500",
+    marginTop: 6,
+    textAlign: "center",
+  },
+  noPlansContainer: {
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#171717",
+    borderRadius: 8,
+  },
+  noPlansText: {
+    color: "white",
+    fontSize: 14,
+    textAlign: "center",
+  },
 });

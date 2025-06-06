@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,12 +11,13 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { MotiView } from "moti";
 import { StatusBar } from "expo-status-bar";
 import { supabase } from "@/config/supabase";
+import { v4 as uuidv4 } from "uuid";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const FundScreen = () => {
   const [amount, setAmount] = useState("");
@@ -23,6 +25,7 @@ const FundScreen = () => {
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
   const [userId, setUserId] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -51,7 +54,135 @@ const FundScreen = () => {
     };
 
     fetchUserData();
-  }, [router]);
+  }, []);
+
+  const handleDeposit = async (depositAmount: number, reference: string) => {
+    try {
+      setIsLoading(true);
+
+      // Fetch wallet
+      const { data: wallet, error: walletError } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_email", userEmail)
+        .single();
+
+      if (walletError && walletError.code !== "PGRST116") {
+        throw new Error(`Wallet query failed: ${walletError.message}`);
+      }
+
+      const currentBalance = wallet?.balance || 0;
+      const profit = depositAmount * 0.1;
+      const netAmount = depositAmount - profit;
+      const newBalance = currentBalance + netAmount;
+
+      // Update wallet
+      const { error: walletUpdateError } = await supabase
+        .from("wallets")
+        .upsert({ user_email: userEmail, balance: newBalance }, { onConflict: "user_email" });
+
+      if (walletUpdateError) {
+        throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
+      }
+
+      // Fetch existing pending transaction
+      const { data: txData, error: txFetchError } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("reference", reference)
+        .eq("status", "pending")
+        .single();
+
+      if (txFetchError || !txData) {
+        throw new Error(`Pending transaction not found: ${txFetchError?.message || "No transaction"}`);
+      }
+
+      const transactionId = txData.id;
+
+      // Update transaction to success
+      const { error: txUpdateError } = await supabase
+        .from("transactions")
+        .update({
+          status: "success",
+          metadata: {
+            payment_date: new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }),
+            payment_method: "Paystack",
+            profit,
+            net_amount: netAmount,
+            user_name: userName,
+            user_id: userId,
+            fees: {
+              transfer_fee: depositAmount * 0.02,
+              wallet_management_fee: depositAmount * 0.02,
+              api_network_fee: depositAmount * 0.04,
+              vat: depositAmount * 0.02,
+              total_fee: profit,
+              net_amount: netAmount,
+            },
+          },
+        })
+        .eq("id", transactionId);
+
+      if (txUpdateError) {
+        throw new Error(`Transaction update failed: ${txUpdateError.message}`);
+      }
+
+      // Record deposit
+      const { error: depositError } = await supabase
+        .from("deposits")
+        .insert({
+          transaction_id: transactionId,
+          user_email: userEmail,
+          amount: depositAmount,
+          profit,
+          net_amount: netAmount,
+          reference,
+        });
+
+      if (depositError) {
+        throw new Error(`Deposit insert failed: ${depositError.message}`);
+      }
+
+      setIsLoading(false);
+      Alert.alert(
+        "Success",
+        `Wallet funded with ₦${netAmount.toLocaleString()}. Profit: ₦${profit.toLocaleString()}.`
+      );
+      setAmount("");
+      router.push("/home");
+    } catch (error: any) {
+      console.error("Deposit error:", error.message);
+      setIsLoading(false);
+      Alert.alert("Error", `Deposit failed: ${error.message || "Unknown error"}`);
+
+      // Revert wallet balance if updated
+      if (typeof currentBalance === "number") {
+        const { error: revertError } = await supabase
+          .from("wallets")
+          .update({ balance: currentBalance })
+          .eq("user_email", userEmail);
+        if (revertError) {
+          console.error("Revert wallet error:", revertError);
+        }
+      }
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      const handlePaymentCallback = async () => {
+        const params = router.getState()?.routes.find((route) => route.name === "paystack")?.params;
+        if (params && params.paymentStatus === "success" && params.reference && params.amount) {
+          const depositAmount = parseFloat(params.amount);
+          await handleDeposit(depositAmount, params.reference);
+        } else if (params && params.paymentStatus === "failed") {
+          Alert.alert("Error", "Payment failed. Please try again.");
+        }
+      };
+
+      handlePaymentCallback();
+    }, [])
+  );
 
   const handlePresetAmount = (value: number) => {
     const currentAmount = amount ? parseFloat(amount) : 0;
@@ -75,7 +206,7 @@ const FundScreen = () => {
       return;
     }
 
-    // Navigate to PaymentScreen with required data
+    const reference = `DEP_${uuidv4()}`;
     router.push({
       pathname: "/paystack",
       params: {
@@ -83,6 +214,7 @@ const FundScreen = () => {
         userEmail,
         userName,
         userId,
+        reference,
       },
     });
   };
@@ -138,8 +270,9 @@ const FundScreen = () => {
                 setAmount(text.replace(/[^0-9.]/g, ""));
                 setError("");
               }}
+              editable={!isLoading}
             />
-            {amount ? (
+            {amount && !isLoading ? (
               <Pressable
                 onPress={() => setAmount("")}
                 style={styles.clearButton}
@@ -164,7 +297,9 @@ const FundScreen = () => {
               style={({ pressed }) => [
                 styles.presetButton,
                 { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                isLoading && styles.disabledButton,
               ]}
+              disabled={isLoading}
             >
               <Text style={styles.presetText}>
                 ₦{value.toLocaleString()}
@@ -181,9 +316,12 @@ const FundScreen = () => {
         >
           <Pressable
             onPress={handleTopUp}
-            style={styles.fundButton}
+            style={[styles.fundButton, isLoading && styles.disabledButton]}
+            disabled={isLoading}
           >
-            <Text style={styles.fundButtonText}>Top Up Now</Text>
+            <Text style={styles.fundButtonText}>
+              {isLoading ? "Processing..." : "Top Up Now"}
+            </Text>
           </Pressable>
         </MotiView>
 
@@ -232,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 40, // Adjusted marginTop to 40 as requested
+    marginTop: 40,
   },
   title: {
     fontSize: 20,
@@ -347,6 +485,9 @@ const styles = StyleSheet.create({
     color: "#888",
     flex: 1,
     lineHeight: 20,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
 

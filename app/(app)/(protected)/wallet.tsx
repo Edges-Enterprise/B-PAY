@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -17,6 +16,7 @@ import { MotiView } from "moti";
 import { colors } from "@/constants/colors";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { supabase } from "@/config/supabase";
+import { usePurchaseHistory } from "@/hooks/useHomeScreenData";
 
 interface Transaction {
   type: string;
@@ -27,11 +27,10 @@ interface Transaction {
 
 interface Recommendation {
   id: string;
-  text: string;
-  price: number;
-  type: string;
-  data: string;
+  plan_name: string;
   provider: string;
+  price: number;
+  validity: string;
 }
 
 interface DataBundle {
@@ -59,22 +58,54 @@ interface ConfirmationParams {
   userEmail?: string;
   transactionPin?: string;
   source?: string;
+  networkId?: string;
+  planId?: string;
 }
 
 export default function WalletScreen() {
   const { colorScheme } = useColorScheme();
   const [showBalance, setShowBalance] = useState<boolean>(false);
   const [showTransactions, setShowTransactions] = useState<boolean>(false);
-  const [currentRecommendations, setCurrentRecommendations] = useState<Recommendation[]>([]);
   const [balance, setBalance] = useState<number>(0);
   const [userEmail, setUserEmail] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
   const [transactionPin, setTransactionPin] = useState<string>("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [preferredProvider, setPreferredProvider] = useState<string>("MTN");
   const [hasPriorPurchase, setHasPriorPurchase] = useState<boolean>(false);
   const [loadingBalance, setLoadingBalance] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Fetch recent purchases (all users, last 24 hours)
+  const {
+    data: purchaseHistory = [],
+    isLoading: isPurchaseHistoryLoading,
+    error: purchaseHistoryError,
+  } = usePurchaseHistory();
+
+  // Process purchase history into recommendations
+  const currentRecommendations: Recommendation[] = purchaseHistory.map((p, index) => {
+    const amountMatch = p.plan_name?.match(/₦(\d+)/);
+    return {
+      id: `${p.id}-${index}`,
+      plan_name: p.plan_name || "Unknown Plan",
+      provider: p.provider_name || getProviderFromPlan(p.plan_name || ""),
+      price: amountMatch ? parseInt(amountMatch[1], 10) + 50 : 350, // Add fees
+      validity: p.validity || "N/A",
+    };
+  });
+
+  console.log("Recommended Purchases (from purchase history):", currentRecommendations);
+
+  // Utility function to derive provider from plan name
+  const getProviderFromPlan = (plan: string): string => {
+    const planUpper = plan.toUpperCase();
+    if (planUpper.includes("MTN")) return "MTN";
+    if (planUpper.includes("GLO")) return "GLO";
+    if (planUpper.includes("AIRTEL")) return "AIRTEL";
+    if (planUpper.includes("9MOBILE") || planUpper.includes("ETISALAT"))
+      return "9MOBILE";
+    return "Unknown";
+  };
 
   // Function to fetch user and wallet data
   const fetchUserAndWallet = useCallback(async () => {
@@ -156,7 +187,7 @@ export default function WalletScreen() {
 
       await fetchTransactions();
 
-      // Fetch purchase history
+      // Check for prior purchases
       const { data: dataPurchases } = await supabase
         .from("data_purchases")
         .select("id")
@@ -181,46 +212,8 @@ export default function WalletScreen() {
           cablePurchases?.length > 0) &&
         !!user.user_metadata?.transaction_pin;
       setHasPriorPurchase(hasPurchases);
-
-      const { data: dataPurchasesFull, error: dataError } = await supabase
-        .from("data_purchases")
-        .select("provider_name")
-        .eq("user_email", user.email);
-
-      const { data: airtimePurchasesFull, error: airtimeError } = await supabase
-        .from("airtime_purchases")
-        .select("provider_name")
-        .eq("user_email", user.email);
-
-      const { data: cablePurchasesFull, error: cableError } = await supabase
-        .from("cable_purchases")
-        .select("provider")
-        .eq("user_id", user.id);
-
-      if (dataError || airtimeError || cableError) {
-        console.error("Error fetching purchases:", { dataError, airtimeError, cableError });
-      }
-
-      const allProviders = [
-        ...(dataPurchasesFull?.map((p) => p.provider_name) || []),
-        ...(airtimePurchasesFull?.map((p) => p.provider_name) || []),
-        ...(cablePurchasesFull?.map((p) => p.provider) || []),
-      ].filter(Boolean);
-
-      const providerCounts = allProviders.reduce(
-        (acc, provider) => {
-          acc[provider] = (acc[provider] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
-
-      const topProvider =
-        Object.entries(providerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "MTN";
-      setPreferredProvider(topProvider);
-      console.log("Preferred provider set:", topProvider);
     } catch (error) {
-      console.error("Error fetching wallet data or preferences:", error);
+      console.error("Error fetching wallet data:", error);
     } finally {
       setRefreshing(false);
     }
@@ -243,7 +236,6 @@ export default function WalletScreen() {
         async (payload) => {
           console.log('Wallet Balance Update:', payload);
           setBalance(payload.new.balance);
-          // Trigger immediate refresh on update
           await fetchUserAndWallet();
         }
       )
@@ -273,56 +265,6 @@ export default function WalletScreen() {
     };
   }, [fetchUserAndWallet, userEmail]);
 
-  useEffect(() => {
-    const fetchRecommendations = async () => {
-      if (!preferredProvider || !hasPriorPurchase) return;
-      try {
-        const today = new Date();
-        const isWeekend = today.getDay() >= 5 || today.getDay() === 0;
-        const isSunday = today.getDay() === 0;
-
-        const types = ["hot", "special"];
-        if (isWeekend) types.push("weekend");
-        if (isSunday) types.push("weekly");
-
-        const response = await fetch("https://ebenkdata.com/api/plans", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
-          },
-          body: JSON.stringify({
-            provider: preferredProvider,
-            types,
-          }),
-        });
-
-        const data = await response.json();
-        console.log("Recommendations response:", data);
-        if (data.status === "success" && Array.isArray(data.plans)) {
-          const recommendations: Recommendation[] = data.plans
-            .slice(0, 5)
-            .map((plan: any, index: number) => ({
-              id: `${plan.type}-${index}-${Date.now()}`,
-              text: `${preferredProvider} ${plan.data} ${plan.type.replace("_", " ")} plan`,
-              price: plan.amount + 50,
-              type: plan.type,
-              data: plan.data,
-              provider: preferredProvider,
-            }));
-          setCurrentRecommendations(recommendations);
-        }
-      } catch (error) {
-        console.error("Error fetching recommendations:", error);
-        setCurrentRecommendations([]);
-      }
-    };
-
-    fetchRecommendations();
-    const interval = setInterval(fetchRecommendations, 30000);
-    return () => clearInterval(interval);
-  }, [preferredProvider, hasPriorPurchase]);
-
   const formattedBalance: string = `₦${balance.toLocaleString("en-NG", {
     minimumFractionDigits: 2,
   })}`;
@@ -331,23 +273,23 @@ export default function WalletScreen() {
 
   const handleRecommendationPress = (rec: Recommendation) => {
     if (balance < rec.price) {
-      console.log("Insufficient balance for:", rec.text, "Price:", rec.price, "Balance:", balance);
+      console.log("Insufficient balance for:", rec.plan_name, "Price:", rec.price, "Balance:", balance);
       return;
     }
 
     const bundle: DataBundle = {
       id: Date.now(),
-      data: rec.data,
+      data: rec.plan_name,
       price: rec.price,
-      validity: "30 days",
+      validity: rec.validity,
       category: "Data",
-      description: "Data Bundle",
-      variation_code: `data_${rec.text.toLowerCase().replace(/\s/g, "_")}`,
+      description: rec.plan_name,
+      variation_code: `data_${rec.plan_name.toLowerCase().replace(/\s/g, "_")}`,
       planType: "Data Plan",
     };
 
     const provider: Provider = {
-      id: 1,
+      id: Date.now(),
       name: rec.provider,
       image: "",
       code: rec.provider.toLowerCase(),
@@ -363,6 +305,8 @@ export default function WalletScreen() {
       userEmail,
       transactionPin,
       source: "wallet",
+      networkId: "0", // Placeholder, adjust if available
+      planId: "0", // Placeholder, adjust if available
     };
 
     router.push({
@@ -577,43 +521,63 @@ export default function WalletScreen() {
                 >
                   💡 Recommended Purchases
                 </Text>
-                <View style={styles.recommendationsList}>
-                  {currentRecommendations.map((rec, index) => (
-                    <MotiView
-                      key={rec.id}
-                      from={{
-                        translateX: index % 2 === 0 ? -100 : 100,
-                        opacity: 0,
-                      }}
-                      animate={{ translateX: 0, opacity: 1 }}
-                      transition={{
-                        type: "timing",
-                        duration: 800,
-                        delay: index * 500,
-                      }}
-                      style={[
-                        styles.recommendationContainer,
-                        index % 2 === 0
-                          ? {
-                              alignSelf: "flex-start",
-                              backgroundColor: colorScheme === "dark" ? "#1e3a8a" : "#3b82f6",
-                            }
-                          : {
-                              alignSelf: "flex-end",
-                              backgroundColor: colorScheme === "dark" ? "#6d28d9" : "#8b5cf6",
-                            },
-                      ]}
-                    >
-                      <Pressable onPress={() => handleRecommendationPress(rec)}>
-                        <Text
-                          style={[styles.recommendationText, { color: "white" }]}
-                        >
-                          {rec.text} - ₦{rec.price}
-                        </Text>
-                      </Pressable>
-                    </MotiView>
-                  ))}
-                </View>
+                {isPurchaseHistoryLoading ? (
+                  <Text
+                    style={[
+                      styles.recommendationText,
+                      { color: colorScheme === "dark" ? "#9ca3af" : "#666" },
+                    ]}
+                  >
+                    Loading recommendations...
+                  </Text>
+                ) : currentRecommendations.length > 0 ? (
+                  <View style={styles.recommendationsList}>
+                    {currentRecommendations.map((rec, index) => (
+                      <MotiView
+                        key={rec.id}
+                        from={{
+                          translateX: index % 2 === 0 ? -100 : 100,
+                          opacity: 0,
+                        }}
+                        animate={{ translateX: 0, opacity: 1 }}
+                        transition={{
+                          type: "timing",
+                          duration: 800,
+                          delay: index * 500,
+                        }}
+                        style={[
+                          styles.recommendationContainer,
+                          index % 2 === 0
+                            ? {
+                                alignSelf: "flex-start",
+                                backgroundColor: colorScheme === "dark" ? "#1e3a8a" : "#3b82f6",
+                              }
+                            : {
+                                alignSelf: "flex-end",
+                                backgroundColor: colorScheme === "dark" ? "#6d28d9" : "#8b5cf6",
+                              },
+                        ]}
+                      >
+                        <Pressable onPress={() => handleRecommendationPress(rec)}>
+                          <Text
+                            style={[styles.recommendationText, { color: "white" }]}
+                          >
+                            {rec.plan_name} - ₦{rec.price}
+                          </Text>
+                        </Pressable>
+                      </MotiView>
+                    ))}
+                  </View>
+                ) : (
+                  <Text
+                    style={[
+                      styles.recommendationText,
+                      { color: colorScheme === "dark" ? "#9ca3af" : "#666" },
+                    ]}
+                  >
+                    No recent purchases found in the last 24 hours.
+                  </Text>
+                )}
               </>
             ) : (
               <Text

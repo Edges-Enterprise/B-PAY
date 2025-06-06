@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   TextInput,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -28,7 +29,7 @@ interface DataBundle {
   validity: string;
   category: string;
   description?: string;
-  variation_code: string;
+  variation_code?: string;
   planType: string;
 }
 
@@ -43,63 +44,102 @@ interface Provider {
   id: number;
   name: string;
   image: any;
-  code: string;
+  code?: string;
+  imageKey?: string;
 }
 
+const planCache: { [providerName: string]: DataBundle[] } = {};
+
 const BuyDataScreen: React.FC = () => {
-  const { provider: providerParam } = useLocalSearchParams();
-  let selectedProvider: Provider | null = null;
+  const { provider: providerData, networkId: providerNetworkId } = useLocalSearchParams<{
+    provider?: string;
+    networkId?: string;
+  }>();
 
-  try {
-    if (providerParam) {
-      const serializableProvider = JSON.parse(providerParam as string) as SerializableProvider;
-      selectedProvider = {
-        id: serializableProvider.id,
-        name: serializableProvider.name,
-        code: serializableProvider.code,
-        image: serializableProvider.imageKey !== "DEFAULT"
-          ? NETWORK_IMAGES[serializableProvider.imageKey as keyof typeof NETWORK_IMAGES]
-          : DEFAULT_PROVIDER_IMAGE,
-      };
-    }
-  } catch (error) {
-    console.error("Error parsing providerParam:", error);
-    Alert.alert("Error", "Invalid provider data");
-    router.back();
-    return null;
-  }
-
-  const [expandedCategory, setExpandedCategory] = useState<string>("Daily Plans");
-  const [selectedPlanType, setSelectedPlanType] = useState<string>("Gifting");
-  const [lastPurchasedNumber, setLastPurchasedNumber] = useState<string>("08012345678");
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
-  const [createPinModalVisible, setCreatePinModalVisible] = useState<boolean>(false);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [networkId, setNetworkId] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('Daily Plans');
+  const [activePlanType, setActivePlanType] = useState<string>('Gifting');
+  const [recentPhoneNumber, setRecentPhoneNumber] = useState<string>('08012345678');
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState<boolean>(false);
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState<boolean>(false);
+  const [isPinCreationModalOpen, setIsPinCreationModalOpen] = useState<boolean>(false);
   const [selectedBundle, setSelectedBundle] = useState<DataBundle | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState<string>("");
-  const [transactionPin, setTransactionPin] = useState<string>("");
-  const [networkProvider, setNetworkProvider] = useState<string>("");
-  const [transactionStatus, setTransactionStatus] = useState<"processing" | "success" | "failed">("processing");
-  const [showTransactionPin, setShowTransactionPin] = useState<boolean>(false);
-  const [hasTransactionPin, setHasTransactionPin] = useState<boolean>(false); // Default to false
-  const [newPin, setNewPin] = useState<string>("");
-  const [confirmPin, setConfirmPin] = useState<string>("");
-  const [showNewPin, setShowNewPin] = useState<boolean>(false);
-  const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
-  const [lastPurchasedBundle, setLastPurchasedBundle] = useState<DataBundle | null>(null);
-  const [lastPurchaseTime, setLastPurchaseTime] = useState<string | null>(null);
-  const [balance, setBalance] = useState<number>(0);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [bundles, setBundles] = useState<DataBundle[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [referenceId, setReferenceId] = useState<string>("");
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [phoneNumberInput, setPhoneNumberInput] = useState<string>('');
+  const [transactionPinInput, setTransactionPinInput] = useState<string>('');
+  const [detectedNetwork, setDetectedNetwork] = useState<string>('');
+  const [transactionState, setTransactionState] = useState<'processing' | 'success' | 'failed'>('processing');
+  const [isTransactionPinVisible, setIsTransactionPinVisible] = useState<boolean>(false);
+  const [hasPin, setHasPin] = useState<boolean>(false);
+  const [newPinInput, setNewPinInput] = useState<string>('');
+  const [confirmPinInput, setConfirmPinInput] = useState<string>('');
+  const [isNewPinVisible, setIsNewPinVisible] = useState<boolean>(false);
+  const [isConfirmPinVisible, setIsConfirmPinVisible] = useState<boolean>(false);
+  const [recentBundle, setRecentBundle] = useState<DataBundle | null>(null);
+  const [recentPurchaseDate, setRecentPurchaseDate] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [userEmailAddress, setUserEmailAddress] = useState<string>('');
+  const [dataBundles, setDataBundles] = useState<DataBundle[]>([]);
+  const [bundleCategories, setBundleCategories] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [transactionReference, setTransactionReference] = useState<string>('');
+  const animationScale = useRef(new Animated.Value(1)).current;
+  const pinVerified = useRef<boolean>(false);
 
-  // Check if user has a transaction PIN
-  const checkTransactionPin = async (email: string) => {
+  useEffect(() => {
+    try {
+      let provider: Provider | null = null;
+      let id: number | null = null;
+      if (providerData) {
+        const parsedProvider = JSON.parse(providerData as string) as SerializableProvider;
+        if (!parsedProvider.id || !parsedProvider.name || !parsedProvider.code || !parsedProvider.imageKey) {
+          throw new Error('Invalid provider data');
+        }
+        provider = {
+          id: parsedProvider.id,
+          name: parsedProvider.name,
+          code: parsedProvider.code,
+          image: parsedProvider.imageKey !== 'DEFAULT'
+            ? NETWORK_IMAGES[parsedProvider.imageKey as keyof typeof NETWORK_IMAGES]
+            : DEFAULT_PROVIDER_IMAGE,
+          imageKey: parsedProvider.imageKey,
+        };
+      } else {
+        throw new Error('No provider data provided');
+      }
+      if (providerNetworkId) {
+        id = parseInt(providerNetworkId, 10);
+        if (isNaN(id)) {
+          throw new Error('Invalid network ID');
+        }
+        console.log('Received networkId:', id);
+      } else {
+        throw new Error('No networkId provided');
+      }
+      setSelectedProvider(provider);
+      setNetworkId(id);
+    } catch (error) {
+      console.error('Error processing providerData or networkId:', error);
+      Alert.alert('Error', 'Invalid provider or network information');
+      router.back();
+    }
+  }, [providerData, providerNetworkId]);
+
+  const updateHasPin = useCallback((value: boolean) => {
+    if (!pinVerified.current || value) {
+      console.log('Updating hasPin to:', value, { timestamp: Date.now() });
+      setHasPin(value);
+      if (value) {
+        pinVerified.current = true;
+      }
+    } else {
+      console.log('Skipping hasPin update, already verified:', hasPin, { timestamp: Date.now() });
+    }
+  }, []);
+
+  const verifyTransactionPin = useCallback(async (email: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -107,692 +147,726 @@ const BuyDataScreen: React.FC = () => {
         .eq('email', email)
         .single();
 
-      console.log('Check PIN Result:', { email, data, error });
-
       if (error) {
         if (error.code === 'PGRST116') {
-          // No profile exists
-          setHasTransactionPin(false);
+          console.log('No profile found for email:', email, { timestamp: Date.now() });
           return false;
         }
         throw error;
       }
 
-      setHasTransactionPin(!!data?.transaction_pin);
-      return !!data?.transaction_pin;
+      const pinExists = !!data?.transaction_pin;
+      console.log('Verified PIN exists:', pinExists, { timestamp: Date.now() });
+      return pinExists;
     } catch (error) {
-      console.error('Error checking transaction PIN:', error);
-      Alert.alert('Error', 'Failed to verify profile. Please try again.');
+      console.error('PIN Check Error:', error);
+      Alert.alert('Error', 'Unable to verify PIN. Please retry.');
       return false;
     }
-  };
+  }, []);
 
-  // Generate referenceId
-  const generateReferenceId = async () => {
+  const createTransactionReference = async () => {
     try {
-      console.log("Generating referenceId");
       const { data: { user }, error } = await supabase.auth.getUser();
-      console.log("Supabase auth response:", { user, error });
       if (error || !user || !user.id) {
-        throw new Error("User not authenticated or UUID missing");
+        throw new Error('Authentication failed or user ID missing');
       }
-      const newReferenceId = `Edges_Network_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      console.log("Reference ID generated:", newReferenceId);
-      return newReferenceId;
+
+      const reference = `Edges_Network_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      return reference;
     } catch (error) {
-      console.error("Error generating referenceId:", error);
-      Alert.alert("Error", "Failed to generate transaction reference");
+      console.error('Reference Creation Error:', error);
+      Alert.alert('Error', 'Unable to generate transaction reference');
       throw error;
     }
   };
 
-  // Format number with commas
   const formatNumberWithCommas = (number: number): string => {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  // Parse search query to extract data amount, validity, and plan type
-  const parseSearchQuery = (query: string) => {
-    const normalizedQuery = query.toLowerCase().trim();
-    const dataMatch = normalizedQuery.match(/(\d*\.?\d*)\s*(gb|mb)/i);
-    const validityMatch = normalizedQuery.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
-    const planTypeMatch = normalizedQuery.match(/(sme|gifting|corporate)/i);
+  const parseSearchInput = (input: string) => {
+    const normalized = input.toLowerCase().trim();
+    const dataMatch = normalized.match(/(\d*\.?\d*)\s*(gb|mb)/i);
+    const validityMatch = normalized.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
+    const planMatch = normalized.match(/(sme|gifting|corporate)/i);
 
     return {
       dataAmount: dataMatch ? parseFloat(dataMatch[1]) : null,
       dataUnit: dataMatch ? dataMatch[2].toUpperCase() : null,
       validityDays: validityMatch ? parseInt(validityMatch[1], 10) : null,
       validityUnit: validityMatch ? validityMatch[2].toLowerCase() : null,
-      planType: planTypeMatch ? planTypeMatch[1].toLowerCase() : null,
+      planType: planMatch ? planMatch[1].toLowerCase() : null,
     };
   };
 
-  // Filter bundles based on search query
-  const filterBundlesBySearch = (query: string) => {
+  const searchBundles = (query: string) => {
     if (!query) return null;
-
-    const { dataAmount, dataUnit, validityDays, validityUnit, planType } = parseSearchQuery(query);
-    return bundles
+    const { dataAmount, dataUnit, validityDays, validityUnit, planType } = parseSearchInput(query);
+    return dataBundles
       .filter((bundle) => {
-        let matches = true;
-
+        let isMatch = true;
         if (dataAmount && dataUnit) {
-          const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
-          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-          const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-          const searchDataInMB = dataUnit === "GB" ? dataAmount * 1000 : dataAmount;
-          matches = matches && Math.abs(bundleDataInMB - searchDataInMB) <= searchDataInMB * 0.2;
+          const bundleData = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
+          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
+          const bundleMB = bundleUnit === 'GB' ? bundleData * 1000 : bundleData;
+          const searchMB = dataUnit === 'GB' ? dataAmount * 1000 : dataAmount;
+          isMatch = isMatch && Math.abs(bundleMB - searchMB) <= searchMB * 0.2;
         }
-
-        if (validityDays && validityUnit) {
+        if (isMatch && validityDays && validityUnit) {
           const bundleDaysMatch = bundle.validity.match(/\d+/);
           const bundleDays = bundleDaysMatch ? parseInt(bundleDaysMatch[0], 10) : 0;
-          const bundleValidityLower = bundle.validity.toLowerCase();
-
-          if (validityUnit.includes("day")) {
+          const validityLower = bundle.validity.toLowerCase();
+          if (validityUnit.includes('day')) {
             if (validityDays <= 3) {
-              matches = matches && bundle.category === "Daily Plans";
+              isMatch = isMatch && bundle.category === 'Daily Plans';
             } else if (validityDays <= 14) {
-              matches = matches && bundle.category === "Weekly Plans";
+              isMatch = isMatch && bundle.category === 'Weekly Plans';
             } else {
-              matches = matches && bundle.category === "Monthly Plans";
+              isMatch = isMatch && bundle.category === 'Monthly Plans';
             }
-            matches = matches && Math.abs(bundleDays - validityDays) <= validityDays * 0.2;
-          } else if (validityUnit.includes("week")) {
+            isMatch = isMatch && Math.abs(bundleDays - validityDays) <= validityDays * 0.2;
+          } else if (validityUnit.includes('week')) {
             const searchDays = validityDays * 7;
-            matches = matches && bundle.category === "Weekly Plans";
-            matches = matches && Math.abs(bundleDays - searchDays) <= searchDays * 0.2;
-          } else if (validityUnit.includes("month")) {
+            isMatch = isMatch && bundle.category === 'Weekly Plans';
+            isMatch = isMatch && Math.abs(bundleDays - searchDays) <= searchDays * 0.2;
+          } else if (validityUnit.includes('month')) {
             const searchDays = validityDays * 30;
-            matches = matches && bundle.category === "Monthly Plans";
-            matches = matches && (
+            isMatch = isMatch && bundle.category === 'Monthly Plans';
+            isMatch = isMatch && (
               bundleDays === searchDays ||
-              bundleValidityLower.includes(`${validityDays} month`) ||
-              bundleValidityLower.includes(`${searchDays} days`)
+              validityLower.includes(`${validityDays} month`) ||
+              validityLower.includes(`${searchDays} days`)
             );
           }
         }
-
         if (planType) {
-          matches = matches && bundle.planType.toLowerCase() === planType;
+          isMatch = isMatch && bundle.planType.toLowerCase() === planType;
         } else {
-          matches = matches && bundle.planType.toLowerCase() === selectedPlanType.toLowerCase();
+          isMatch = isMatch && bundle.planType.toLowerCase() === activePlanType.toLowerCase();
         }
-
-        return matches;
+        return isMatch;
       })
       .sort((a, b) => a.price - b.price);
   };
 
-  // Get available plan types for the current expandedCategory
-  const availablePlanTypes = useMemo(() => {
-    if (searchQuery) {
-      const searchResults = filterBundlesBySearch(searchQuery);
-      if (searchResults) {
-        return Array.from(new Set(searchResults.map((bundle) => bundle.planType))).sort();
-      }
-      return ["SME", "Gifting", "Corporate"];
-    }
-
-    if (!bundles || !Array.isArray(bundles)) {
+  const planTypeOptions = useMemo(() => {
+    if (!dataBundles || !Array.isArray(dataBundles)) {
       return [];
     }
-
-    if (expandedCategory === "Hot" && lastPurchasedBundle) {
-      const hotBundles = bundles.filter((bundle) => {
+    if (searchTerm) {
+      const results = searchBundles(searchTerm);
+      if (results) {
+        return Array.from(new Set(results.map((bundle) => bundle.planType))).sort();
+      }
+      return [];
+    }
+    if (activeCategory === 'Hot' && recentBundle) {
+      const hotBundles = dataBundles.filter((bundle) => {
         try {
-          const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
-          const isSameCategory = bundle.category === lastPurchasedBundle.category;
-          const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
-          const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
-          const lastDataInMB = lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
-          const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
-          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-          const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-          const isSimilarDataAmount = bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
-          return isSamePlanType && isSameCategory && isSimilarDataAmount;
+          const samePlanType = bundle.planType === recentBundle.planType;
+          const sameCategory = bundle.category === recentBundle.category;
+          const recentData = parseFloat(recentBundle.data.match(/[\d.]+/)?.[0] || '0');
+          const recentUnit = recentBundle.data.match(/[MG]B/)?.[0] || '';
+          const recentMB = recentUnit === 'GB' ? recentData * 1000 : recentData;
+          const bundleData = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
+          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
+          const bundleMB = bundleUnit === 'GB' ? bundleData * 1000 : bundleData;
+          const similarData = bundleMB >= recentMB * 0.5 && bundleMB <= recentMB * 1.5;
+          return samePlanType && sameCategory && similarData;
         } catch (error) {
-          console.error("Error processing bundle:", bundle, error);
+          console.error('Bundle Processing Error:', bundle, error);
           return false;
         }
       });
       return Array.from(new Set(hotBundles.map((bundle) => bundle.planType))).sort();
     }
-
     return Array.from(
-      new Set(bundles.filter((bundle) => bundle.category === expandedCategory).map((bundle) => bundle.planType))
+      new Set(dataBundles
+        .filter((bundle) => bundle.category === activeCategory)
+        .map((bundle) => bundle.planType))
     ).sort();
-  }, [bundles, expandedCategory, searchQuery, lastPurchasedBundle]);
-
-  // Fetch user data, wallet balance, provider data plans, last purchased bundle, and check PIN
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!selectedProvider) {
-        setError("No provider selected");
-        setLoading(false);
-        router.back();
-        return;
-      }
-
-      try {
-        // Fetch user and wallet balance
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user || !user.email) {
-          throw new Error("User not authenticated or email missing");
-        }
-
-        setUserEmail(user.email);
-
-        // Check if user has a transaction PIN
-        await checkTransactionPin(user.email);
-
-        const { data: wallet, error: walletError } = await supabase
-          .from("wallets")
-          .select("balance")
-          .eq("user_email", user.email)
-          .single();
-
-        if (walletError && walletError.code !== "PGRST116") {
-          throw walletError;
-        }
-
-        const newBalance = wallet?.balance || 0;
-        console.log('Fetched Wallet Balance:', { balance: newBalance, userEmail: user.email });
-        setBalance(newBalance);
-
-        // Set up real-time subscription for wallet balance
-        const subscription = supabase
-          .channel(`wallet-changes:${user.email}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'wallets',
-              filter: `user_email=eq.${user.email}`,
-            },
-            (payload) => {
-              console.log('Real-time Wallet Balance Update:', payload);
-              setBalance(payload.new.balance);
-            }
-          )
-          .subscribe();
-
-        // Fetch last purchased bundle for the phone number
-        const { data: transactions, error: txError } = await supabase
-          .from("transactions")
-          .select("metadata, created_at")
-          .eq("user_email", user.email)
-          .eq("status", "success")
-          .eq("metadata->>phone_number", lastPurchasedNumber)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (txError && txError.code !== "PGRST116") {
-          console.warn("No previous transactions found or error:", txError);
-        }
-
-        if (transactions?.metadata) {
-          const { purchase, validity } = transactions.metadata;
-          const match = purchase.match(/(.+?) on/);
-          const data = match ? match[1].trim() : purchase;
-          setLastPurchasedBundle({
-            id: 0,
-            data,
-            price: 0,
-            validity,
-            category: "",
-            variation_code: "",
-            planType: "",
-          });
-          setLastPurchaseTime(transactions.created_at);
-        }
-
-        // Fetch data plans from ebenkdata.com API
-        const response = await fetch("https://ebenkdata.com/api/network/", {
-          headers: {
-            Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch data plans: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const providerKey = `${selectedProvider.name}_PLAN`;
-        const plans = data[providerKey];
-
-        if (!Array.isArray(plans) || plans.length === 0) {
-          throw new Error(`No plans found for ${selectedProvider.name}`);
-        }
-
-        const fetchedBundles: DataBundle[] = plans.map((plan: any) => {
-          const dataAmount = plan.plan || "Unknown";
-          let validity = plan.month_validate || "Not Specified";
-          let category = "";
-
-          if (
-            validity.toLowerCase().includes("saturday") ||
-            validity.toLowerCase().includes("sunday") ||
-            plan.plan.toLowerCase().includes("weekend")
-          ) {
-            category = "Weekend Plans";
-            validity = "Weekend";
-          } else if (
-            validity.toLowerCase().includes("night") ||
-            plan.plan.toLowerCase().includes("night")
-          ) {
-            category = "Night Plans";
-            validity = "11 PM - 5 AM";
-          } else if (plan.plan.toLowerCase().includes("unlimited")) {
-            category = "Unlimited Plans";
-          } else {
-            const daysMatch = validity.match(/\d+/);
-            const days = daysMatch ? parseInt(daysMatch[0], 10) : 0;
-            if (
-              validity.toLowerCase().includes("month") ||
-              validity.toLowerCase().includes("months") ||
-              validity.toLowerCase().includes("30 days") ||
-              validity.toLowerCase().includes("30days") ||
-              days >= 30
-            ) {
-              category = "Monthly Plans";
-            } else if (
-              ["24 hrs", "48 hrs", "72 hrs"].includes(validity) ||
-              days <= 3
-            ) {
-              category = "Daily Plans";
-            } else if (days >= 5 && days <= 14) {
-              category = "Weekly Plans";
-            } else {
-              category = "Monthly Plans";
-            }
-          }
-
-          const planType = plan.plan_type || "Standard";
-
-          return {
-            id: plan.id,
-            data: dataAmount,
-            price: parseFloat(plan.plan_amount) + 50,
-            validity,
-            category,
-            description: plan.plan,
-            variation_code: plan.dataplan_id,
-            planType,
-          };
-        });
-
-        setBundles(fetchedBundles);
-
-        const uniqueCategories = Array.from(new Set(fetchedBundles.map((bundle) => bundle.category)));
-        const categoryOrder = ["Daily Plans", "Weekly Plans", "Monthly Plans", "Weekend Plans", "Night Plans", "Unlimited Plans"];
-        uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
-
-        let finalCategories = uniqueCategories;
-        if (lastPurchasedBundle && lastPurchaseTime) {
-          const purchaseDate = new Date(lastPurchaseTime);
-          const currentTime = new Date();
-          const hoursDiff = (currentTime.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60);
-          const dataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
-          const unit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
-          const dataInGB = unit === "GB" ? dataValue : dataValue / 1000;
-
-          if (dataInGB >= 5 && hoursDiff <= 6) {
-            finalCategories = ["Hot", ...uniqueCategories];
-          }
-        }
-
-        setCategories(finalCategories);
-
-        return () => {
-          supabase.removeChannel(subscription);
-        };
-      } catch (error: any) {
-        console.error("Error fetching data:", error);
-        setError(`Failed to load ${selectedProvider?.name || "provider"} data plans or wallet balance.`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [selectedProvider, lastPurchasedNumber]);
-
-  const getProviderFromPhone = (phone: string): string => {
-    const prefix = phone.slice(0, 4);
-    const mtn = ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"];
-    const glo = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
-    const airtel = ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"];
-    const nineMobile = ["0809", "0817", "0818", "0909", "0908"];
-
-    if (mtn.includes(prefix)) return "MTN";
-    if (glo.includes(prefix)) return "GLO";
-    if (airtel.includes(prefix)) return "AIRTEL";
-    if (nineMobile.includes(prefix)) return "9MOBILE";
-    return "";
-  };
+  }, [dataBundles, activeCategory, searchTerm, recentBundle]);
 
   useEffect(() => {
-    if (phoneNumber.length === 11 && selectedProvider) {
-      const detectedProvider = getProviderFromPhone(phoneNumber);
-      setNetworkProvider(detectedProvider === selectedProvider.name ? detectedProvider : "");
-    } else {
-      setNetworkProvider("");
+    if (planTypeOptions.length > 0 && !planTypeOptions.includes(activePlanType)) {
+      // Prioritize 'Gifting' if available, otherwise select the first available plan type
+      const defaultPlanType = planTypeOptions.includes('Gifting') ? 'Gifting' : planTypeOptions[0];
+      setActivePlanType(defaultPlanType);
+      console.log('Setting default plan type:', defaultPlanType, { available: planTypeOptions });
     }
-  }, [phoneNumber, selectedProvider]);
+  }, [planTypeOptions]);
 
-  const handleContinue = async () => {
-    if (!selectedBundle || !selectedProvider) {
-      Alert.alert("Error", "No bundle or provider selected");
+  const loadData = async () => {
+    if (!selectedProvider || !networkId) {
+      setErrorMessage('Missing provider or network ID');
+      setIsLoading(false);
+      router.back();
       return;
     }
 
-    if (phoneNumber.length !== 11 || !/^\d{11}$/.test(phoneNumber)) {
-      Alert.alert("Error", "Please enter a valid 11-digit phone number");
-      return;
-    }
-
-    if (!hasTransactionPin) {
-      Alert.alert("Error", "Please create a transaction PIN first");
-      setCreatePinModalVisible(true);
-      return;
-    }
-
-    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-      Alert.alert("Error", "Please enter a transaction PIN between 4 and 6 digits");
-      return;
-    }
-
-    if (!referenceId) {
-      Alert.alert("Error", "Transaction reference not generated");
-      return;
-    }
-
-    if (!userEmail) {
-      Alert.alert("Error", "User not authenticated");
+    const cacheKey = selectedProvider.name.toUpperCase();
+    if (planCache[cacheKey]) {
+      setDataBundles(planCache[cacheKey]);
+      setBundleCategories(
+        Array.from(new Set(planCache[cacheKey].map((bundle) => bundle.category))).sort(
+          (a, b) =>
+            ['Daily Plans', 'Weekly Plans', 'Monthly Plans', 'Weekend Plans', 'Night Plans', 'Unlimited Plans'].indexOf(a) -
+            ['Daily Plans', 'Weekly Plans', 'Monthly Plans', 'Weekend Plans', 'Night Plans', 'Unlimited Plans'].indexOf(b)
+        )
+      );
+      setIsLoading(false);
       return;
     }
 
     try {
-      // Verify transaction PIN
-      const { data: userData, error: pinError } = await supabase
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || !user.email) {
+        throw new Error('User authentication failed or email missing');
+      }
+
+      setUserEmailAddress(user.email);
+
+      if (!pinVerified.current) {
+        const pinExists = await verifyTransactionPin(user.email);
+        updateHasPin(pinExists);
+      }
+
+      let walletData = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        try {
+          const { data, error } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('user_email', user.email)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('Wallet fetch error:', error);
+            throw error;
+          }
+
+          walletData = data;
+          break;
+        } catch (error) {
+          attempts++;
+          if (attempts === maxAttempts) {
+            console.error('Failed to fetch wallet balance after retries:', error);
+            throw new Error('Unable to fetch wallet balance');
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      const currentBalance = walletData?.balance ?? 0;
+      setWalletBalance(currentBalance);
+
+      const subscription = supabase
+        .channel(`wallet-updates:${user.email}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'wallets',
+            filter: `user_email=eq.${user.email}`,
+          },
+          (payload) => {
+            setWalletBalance(payload.new.balance ?? 0);
+          }
+        )
+        .subscribe((status, err) => {
+          if (err) {
+            console.error('Subscription error:', err);
+          }
+        });
+
+      const response = await fetch('https://ebenkdata.com/api/network/', {
+        headers: {
+          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
+        },
+      });
+
+      const rawData = await response.text();
+      let parsedData;
+      try {
+        parsedData = JSON.parse(rawData);
+      } catch (parseError) {
+        throw new Error(`Unable to parse API response: ${rawData.slice(0, 100)}...`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} - ${rawData.slice(0, 100)}...`);
+      }
+
+      const providerKey = `${selectedProvider.name.toUpperCase()}_PLAN`;
+      const plans = parsedData[providerKey];
+
+      if (!Array.isArray(plans) || plans.length === 0) {
+        throw new Error(`No plans available for ${selectedProvider.name}`);
+      }
+
+      const bundles: DataBundle[] = plans.map((plan: any) => {
+        const dataAmount = plan.plan || 'Unknown';
+        let validity = plan.month_validate || 'Not Specified';
+        let category = '';
+
+        if (
+          validity.toLowerCase().includes('saturday') ||
+          validity.toLowerCase().includes('sunday') ||
+          plan.plan.toLowerCase().includes('weekend')
+        ) {
+          category = 'Weekend Plans';
+          validity = 'Weekend';
+        } else if (
+          validity.toLowerCase().includes('night') ||
+          plan.plan.toLowerCase().includes('night')
+        ) {
+          category = 'Night Plans';
+          validity = '11 PM - 5 AM';
+        } else if (plan.plan.toLowerCase().includes('unlimited')) {
+          category = 'Unlimited Plans';
+        } else {
+          const daysMatch = validity.match(/\d+/);
+          const days = daysMatch ? parseInt(daysMatch[0], 10) : 0;
+          if (
+            validity.toLowerCase().includes('month') ||
+            validity.toLowerCase().includes('months') ||
+            validity.toLowerCase().includes('30 days') ||
+            validity.toLowerCase().includes('30days') ||
+            days >= 30
+          ) {
+            category = 'Monthly Plans';
+          } else if (
+            ['24 hrs', '48 hrs', '72 hrs'].includes(validity) ||
+            days <= 3
+          ) {
+            category = 'Daily Plans';
+          } else if (days >= 5 && days <= 14) {
+            category = 'Weekly Plans';
+          } else {
+            category = 'Monthly Plans';
+          }
+        }
+
+        const planType = plan.plan_type || 'Standard';
+
+        return {
+          id: plan.id,
+          data: dataAmount,
+          price: parseFloat(plan.plan_amount) + 50,
+          validity,
+          category,
+          description: plan.plan,
+          variation_code: plan.dataplan_id,
+          planType,
+        };
+      });
+
+      planCache[cacheKey] = bundles;
+      setDataBundles(bundles);
+
+      const uniqueCategories = Array.from(new Set(bundles.map((bundle) => bundle.category)));
+      const categoryOrder = [
+        'Daily Plans',
+        'Weekly Plans',
+        'Monthly Plans',
+        'Weekend Plans',
+        'Night Plans',
+        'Unlimited Plans',
+      ];
+      uniqueCategories.sort((a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b));
+      let finalCategories = uniqueCategories;
+
+      if (recentBundle && recentPurchaseDate) {
+        const purchaseTime = new Date(recentPurchaseDate);
+        const now = new Date();
+        const hoursSincePurchase = (now.getTime() - purchaseTime.getTime()) / (1000 * 60 * 60);
+        const dataValue = parseFloat(recentBundle.data.match(/[\d.]+/)?.[0] || '0');
+        const unit = recentBundle.data.match(/[MG]B/)?.[0] || '';
+        const dataInGB = unit === 'GB' ? dataValue : dataValue / 1000;
+
+        if (dataInGB >= 5 && hoursSincePurchase <= 6) {
+          finalCategories = ['Hot', ...uniqueCategories];
+        }
+      }
+
+      setBundleCategories(finalCategories);
+
+      // Set initial plan type based on availability
+      const availablePlanTypes = Array.from(new Set(bundles.map((bundle) => bundle.planType))).sort();
+      if (availablePlanTypes.length > 0) {
+        const defaultPlanType = availablePlanTypes.includes('Gifting') ? 'Gifting' : availablePlanTypes[0];
+        setActivePlanType(defaultPlanType);
+        console.log('Initial plan type set:', defaultPlanType, { available: availablePlanTypes });
+      }
+
+      return () => {
+        supabase.removeChannel(subscription);
+      };
+    } catch (error: any) {
+      console.error('Data Fetch Error:', error.message);
+      setErrorMessage(
+        `Unable to load ${selectedProvider?.name || 'provider'} data plans or wallet balance: ${error.message}`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (selectedProvider && networkId) {
+      loadData().then(() => {
+        if (mounted) {
+          console.log('loadData completed, hasPin:', hasPin, { timestamp: Date.now() });
+        }
+      });
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedProvider, networkId]);
+
+  useEffect(() => {
+    console.log('hasPin state changed:', hasPin, { timestamp: Date.now() });
+  }, [hasPin]);
+
+  const detectProviderFromNumber = (phone: string): string => {
+    if (phone.length !== 11) return '';
+    const prefix = phone.slice(0, 4);
+    const mtnPrefixes = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
+    const gloPrefixes = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
+    const airtelPrefixes = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
+    const nineMobilePrefixes = ['0809', '0817', '0818', '0909', '0908'];
+
+    if (mtnPrefixes.includes(prefix)) return 'MTN';
+    if (gloPrefixes.includes(prefix)) return 'GLO';
+    if (airtelPrefixes.includes(prefix)) return 'AIRTEL';
+    if (nineMobilePrefixes.includes(prefix)) return '9MOBILE';
+    return '';
+  };
+
+  useEffect(() => {
+    if (phoneNumberInput.length === 11 && selectedProvider) {
+      const provider = detectProviderFromNumber(phoneNumberInput);
+      setDetectedNetwork(provider === selectedProvider.name ? provider : '');
+    } else {
+      setDetectedNetwork('');
+    }
+  }, [phoneNumberInput, selectedProvider]);
+
+  const handleProceed = async () => {
+    if (!selectedBundle) {
+      Alert.alert('Error', 'No plan selected');
+      return;
+    }
+    if (!selectedProvider) {
+      Alert.alert('Error', 'No provider selected');
+      return;
+    }
+    if (!networkId) {
+      Alert.alert('Error', 'Network ID missing');
+      return;
+    }
+    if (!phoneNumberInput || phoneNumberInput.length !== 11 || !/^\d{11}$/.test(phoneNumberInput)) {
+      Alert.alert('Error', 'Enter a valid 11-digit phone number');
+      return;
+    }
+    if (!hasPin) {
+      Alert.alert('Error', 'Create a transaction PIN first');
+      setIsPinCreationModalOpen(true);
+      return;
+    }
+    if (!transactionPinInput || transactionPinInput.length < 4 || transactionPinInput.length > 6 || !/^\d+$/.test(transactionPinInput)) {
+      Alert.alert('Error', 'Enter a PIN between 4 and 6 digits');
+      return;
+    }
+    if (!userEmailAddress) {
+      Alert.alert('Error', 'User authentication missing');
+      return;
+    }
+    if (walletBalance === null) {
+      Alert.alert('Error', 'Wallet balance not loaded');
+      return;
+    }
+    if (selectedBundle.price > walletBalance) {
+      Alert.alert('Error', `Insufficient balance. Required: ₦${formatNumberWithCommas(selectedBundle.price)}, Available: ₦${formatNumberWithCommas(walletBalance)}`);
+      return;
+    }
+    if (detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
+      Alert.alert('Error', `Phone number does not match the selected provider (${selectedProvider.name})`);
+      return;
+    }
+
+    try {
+      const { data: profileData, error: pinError } = await supabase
         .from('profiles')
         .select('transaction_pin')
-        .eq('email', userEmail)
+        .eq('email', userEmailAddress)
         .single();
 
-      console.log('PIN Verification Result:', { userEmail, transactionPin, userData, pinError });
-
       if (pinError) {
-        console.error('PIN verification error:', pinError);
+        console.error('PIN Error:', pinError);
         if (pinError.code === 'PGRST116') {
-          Alert.alert('Error', 'No profile found. Please create a transaction PIN.');
-          setCreatePinModalVisible(true);
-        } else if (pinError.code === '42703') {
-          Alert.alert('Error', 'Profile table is missing transaction_pin column. Please contact support.');
-        } else if (pinError.code === '42P01') {
-          Alert.alert('Error', 'Profile table not found. Please contact support.');
+          Alert.alert('Error', 'Profile not found. Create a transaction PIN.');
+          setIsPinCreationModalOpen(true);
         } else {
-          Alert.alert('Error', 'Failed to verify PIN.');
+          Alert.alert('Error', 'PIN verification failed.');
         }
         return;
       }
 
-      if (!userData) {
-        console.log('No profile found for email:', userEmail);
-        Alert.alert('Error', 'Profile not found. Please create a transaction PIN.');
-        setCreatePinModalVisible(true);
+      if (!profileData || !profileData.transaction_pin) {
+        Alert.alert('Error', 'No PIN set. Create a transaction PIN.');
+        setIsPinCreationModalOpen(true);
         return;
       }
 
-      if (!userData.transaction_pin) {
-        console.log('No transaction PIN set for user:', { userEmail, userData });
-        Alert.alert('Error', 'No PIN set. Please create a transaction PIN.');
-        setCreatePinModalVisible(true);
+      if (profileData.transaction_pin !== transactionPinInput) {
+        Alert.alert('Error', 'Incorrect PIN');
         return;
       }
 
-      if (userData.transaction_pin !== transactionPin) {
-        console.log('PIN mismatch:', { storedPin: userData.transaction_pin, providedPin: transactionPin });
-        Alert.alert('Error', 'Invalid PIN');
-        return;
-      }
+      const reference = await createTransactionReference();
+      setTransactionReference(reference);
 
-      // Navigate to confirmation page
-      console.log("Navigating to confirmation with referenceId:", referenceId, "and balance:", balance);
       router.push({
-        pathname: "/Confirmation",
+        pathname: '/Confirmation',
         params: {
           bundle: JSON.stringify(selectedBundle),
           provider: JSON.stringify({
             id: selectedProvider.id,
             name: selectedProvider.name,
             code: selectedProvider.code,
-            image: selectedProvider.imageKey || "DEFAULT",
+            imageKey: selectedProvider.imageKey || 'DEFAULT',
           }),
-          phoneNumber,
-          transactionPin,
-          userEmail,
-          referenceId,
-          balance: balance.toString(),
+          phoneNumber: phoneNumberInput,
+          transactionPin: transactionPinInput,
+          userEmail: userEmailAddress,
+          referenceId: reference,
+          balance: walletBalance.toString(),
+          networkId: networkId.toString(),
+          planId: selectedBundle.id.toString(),
         },
       });
-      setModalVisible(false);
+
+      setIsPurchaseModalOpen(false);
     } catch (error) {
-      console.error('Error verifying PIN:', error);
-      Alert.alert('Error', 'Failed to verify PIN. Please try again.');
+      console.error('PIN Verification Error:', error);
+      Alert.alert('Error', 'Unable to verify PIN or generate reference. Please retry.');
     }
   };
 
-  const closeTransactionModal = () => {
-    setTransactionModalVisible(false);
-    setPhoneNumber("");
-    setTransactionPin("");
-    setSelectedBundle(null);
-    setNetworkProvider("");
-    setTransactionStatus("processing");
-    setReferenceId("");
-  };
-
-  const closePurchaseModal = () => {
-    setModalVisible(false);
-    setPhoneNumber("");
-    setTransactionPin("");
-    setSelectedBundle(null);
-    setNetworkProvider("");
-    setReferenceId("");
-  };
-
-  const closeCreatePinModal = () => {
-    setCreatePinModalVisible(false);
-    setNewPin("");
-    setConfirmPin("");
-  };
-
-  const handleCreatePin = async () => {
-    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
-      Alert.alert("Error", "PIN must be between 4 and 6 digits.");
+  const savePin = async () => {
+    if (newPinInput.length < 4 || newPinInput.length > 6 || confirmPinInput.length < 4 || confirmPinInput.length > 6) {
+      Alert.alert('Error', 'PIN must be 4-6 digits.');
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      Alert.alert('Error', 'PINs do not match.');
       return;
     }
 
-    if (newPin !== confirmPin) {
-      Alert.alert("Error", "PINs do not match.");
-      return;
-    }
-
-    if (!userEmail) {
-      Alert.alert("Error", "User not authenticated");
+    if (!userEmailAddress) {
+      Alert.alert('Error', 'User not authenticated');
       return;
     }
 
     try {
-      // Check if profile exists
-      const { data: existingProfile, error: fetchError } = await supabase
+      setIsLoading(true);
+      const { data: profile, error: fetchError } = await supabase
         .from('profiles')
         .select('email')
-        .eq('email', userEmail)
+        .eq('email', userEmailAddress)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking profile:', fetchError);
         throw fetchError;
       }
 
-      if (existingProfile) {
-        // Update existing profile with new PIN
+      if (profile) {
         const { error: updateError } = await supabase
           .from('profiles')
-          .update({ transaction_pin: newPin })
-          .eq('email', userEmail);
-
-        if (updateError) {
-          console.error('Error updating PIN:', updateError);
-          throw updateError;
-        }
+          .update({ transaction_pin: newPinInput })
+          .eq('email', userEmailAddress);
+        if (updateError) throw updateError;
       } else {
-        // Create new profile with PIN
         const { error: insertError } = await supabase
           .from('profiles')
-          .insert({ email: userEmail, transaction_pin: newPin });
-
-        if (insertError) {
-          console.error('Error creating profile:', insertError);
-          throw insertError;
-        }
+          .insert({ email: userEmailAddress, transaction_pin: newPinInput });
+        if (insertError) throw insertError;
       }
 
-      console.log('PIN saved successfully for:', userEmail);
-      setTransactionPin(newPin);
-      setHasTransactionPin(true);
-      setCreatePinModalVisible(false);
-      setNewPin("");
-      setConfirmPin("");
-      Alert.alert('Success', 'Transaction PIN created successfully.');
+      const pinExists = await verifyTransactionPin(userEmailAddress);
+      if (!pinExists) {
+        throw new Error('PIN verification failed after saving');
+      }
+
+      updateHasPin(true);
+      console.log('hasPin set to true after PIN creation', { timestamp: Date.now() });
+      setTransactionPinInput(newPinInput);
+      setIsPinCreationModalOpen(false);
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setIsPurchaseModalOpen(true);
+      Alert.alert('Success', 'Transaction PIN created.');
     } catch (error) {
-      console.error('Error saving PIN:', error);
-      Alert.alert('Error', 'Failed to create transaction PIN. Please try again.');
+      console.error('PIN Save Error:', error);
+      Alert.alert('Error', 'Unable to create PIN. Please retry.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const goBackToProviders = () => {
+  const showPurchaseModal = async (bundle: DataBundle) => {
+    try {
+      if (!userEmailAddress) {
+        throw new Error('User email not available');
+      }
+      const reference = await createTransactionReference();
+      setTransactionReference(reference);
+      setSelectedBundle(bundle);
+      if (!pinVerified.current) {
+        const pinExists = await verifyTransactionPin(userEmailAddress);
+        updateHasPin(pinExists);
+        console.log('showPurchaseModal hasPin:', pinExists, { timestamp: Date.now() });
+      } else {
+        console.log('Skipping PIN verification, using stored hasPin:', hasPin, { timestamp: Date.now() });
+      }
+      setIsPurchaseModalOpen(true);
+      return hasPin;
+    } catch (error) {
+      console.error('Error in showPurchaseModal:', error);
+      setIsPurchaseModalOpen(false);
+      Alert.alert('Error', 'Unable to generate reference or open purchase modal');
+      return false;
+    }
+  };
+
+  const closeTransactionModal = () => {
+    setIsTransactionModalOpen(false);
+    setPhoneNumberInput('');
+    setTransactionPinInput('');
+    setSelectedBundle(null);
+    setDetectedNetwork('');
+    setTransactionState('processing');
+    setTransactionReference('');
+  };
+
+  const closePurchaseModal = () => {
+    setIsPurchaseModalOpen(false);
+    setPhoneNumberInput('');
+    setTransactionPinInput('');
+    setSelectedBundle(null);
+    setDetectedNetwork('');
+    setTransactionReference('');
+  };
+
+  const closePinCreationModal = () => {
+    setIsPinCreationModalOpen(false);
+    setNewPinInput('');
+    setConfirmPinInput('');
+  };
+
+  const navigateBack = () => {
     router.back();
   };
 
-  const selectCategory = (category: string) => {
-    setExpandedCategory(category);
-    const newAvailablePlanTypes = bundles
+  const chooseCategory = (category: string) => {
+    setActiveCategory(category);
+    const planTypes = dataBundles
       .filter((bundle) => bundle.category === category)
       .map((bundle) => bundle.planType);
-    const uniquePlanTypes = Array.from(new Set(newAvailablePlanTypes)).sort();
-    if (uniquePlanTypes.length > 0 && !uniquePlanTypes.includes(selectedPlanType)) {
-      setSelectedPlanType(uniquePlanTypes[0]);
+    const uniqueTypes = Array.from(new Set(planTypes)).sort();
+    if (uniqueTypes.length > 0) {
+      const defaultPlanType = uniqueTypes.includes('Gifting') ? 'Gifting' : uniqueTypes[0];
+      setActivePlanType(defaultPlanType);
+      console.log('Category changed, set plan type:', defaultPlanType, { available: uniqueTypes });
     }
-    Animated.timing(scaleAnim, {
+    Animated.timing(animationScale, {
       toValue: 1.05,
       duration: 300,
       useNativeDriver: true,
     }).start(() => {
-      Animated.timing(scaleAnim, {
+      Animated.timing(animationScale, {
         toValue: 1,
-        duration: 300,
+        duration: 0,
         useNativeDriver: true,
       }).start();
     });
   };
 
-  const selectPlanType = (planType: string) => {
-    setSelectedPlanType(planType);
+  const choosePlanType = (planType: string) => {
+    setActivePlanType(planType);
   };
 
-  const clearSearch = () => {
-    setSearchQuery("");
+  const resetSearch = () => {
+    setSearchTerm('');
   };
 
-  const openPurchaseModal = async (bundle: DataBundle) => {
-    try {
-      const newReferenceId = await generateReferenceId();
-      setReferenceId(newReferenceId);
-      setSelectedBundle(bundle);
-      setModalVisible(true);
-    } catch (error) {
-      setModalVisible(false);
-    }
+  const retryLoad = () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    loadData();
   };
 
   const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
-    const slideAnim = useRef(new Animated.Value(0)).current;
-
-    const panResponder = useRef(
+    const slideAnimation = useRef(new Animated.Value(0)).current;
+    const panHandler = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dx > 0) {
-            slideAnim.setValue(gestureState.dx);
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+        },
+        onPanResponderMove: (_, gesture) => {
+          if (gesture.dx > 0) {
+            slideAnimation.setValue(gesture.dx);
           }
         },
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx > 100) {
-            openPurchaseModal(bundle);
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx > 100) {
+            showPurchaseModal(bundle);
           }
-          Animated.spring(slideAnim, {
+          Animated.spring(slideAnimation, {
             toValue: 0,
             useNativeDriver: true,
           }).start();
         },
-      }),
+      })
     ).current;
 
     return (
-      <Animated.View
-        key={bundle.id}
-        {...panResponder.panHandlers}
-        style={[{ transform: [{ translateX: slideAnim }] }]}
-      >
+      <Animated.View key={bundle.id} {...panHandler.panHandlers} style={{ transform: [{ translateX: slideAnimation }] }}>
         <View style={styles.bundleCard}>
           <View style={styles.bundleHeader}>
             <View style={styles.bundleInfo}>
-              <Text
-                style={styles.bundleTitle}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
+              <Text style={styles.bundleTitle} numberOfLines={1} ellipsizeMode="tail">
                 {bundle.data}
               </Text>
-              <Text style={styles.bundleValidity}>{bundle.validity}</Text>
+              <Text style={styles.bundleValidityText}>{bundle.validity}</Text>
             </View>
-            <Text style={styles.bundlePrice}>
-              ₦{formatNumberWithCommas(bundle.price)}
-            </Text>
+            <Text style={styles.bundlePrice}>₦{formatNumberWithCommas(bundle.price)}</Text>
           </View>
-          <Text
-            style={styles.bundleDescription}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
+          <Text style={styles.bundleDescription} numberOfLines={2} ellipsizeMode="tail">
             {bundle.description}
           </Text>
-          {bundle.planType && (
-            <Text style={styles.planTypeText}>{bundle.planType}</Text>
-          )}
-          {bundle.validity === "Not Specified" && (
-            <Text style={styles.warningText}>
-              Note: Plan duration not specified. Confirm with provider.
-            </Text>
+          {bundle.planType && <Text style={styles.planTypeText}>{bundle.planType}</Text>}
+          {bundle.validity === 'Not Specified' && (
+            <Text style={styles.warningText}>Note: Plan duration unclear. Check with provider.</Text>
           )}
           <View style={styles.bundleActions}>
-            <MotiView
-              from={{ scale: 1 }}
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ type: "timing", duration: 1500 }}
-            >
-              <Pressable
-                onPress={() => openPurchaseModal(bundle)}
-                style={styles.buyButton}
-              >
-                <Text style={styles.buyButtonText}>Click to Buy</Text>
+            <MotiView from={{ scale: 1 }} animate={{ scale: [1, 1.05, 1] }} transition={{ type: 'timing', duration: 1500 }}>
+              <Pressable onPress={() => showPurchaseModal(bundle)} style={styles.buyButton}>
+                <Text style={styles.buyButtonText}>Purchase</Text>
               </Pressable>
             </MotiView>
             <View style={styles.swipeHint}>
@@ -805,38 +879,35 @@ const BuyDataScreen: React.FC = () => {
     );
   };
 
-  const getBundlesForCategory = (category: string) => {
-    if (!bundles || !Array.isArray(bundles)) {
+  const getCategoryBundles = (category: string) => {
+    if (!dataBundles || !Array.isArray(dataBundles)) {
       return [];
     }
-
-    if (searchQuery) {
-      const searchResults = filterBundlesBySearch(searchQuery);
-      return searchResults || [];
+    if (searchTerm) {
+      const results = searchBundles(searchTerm);
+      return results || [];
     }
-
-    let filteredBundles = bundles;
-
-    filteredBundles = filteredBundles.filter(
-      (bundle) => bundle.planType.toLowerCase() === selectedPlanType.toLowerCase(),
+    let filtered = dataBundles;
+    filtered = filtered.filter(
+      (bundle) => bundle.planType.toLowerCase() === activePlanType.toLowerCase()
     );
 
-    if (category === "Hot" && lastPurchasedBundle) {
-      return filteredBundles
+    if (category === 'Hot' && recentBundle) {
+      return filtered
         .filter((bundle) => {
           try {
-            const isSamePlanType = bundle.planType === lastPurchasedBundle.planType;
-            const isSameCategory = bundle.category === lastPurchasedBundle.category;
-            const lastDataValue = parseFloat(lastPurchasedBundle.data.match(/[\d.]+/)?.[0] || "0");
-            const lastUnit = lastPurchasedBundle.data.match(/[MG]B/)?.[0] || "";
-            const lastDataInMB = lastUnit === "GB" ? lastDataValue * 1000 : lastDataValue;
-            const bundleDataValue = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
-            const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-            const bundleDataInMB = bundleUnit === "GB" ? bundleDataValue * 1000 : bundleDataValue;
-            const isSimilarDataAmount = bundleDataInMB >= lastDataInMB * 0.5 && bundleDataInMB <= lastDataInMB * 1.5;
-            return isSamePlanType && isSameCategory && isSimilarDataAmount;
+            const samePlanType = bundle.planType === recentBundle.planType;
+            const sameCategory = bundle.category === recentBundle.category;
+            const recentData = parseFloat(recentBundle.data.match(/[\d.]+/)?.[0] || '0');
+            const recentUnit = recentBundle.data.match(/[MG]B/)?.[0] || '';
+            const recentMB = recentUnit === 'GB' ? recentData * 1000 : recentData;
+            const bundleData = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || '0');
+            const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || '';
+            const bundleMB = bundleUnit === 'GB' ? bundleData * 1000 : bundleData;
+            const similarData = bundleMB >= recentMB * 0.5 && bundleMB <= recentMB * 1.5;
+            return samePlanType && sameCategory && similarData;
           } catch (error) {
-            console.error("Error processing bundle:", bundle, error);
+            console.error('Bundle Error:', error);
             return false;
           }
         })
@@ -844,102 +915,79 @@ const BuyDataScreen: React.FC = () => {
         .slice(0, 5);
     }
 
-    return filteredBundles
+    return filtered
       .filter((bundle) => bundle.category === category)
       .sort((a, b) => a.price - b.price);
   };
 
-  if (!selectedProvider) {
+  if (!selectedProvider || !networkId) {
     return null;
   }
 
-  const bundlesInCategory = getBundlesForCategory(expandedCategory);
+  const categoryBundles = getCategoryBundles(activeCategory);
 
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
         <View style={styles.providerHeader}>
-          <Pressable onPress={goBackToProviders} style={styles.backButton}>
+          <Pressable onPress={navigateBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </Pressable>
-          <Image
-            source={selectedProvider.image}
-            style={styles.providerLogo}
-            resizeMode="contain"
-          />
-          <Text style={styles.providerName}>
-            {selectedProvider.name} Data Bundles
+          <Image source={selectedProvider.image} style={styles.providerLogo} resizeMode="contain" />
+          <Text style={styles.providerName}>{selectedProvider.name} Data Plans</Text>
+        </View>
+        <View style={styles.walletBalanceContainer}>
+          <Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
+          <Text style={styles.walletBalanceValue}>
+            {walletBalance === null ? 'Loading...' : `₦${formatNumberWithCommas(walletBalance)}`}
           </Text>
         </View>
         <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#A1A1AA"
-            style={styles.searchIcon}
-          />
+          <Ionicons name="search" size={20} color="#A1A1AA" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search plans (e.g., 1GB for 30 days)"
             placeholderTextColor="#A1A1AA"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+            value={searchTerm}
+            onChangeText={setSearchTerm}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+          {searchTerm?.length > 0 && (
+            <TouchableOpacity onPress={resetSearch} style={styles.clearButton}>
               <Ionicons name="close-circle" size={20} color="#A1A1AA" />
             </TouchableOpacity>
           )}
         </View>
-        {!searchQuery && (
-          <ScrollView
-            horizontal
-            style={styles.categoryBar}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryBarContent}
-          >
-            {categories.map((category) => (
+        {!searchTerm && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryBarContent}>
+            {bundleCategories.map((category) => (
               <Pressable
                 key={category}
-                onPress={() => selectCategory(category)}
-                style={[
-                  styles.categoryButton,
-                  expandedCategory === category ? styles.selectedCategoryButton : {},
-                ]}
+                onPress={() => chooseCategory(category)}
+                style={[styles.categoryButton, activeCategory === category ? styles.selectedCategoryButton : {}]}
               >
                 <Text
-                  style={[
-                    styles.categoryButtonText,
-                    expandedCategory === category ? styles.selectedCategoryButtonText : {},
-                  ]}
+                  style={[styles.categoryLabel, activeCategory === category ? styles.selectedCategoryLabel : {}]}
                 >
-                  {category === "Hot" ? "🔥 Hot" : category}
+                  {category === 'Hot' ? '🔥 Hot' : category}
                 </Text>
               </Pressable>
             ))}
           </ScrollView>
         )}
-        {!searchQuery && availablePlanTypes.length > 0 && (
+        {!searchTerm && planTypeOptions.length > 0 && (
           <ScrollView
             horizontal
-            style={styles.planTypeBar}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.planTypeBarContent}
           >
-            {availablePlanTypes.map((planType) => (
+            {planTypeOptions.map((planType) => (
               <Pressable
                 key={planType}
-                onPress={() => selectPlanType(planType)}
-                style={[
-                  styles.planTypeButton,
-                  selectedPlanType === planType ? styles.selectedPlanTypeButton : {},
-                ]}
+                onPress={() => choosePlanType(planType)}
+                style={[styles.planTypeButton, activePlanType === planType ? styles.selectedPlanTypeButton : {}]}
               >
                 <Text
-                  style={[
-                    styles.planTypeButtonText,
-                    selectedPlanType === planType ? styles.selectedPlanTypeButtonText : {},
-                  ]}
+                  style={[styles.planTypeLabel, activePlanType === planType ? styles.selectedPlanTypeLabel : {}]}
                 >
                   {planType}
                 </Text>
@@ -950,71 +998,82 @@ const BuyDataScreen: React.FC = () => {
       </View>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
+        contentContainerStyle={styles.scrollContent}
         nestedScrollEnabled={true}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         overScrollMode="never"
-        removeClippedSubviews={true}
+        bounces={true}
+        alwaysBounceVertical={true}
       >
-        {loading ? (
-          <Text style={styles.loadingText}>Loading...</Text>
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : categories.length === 0 && !searchQuery ? (
-          <Text style={styles.loadingText}>No categories available</Text>
-        ) : bundlesInCategory.length === 0 ? (
-          <Text style={styles.loadingText}>
-            {searchQuery ? "No plans match your search" : "No bundles available for this category"}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#00cc66" />
+            <Text style={styles.activityIndicatorText}>Loading Plans...</Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <Pressable onPress={retryLoad} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : bundleCategories.length === 0 && !searchTerm ? (
+          <Text style={styles.noCategoriesText}>No categories available</Text>
+        ) : categoryBundles.length === 0 ? (
+          <Text style={styles.noPlansText}>
+            {searchTerm ? 'No matching plans found' : 'No plans in this category'}
           </Text>
         ) : (
           <View style={styles.bundleListContainer}>
             <Text style={styles.categoryHint}>
-              {searchQuery ? "Search Results:" : "Select a plan:"}
+              {searchTerm ? 'Search Results:' : 'Choose a plan:'}
             </Text>
-            <View style={styles.scrollViewWrapper}>
-              {bundlesInCategory.map((bundle) => (
+            <View style={styles.bundleWrapper}>
+              {categoryBundles.map((bundle) => (
                 <BundleCard key={bundle.id} bundle={bundle} />
               ))}
             </View>
           </View>
         )}
       </ScrollView>
-      <View style={{ zIndex: 1000 }}>
+      <View style={{ zIndex: 5 }}>
         <PurchaseModal
-          visible={modalVisible}
+          visible={isPurchaseModalOpen}
           onClose={closePurchaseModal}
-          selectedPlan={selectedBundle?.data || ""}
-          phoneNumber={phoneNumber}
-          setPhoneNumber={setPhoneNumber}
-          transactionPin={transactionPin}
-          setTransactionPin={setTransactionPin}
-          networkProvider={networkProvider}
-          hasTransactionPin={hasTransactionPin}
-          showTransactionPin={showTransactionPin}
-          setShowTransactionPin={setShowTransactionPin}
-          onCreatePin={() => setCreatePinModalVisible(true)}
-          onContinue={handleContinue}
+          selectedPlan={selectedBundle?.data || ''}
+          phoneNumber={phoneNumberInput}
+          setPhoneNumber={setPhoneNumberInput}
+          transactionPin={transactionPinInput}
+          setTransactionPin={setTransactionPinInput}
+          networkProvider={detectedNetwork}
+          hasPin={hasPin}
+          defaultPin={transactionPinInput}
+          showTransactionPin={isTransactionPinVisible}
+          setShowTransactionPin={setIsTransactionPinVisible}
+          onCreatePin={() => setIsPinCreationModalOpen(true)}
+          onContinue={handleProceed}
         />
         <TransactionStatusModal
-          visible={transactionModalVisible}
+          visible={isTransactionModalOpen}
           onClose={closeTransactionModal}
-          transactionStatus={transactionStatus}
+          transactionStatus={transactionState}
           selectedPlan={selectedBundle}
-          phoneNumber={phoneNumber}
-          networkProvider={networkProvider}
+          phoneNumber={phoneNumberInput}
+          networkProvider={detectedNetwork}
         />
         <CreatePinModal
-          visible={createPinModalVisible}
-          onClose={closeCreatePinModal}
-          newPin={newPin}
-          setNewPin={setNewPin}
-          confirmPin={confirmPin}
-          setConfirmPin={setConfirmPin}
-          showNewPin={showNewPin}
-          setShowNewPin={setShowNewPin}
-          showConfirmPin={showConfirmPin}
-          setShowConfirmPin={setShowConfirmPin}
-          onSave={handleCreatePin}
+          visible={isPinCreationModalOpen}
+          onClose={closePinCreationModal}
+          newPin={newPinInput}
+          setNewPin={setNewPinInput}
+          confirmPin={confirmPinInput}
+          setConfirmPin={setConfirmPinInput}
+          showNewPin={isNewPinVisible}
+          setShowNewPin={setIsNewPinVisible}
+          showConfirmPin={isConfirmPinVisible}
+          setShowConfirmPin={setIsConfirmPinVisible}
+          onSave={savePin}
+          isLoading={isLoading}
         />
       </View>
     </View>
@@ -1024,10 +1083,10 @@ const BuyDataScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: 'black',
   },
   fixedHeader: {
-    backgroundColor: "black",
+    backgroundColor: 'black',
     paddingTop: 48,
     paddingHorizontal: 16,
     zIndex: 10,
@@ -1036,14 +1095,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 0,
   },
-  scrollViewContent: {
+  scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 50,
     paddingTop: 8,
+    flexGrow: 1,
   },
   providerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
   backButton: {
@@ -1053,20 +1113,38 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "white",
+    backgroundColor: 'white',
   },
   providerName: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "white",
+    fontWeight: 'bold',
+    color: 'white',
     marginLeft: 12,
   },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1E1E1E",
+  walletBalanceContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  walletBalanceLabel: {
+    fontSize: 16,
+    color: '#A1A1AA',
+  },
+  walletBalanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    paddingHorizontal: 10,
     marginBottom: 16,
   },
   searchIcon: {
@@ -1075,150 +1153,189 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: "white",
+    color: 'white',
     paddingVertical: 10,
   },
   clearButton: {
     padding: 4,
   },
-  categoryBar: {
-    marginBottom: 8,
-  },
-  planTypeBar: {
-    marginBottom: 16,
-    marginLeft: 40,
-  },
   categoryBarContent: {
-    justifyContent: "center",
+    flexDirection: 'row',
     paddingHorizontal: 4,
   },
   planTypeBarContent: {
-    justifyContent: "center",
+    flexDirection: 'row',
     paddingHorizontal: 4,
   },
   categoryButton: {
-    backgroundColor: "#1E1E1E",
+    backgroundColor: '#1E1E1E',
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingHorizontal: 10,
     marginHorizontal: 4,
+    borderRadius: 6,
   },
   planTypeButton: {
-    backgroundColor: "#1E1E1E",
+    backgroundColor: '#1E1E1E',
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 20,
     marginHorizontal: 4,
+    borderRadius: 4,
   },
   selectedCategoryButton: {
-    backgroundColor: "#744925",
+    backgroundColor: '#744925',
   },
   selectedPlanTypeButton: {
-    backgroundColor: "#744925",
+    backgroundColor: '#744925',
   },
-  categoryButtonText: {
+  categoryLabel: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#A1A1AA",
+    fontWeight: '600',
+    color: '#A1A1AA',
   },
-  planTypeButtonText: {
+  planTypeLabel: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#A1A1AA",
+    fontWeight: '600',
+    color: '#A1A1AA',
   },
-  selectedCategoryButtonText: {
-    color: "white",
+  selectedCategoryLabel: {
+    color: 'white',
   },
-  selectedPlanTypeButtonText: {
-    color: "white",
+  selectedPlanTypeLabel: {
+    color: 'white',
   },
   categoryHint: {
     fontSize: 14,
-    color: "#A1A1AA",
+    color: 'white',
     marginBottom: 12,
   },
   bundleListContainer: {
     paddingVertical: 8,
+    flexGrow: 1,
   },
-  scrollViewWrapper: {
-    position: "relative",
-    flex: 1,
+  bundleWrapper: {
+    marginBottom: 16,
+    flexGrow: 1,
   },
   bundleCard: {
-    backgroundColor: "#2D2D2D",
-    borderRadius: 8,
-    padding: 8,
-    marginRight: 12,
-    marginBottom: 8,
+    backgroundColor: '#2D2D2D',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
   },
   bundleHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   bundleInfo: {
     flex: 1,
     marginRight: 8,
   },
   bundleTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "white",
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    flexGrow: 1,
   },
-  bundleValidity: {
-    fontSize: 10,
-    color: "#A1A1AA",
-    marginTop: 2,
+  bundleValidityText: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    marginTop: 4,
   },
   bundlePrice: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "white",
-    textAlign: "right",
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'right',
   },
   bundleDescription: {
-    fontSize: 10,
-    color: "#A1A1AA",
-    marginBottom: 6,
-    flexWrap: "wrap",
+    fontSize: 12,
+    color: '#A1A1AA',
+    marginBottom: 8,
+    flexWrap: 'wrap',
   },
   planTypeText: {
-    fontSize: 10,
-    color: "#A1A1AA",
-    marginBottom: 6,
-    textAlign: "left",
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginBottom: 8,
+    textAlign: 'left',
   },
   warningText: {
-    fontSize: 10,
-    color: "#FF4444",
-    marginBottom: 6,
-    textAlign: "left",
+    fontSize: 14,
+    color: '#FF4444',
+    marginBottom: 8,
+    textAlign: 'left',
   },
   bundleActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   buyButton: {
-    backgroundColor: "#744925",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    backgroundColor: '#744925',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 6,
   },
   buyButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "white",
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
   swipeHint: {
-    alignItems: "center",
+    alignItems: 'center',
   },
   swipeText: {
-    fontSize: 10,
-    color: "#A1A1AA",
-    marginBottom: 4,
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginBottom: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityIndicatorText: {
+    fontSize: 16,
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF4444',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  noCategoriesText: {
+    fontSize: 16,
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  noPlansText: {
+    fontSize: 16,
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  retryButton: {
+    backgroundColor: '#744925',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    color: 'white',
+    fontWeight: '600',
   },
 });
 
