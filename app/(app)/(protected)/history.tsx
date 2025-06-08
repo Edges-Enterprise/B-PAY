@@ -120,46 +120,45 @@ export default function HistoryScreen() {
         const transactionType = (tx.type || "unknown").toLowerCase().trim();
         console.log(`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`);
 
+        // Helper function to parse provider from purchase string
+        const parseProviderFromPurchase = (purchase: string): { provider: string; data: string } | null => {
+          const purchaseLower = purchase.toLowerCase();
+          const matchedProvider = knownProviders.find((p) => purchaseLower.includes(p));
+          if (matchedProvider) {
+            const cleanedData = purchase.replace(new RegExp(`\\b${matchedProvider}\\b`, "i"), "").replace(/\s+/g, " ").trim();
+            return {
+              provider: matchedProvider.charAt(0).toUpperCase() + matchedProvider.slice(1),
+              data: cleanedData || `${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)} Purchase`,
+            };
+          }
+          return null;
+        };
+
         if (transactionType === "data") {
-          // Extract fields from metadata
-          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
+          provider = tx.metadata?.provider || "Unknown Provider";
           data = tx.metadata?.purchase || "Data Purchase";
           phoneNumber = tx.metadata?.phone_number || "N/A";
+          if (provider === "Unknown Provider" && tx.metadata?.purchase) {
+            const parsed = parseProviderFromPurchase(tx.metadata.purchase);
+            if (parsed) {
+              provider = parsed.provider;
+              data = parsed.data;
+            }
+          }
         } else if (transactionType === "deposit") {
           data = "Wallet Funding";
           provider = tx.metadata?.payment_method || "Payment Gateway";
           phoneNumber = tx.metadata?.phone_number || "N/A";
-        } else if (transactionType === "airtime") {
-          // Handle airtime transactions
-          data = tx.metadata?.purchase || "Airtime Purchase";
-          phoneNumber = tx.metadata?.phone_number || "N/A";
-
-          // Try to extract provider from metadata.provider, metadata.network, or metadata.operator
-          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
-
-          // If provider is still "Unknown Provider", try parsing from metadata.purchase
-          if (provider === "Unknown Provider" && tx.metadata?.purchase) {
-            const purchaseLower = tx.metadata.purchase.toLowerCase();
-            const matchedProvider = knownProviders.find((p) => purchaseLower.includes(p));
-            if (matchedProvider) {
-              provider = matchedProvider.charAt(0).toUpperCase() + matchedProvider.slice(1);
-              // Clean up data to remove provider name
-              data = tx.metadata.purchase.replace(new RegExp(`on ${matchedProvider}`, "i"), "").trim();
-            }
-          }
         } else {
-          // Handle other transaction types
+          // Handle other transaction types (e.g., airtime, electricity)
           data = tx.metadata?.purchase || transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
-          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
+          provider = tx.metadata?.provider || "Unknown Provider";
           phoneNumber = tx.metadata?.phone_number || "N/A";
-
-          // Try parsing provider from metadata.purchase if needed
           if (provider === "Unknown Provider" && tx.metadata?.purchase) {
-            const purchaseLower = tx.metadata.purchase.toLowerCase();
-            const matchedProvider = knownProviders.find((p) => purchaseLower.includes(p));
-            if (matchedProvider) {
-              provider = matchedProvider.charAt(0).toUpperCase() + matchedProvider.slice(1);
-              data = tx.metadata.purchase.replace(new RegExp(`on ${matchedProvider}`, "i"), "").trim();
+            const parsed = parseProviderFromPurchase(tx.metadata.purchase);
+            if (parsed) {
+              provider = parsed.provider;
+              data = parsed.data;
             }
           }
         }

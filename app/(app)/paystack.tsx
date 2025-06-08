@@ -444,96 +444,81 @@ const PaymentScreen = () => {
     const reference = paymentReference || `EDGES_${userId}_${Date.now()}`;
     console.log(`Generating Paystack HTML with reference: ${reference}`);
     return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Paystack Payment</title>
-        <script src="https://js.paystack.co/v1/inline.js"></script>
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #1A2526;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+     <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Paystack Payment</title>
+      <script src="https://js.paystack.co/v1/inline.js"></script>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          width: 100vw;
+          height: 100vh;
+          background: #1A2526;
+          font-family: Arial, sans-serif;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        .container {
+          margin-top: 40px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: ${width}px;
+          max-width: 100%;
+        }
+        #paystackIframe {
+          width: ${width * 0.9}px;
+          max-width: 500px;
+          height: ${height * 0.6}px;
+          border: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div id="paystackIframe"></div>
+      </div>
+      <script>
+        const handler = PaystackPop.setup({
+          key: '${PAYSTACK_PUBLIC_KEY || ""}',
+          email: '${userEmail}',
+          amount: ${parseFloat(amount as string) * 100},
+          currency: 'NGN',
+          channels: ['card', 'bank', 'ussd', 'qr', 'opay', 'visa_qr'],
+          ref: '${reference}',
+          metadata: {
+            custom_fields: [
+              {
+                display_name: "Mobile Payment",
+                variable_name: "mobile_payment",
+                value: "Edges Network"
+              }
+            ]
+          },
+          onClose: function() {
+            // Do nothing on close to prevent premature cancellation
+            // Rely on Paystack's built-in close mechanisms
+          },
+          callback: function(response) {
+            window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
           }
-          .container {
-            margin-top: 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            width: ${width}px;
-            max-width: 100%;
-          }
-          #paystackIframe {
-            width: ${width * 0.9}px;
-            max-width: 500px;
-            height: ${height * 0.6}px;
-            border: none;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div id="paystackIframe"></div>
-        </div>
-        <script>
-          const handler = PaystackPop.setup({
-            key: '${PAYSTACK_PUBLIC_KEY || ""}',
-            email: '${userEmail}',
-            amount: ${parseFloat(amount as string) * 100},
-            currency: 'NGN',
-            channels: ['bank_transfer', 'card', 'ussd'],
-            ref: '${reference}',
-            metadata: {
-              custom_fields: [
-                {
-                  display_name: "Mobile Payment",
-                  variable_name: "mobile_payment",
-                  value: "Edges Network"
-                }
-              ]
-            },
-            onClose: function() {
-              // Do nothing on close to prevent premature cancellation
-              // Rely on Paystack's built-in close mechanisms
-            },
-            callback: function(response) {
-              window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
-            }
-          });
-          handler.openIframe();
+        });
+        handler.openIframe();
 
-          // Function to copy text to clipboard
-          function copyToClipboard(text) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).then(() => {
-                window.ReactNativeWebView.postMessage('copy-success:' + text);
-              }).catch(err => {
-                console.error('Clipboard API failed:', err);
-                // Fallback to document.execCommand
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                try {
-                  document.execCommand('copy');
-                  window.ReactNativeWebView.postMessage('copy-success:' + text);
-                } catch (e) {
-                  console.error('Fallback copy failed:', e);
-                }
-                document.body.removeChild(textarea);
-              });
-            } else {
-              // Fallback for older browsers
+        // Function to copy text to clipboard
+        function copyToClipboard(text) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+              window.ReactNativeWebView.postMessage('copy-success:' + text);
+            }).catch(err => {
+              console.error('Clipboard API failed:', err);
               const textarea = document.createElement('textarea');
               textarea.value = text;
               document.body.appendChild(textarea);
@@ -545,41 +530,50 @@ const PaymentScreen = () => {
                 console.error('Fallback copy failed:', e);
               }
               document.body.removeChild(textarea);
+            });
+          } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+              document.execCommand('copy');
+              window.ReactNativeWebView.postMessage('copy-success:' + text);
+            } catch (e) {
+              console.error('Fallback copy failed:', e);
             }
+            document.body.removeChild(textarea);
           }
+        }
 
-          // Prevent copy actions from triggering focus loss
-          document.addEventListener('copy', (e) => {
-            e.stopPropagation();
-            // Allow copy to proceed without closing iframe
-          });
+        // Prevent copy actions from triggering focus loss
+        document.addEventListener('copy', (e) => {
+          e.stopPropagation();
+        });
 
-          // Observe DOM changes to detect bank transfer details
-          const observer = new MutationObserver((mutations) => {
-            // Look for account number element (adjust selector based on Paystack's DOM)
-            const accountNumberElement = document.querySelector('span[class*="account-number"], p[class*="account-number"], div[class*="account-number"]');
-            const copyButton = document.querySelector('button[class*="copy"], button[title*="copy"], button[aria-label*="copy"]');
-            
-            if (accountNumberElement && copyButton) {
-              const accountNumber = accountNumberElement.textContent.trim();
-              // Override copy button click
-              copyButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                copyToClipboard(accountNumber);
-              }, { once: true });
-              observer.disconnect(); // Stop observing after finding elements
-            }
-          });
+        // Observe DOM changes to detect bank transfer details
+        const observer = new MutationObserver((mutations) => {
+          const accountNumberElement = document.querySelector('span[class*="account-number"], p[class*="account-number"], div[class*="account-number"]');
+          const copyButton = document.querySelector('button[class*="copy"], button[title*="copy"], button[aria-label*="copy"]');
+          
+          if (accountNumberElement && copyButton) {
+            const accountNumber = accountNumberElement.textContent.trim();
+            copyButton.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              copyToClipboard(accountNumber);
+            }, { once: true });
+            observer.disconnect();
+          }
+        });
 
-          // Start observing the iframe's document
-          observer.observe(document.body, {
-            childList: true,
-            subtree: true
-          });
-        </script>
-      </body>
-      </html>
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      </script>
+    </body>
+    </html>
     `;
   };
 
