@@ -91,13 +91,7 @@ export default function HistoryScreen() {
           created_at,
           reference,
           type,
-          user_email,
-          data_purchases (
-            plan_name,
-            provider_name,
-            phone_number,
-            created_at
-          )
+          user_email
         `)
         .eq("user_email", user.email)
         .order("created_at", { ascending: false });
@@ -116,30 +110,62 @@ export default function HistoryScreen() {
 
       console.log("Raw transaction data:", JSON.stringify(txData, null, 2));
 
-      const formattedHistory: HistoryItem[] = txData.map((tx) => {
-        let provider = "Not Specified";
-        let data = "Not Specified";
-        let phoneNumber = "Not Available";
+      const knownProviders = ["glo", "mtn", "airtel", "9mobile"];
 
-        const transactionType = tx.type ? tx.type.toLowerCase().trim() : "unknown";
-        console.log(`Transaction ID: ${tx.id}, Type: ${transactionType}, Data Purchases: ${JSON.stringify(tx.data_purchases)}`);
+      const formattedHistory: HistoryItem[] = txData.map((tx) => {
+        let provider = "Unknown Provider";
+        let data = "Unknown Transaction";
+        let phoneNumber = "N/A";
+
+        const transactionType = (tx.type || "unknown").toLowerCase().trim();
+        console.log(`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`);
 
         if (transactionType === "data") {
-          // Prefer data_purchases fields, fallback to metadata
-          provider = (tx.data_purchases?.provider_name || tx.metadata?.provider || provider) as string;
-          data = (tx.data_purchases?.plan_name || tx.metadata?.purchase || data) as string;
-          phoneNumber = (tx.data_purchases?.phone_number || tx.metadata?.phone_number || phoneNumber) as string;
+          // Extract fields from metadata
+          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
+          data = tx.metadata?.purchase || "Data Purchase";
+          phoneNumber = tx.metadata?.phone_number || "N/A";
         } else if (transactionType === "deposit") {
           data = "Wallet Funding";
-          provider = tx.metadata?.payment_method || "Paystack";
-          phoneNumber = tx.metadata?.phone_number || phoneNumber;
+          provider = tx.metadata?.payment_method || "Payment Gateway";
+          phoneNumber = tx.metadata?.phone_number || "N/A";
+        } else if (transactionType === "airtime") {
+          // Handle airtime transactions
+          data = tx.metadata?.purchase || "Airtime Purchase";
+          phoneNumber = tx.metadata?.phone_number || "N/A";
+
+          // Try to extract provider from metadata.provider, metadata.network, or metadata.operator
+          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
+
+          // If provider is still "Unknown Provider", try parsing from metadata.purchase
+          if (provider === "Unknown Provider" && tx.metadata?.purchase) {
+            const purchaseLower = tx.metadata.purchase.toLowerCase();
+            const matchedProvider = knownProviders.find((p) => purchaseLower.includes(p));
+            if (matchedProvider) {
+              provider = matchedProvider.charAt(0).toUpperCase() + matchedProvider.slice(1);
+              // Clean up data to remove provider name
+              data = tx.metadata.purchase.replace(new RegExp(`on ${matchedProvider}`, "i"), "").trim();
+            }
+          }
         } else {
-          data = transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
-          provider = tx.metadata?.provider || provider;
-          phoneNumber = tx.metadata?.phone_number || phoneNumber;
+          // Handle other transaction types
+          data = tx.metadata?.purchase || transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
+          provider = tx.metadata?.provider || tx.metadata?.network || tx.metadata?.operator || "Unknown Provider";
+          phoneNumber = tx.metadata?.phone_number || "N/A";
+
+          // Try parsing provider from metadata.purchase if needed
+          if (provider === "Unknown Provider" && tx.metadata?.purchase) {
+            const purchaseLower = tx.metadata.purchase.toLowerCase();
+            const matchedProvider = knownProviders.find((p) => purchaseLower.includes(p));
+            if (matchedProvider) {
+              provider = matchedProvider.charAt(0).toUpperCase() + matchedProvider.slice(1);
+              data = tx.metadata.purchase.replace(new RegExp(`on ${matchedProvider}`, "i"), "").trim();
+            }
+          }
         }
 
-        const normalizedStatus = tx.status ? tx.status.toLowerCase() : "unknown";
+        // Normalize status with proper capitalization
+        const normalizedStatus = (tx.status || "unknown").toLowerCase();
         const status = ["success", "failed", "pending"].includes(normalizedStatus)
           ? (normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)) as "Success" | "Failed" | "Pending"
           : "Unknown";
@@ -152,7 +178,7 @@ export default function HistoryScreen() {
           date: tx.created_at,
           status,
           phoneNumber,
-          reference: tx.reference || "Not Available",
+          reference: tx.reference || "N/A",
           metadata: tx.metadata || {},
           type: tx.type || "Unknown",
         };
@@ -201,8 +227,7 @@ export default function HistoryScreen() {
               style={styles.closeButton}
               onPress={() => setSelectedTransaction(null)}
             >
-              <Ionicons name="close" size={24} color="#FFF" />
-            </Pressable>
+              <Ionic-Resizable><Ionicons name="close" size={24} color="#FFF" /></Pressable>
             <ScrollView>
               <Text style={styles.receiptTitle}>
                 {type.toLowerCase() === "deposit" ? "Deposit Receipt" : "Purchase Receipt"}

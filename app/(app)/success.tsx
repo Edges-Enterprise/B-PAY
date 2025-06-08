@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import { SafeAreaView, Text, Pressable, StyleSheet, Animated, PanResponder, View } from 'react-native';
+import { SafeAreaView, Text, Pressable, StyleSheet, Animated, PanResponder, View, Image, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useRef, useEffect, useState } from 'react';
@@ -41,6 +41,12 @@ export default function SuccessScreen() {
   const [parsedMetadata, setParsedMetadata] = useState<Metadata | null>(null);
   const [newReferenceId, setNewReferenceId] = useState<string>('');
 
+  // Pulse animation for the button
+  const pulseAnimation = useRef(new Animated.Value(1)).current;
+
+  // Get screen width for dynamic GIF sizing
+  const screenWidth = Dimensions.get('window').width;
+
   // Generate a new reference ID when component mounts
   useEffect(() => {
     const generateReferenceId = async () => {
@@ -49,6 +55,24 @@ export default function SuccessScreen() {
     };
     generateReferenceId();
   }, []);
+
+  // Start pulse animation
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnimation, {
+          toValue: 1.05,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnimation, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnimation]);
 
   // Log received params for debugging
   useEffect(() => {
@@ -71,6 +95,7 @@ export default function SuccessScreen() {
       try {
         const parsed = JSON.parse(metadata) as Metadata;
         setParsedMetadata(parsed);
+        console.log('Parsed metadata:', parsed);
       } catch (error) {
         console.error('Error parsing metadata:', error);
       }
@@ -170,8 +195,8 @@ export default function SuccessScreen() {
     try {
       return new Date(dateStr).toLocaleString('en-US', {
         timeZone: 'Africa/Lagos',
-        dateStyle: 'long',
-        timeStyle: 'medium',
+        dateStyle: 'medium',
+        timeStyle: 'short',
       });
     } catch (error) {
       return 'Invalid date';
@@ -184,13 +209,13 @@ export default function SuccessScreen() {
       case 'data':
         return 'Data Plan';
       case 'airtime':
-        return 'Airtime Amount';
+        return 'Airtime';
       case 'cable':
         return 'Cable Subscription';
       case 'electricity':
         return 'Electricity Units';
       default:
-        return 'Purchase';
+        return 'Item';
     }
   };
 
@@ -200,13 +225,13 @@ export default function SuccessScreen() {
       case 'data':
         return data ? `${data} Data` : 'Data Purchase';
       case 'airtime':
-        return data ? `${data} Airtime` : 'Airtime Purchase';
+        return data ? `${data}` : 'Airtime Purchase';
       case 'cable':
         return data ? `${data} Subscription` : 'Cable Subscription';
       case 'electricity':
         return data ? `${data} Units` : 'Electricity Purchase';
       default:
-        return 'Purchase';
+        return data || 'Purchase';
     }
   };
 
@@ -281,73 +306,76 @@ export default function SuccessScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Animated.View {...panHandler.panHandlers} style={{ transform: [{ translateX: slideAnimation }] }}>
-        <MotiView
-          from={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 10 }}
-          style={styles.iconContainer}
-        >
-          <Ionicons name="checkmark-circle" size={60} color="#00cc66" />
-        </MotiView>
-
+      <Animated.View {...panHandler.panHandlers} style={{ transform: [{ translateX: slideAnimation }], flex: 1 }}>
         <Text style={styles.title}>
           Congratulations 🎉 {userName}!
         </Text>
 
         <Text style={styles.subtitle}>
-          You have successfully 🔥 purchased {getPurchaseDescription()}!
+          You have successfully purchased {getPurchaseDescription()}!
         </Text>
 
         <View style={styles.card}>
+          {/* Header Section for Key Purchase Details */}
+          <View style={styles.purchaseHeader}>
+            <Text style={styles.purchaseTitle}>{getPurchaseDescription()}</Text>
+            <Text style={styles.purchaseProvider}>{provider}</Text>
+            <Text style={styles.purchaseAmount}>{formatAmount(price)}</Text>
+          </View>
+          <View style={styles.divider} />
+          {/* Secondary Details */}
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>{getPurchaseLabel()}</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{data}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Provider</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{provider}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Amount</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{formatAmount(price)}</Text>
+              <Text style={styles.detailLabel}>Phone</Text>
+              <Text style={styles.detailValue}>{phoneNumber}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Payment</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{parsedMetadata?.payment_method || 'N/A'}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Phone</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{phoneNumber}</Text>
+              <Text style={styles.detailValue}>{parsedMetadata?.payment_method || 'N/A'}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Validity</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{parsedMetadata?.validity || 'N/A'}</Text>
+              <Text style={styles.detailValue}>{parsedMetadata?.validity || 'N/A'}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Balance</Text>
-              <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">{formatBalance(balance)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Reference</Text>
-              <Text style={styles.detailValue} numberOfLines={2} ellipsizeMode="tail">{reference}</Text>
+              <Text style={styles.detailValue}>{formatBalance(balance)}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Date</Text>
-              <Text style={styles.detailValue} numberOfLines={2} ellipsizeMode="tail">{formatDate(date)}</Text>
+              <Text style={styles.detailValue}>{formatDate(date)}</Text>
+            </View>
+            <View style={[styles.detailRow, styles.fullWidthRow]}>
+              <Text style={styles.detailLabel}>Reference</Text>
+              <Text style={styles.detailValue}>{reference}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.swipe}>
-          <Text style={styles.swipeText}>Slide right to purchase again.</Text>
-          <Ionicons name="arrow-forward" size={14} color="#A1A1AA" />
+          <Text style={styles.swipeText}>Slide right to purchase again</Text>
+          <Ionicons name="arrow-forward" size={12} color="#A1A1AA" />
         </View>
 
-        <Pressable style={styles.button} onPress={() => router.replace('/(app)/wallet')}>
-          <Text style={styles.buttonText}>Back to Wallet</Text>
-        </Pressable>
+        <Animated.View style={[styles.button, { transform: [{ scale: pulseAnimation }] }]}>
+          <Pressable onPress={() => router.replace('/(app)/wallet')}>
+            <Text style={styles.buttonText}>Back to Wallet</Text>
+          </Pressable>
+        </Animated.View>
+
+        {/* Adjusted: Moved GIF to footer bottom with MotiView for animation */}
+        <MotiView
+          from={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 0.8 }} // Adjusted: Reduced opacity for blending with background
+          transition={{ type: 'spring', damping: 10 }}
+          style={styles.footerGifContainer}
+        >
+          <Image
+            source={require('../../assets/images/celebration.gif')}
+            style={[styles.celebrationGif, { width: screenWidth }]} // Adjusted: Full screen width
+            resizeMode="cover" // Adjusted: Changed to cover to fill the width while maintaining aspect ratio
+          />
+        </MotiView>
       </Animated.View>
     </SafeAreaView>
   );
@@ -356,83 +384,127 @@ export default function SuccessScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    height: '100%',
     backgroundColor: '#000000',
-    padding: 16,
-    paddingTop: 20,
-    justifyContent: 'flex-start',
+    padding: 8,
+    justifyContent: 'space-between', // Adjusted: Ensures content is spaced with GIF at bottom
     alignItems: 'center',
   },
-  iconContainer: {
-    marginBottom: 10,
+  // Adjusted: New style for footer GIF container
+  footerGifContainer: {
+    position: 'absolute',
+    bottom: 0, // Adjusted: Pins GIF to the bottom of the SafeAreaView
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    // Tweak this margin if you need to adjust the GIF's position relative to the bottom edge
+    marginBottom: 0,
+  },
+  celebrationGif: {
+    height: 100, // Adjusted: Fixed height to maintain aspect ratio; tweak this value to adjust GIF size
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#00cc66',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#A1A1AA',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   card: {
-    width: '90%',
-    borderWidth: 2,
+    width: '95%',
+    borderWidth: 1,
     borderColor: '#8B4513',
-    borderRadius: 5,
+    borderRadius: 6,
     backgroundColor: '#1E1E1E',
-    marginBottom: 12,
-    padding: 10,
+    height: 'auto', // Fit content
+  },
+  purchaseHeader: {
+    padding: 8,
+    backgroundColor: '#2F2F2F',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+  },
+  purchaseTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  purchaseProvider: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#00cc66',
+    marginBottom: 2,
+  },
+  purchaseAmount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#4A4A4A',
+    marginVertical: 4,
   },
   detailsContainer: {
-    padding: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+    justifyContent: 'space-between',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    width: '48%',
+    marginBottom: 4,
+  },
+  fullWidthRow: {
+    width: '100%', // Reference row takes full width
   },
   detailLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#A1A1AA',
     flex: 1,
-    flexShrink: 1,
   },
   detailValue: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '500',
     color: '#FFFFFF',
-    textAlign: 'right',
-    maxWidth: '50%',
     flex: 1,
-    flexWrap: 'wrap',
+    textAlign: 'right',
   },
   swipe: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   swipeText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#A1A1AA',
-    marginRight: 6,
+    marginRight: 4,
   },
   button: {
     backgroundColor: '#00cc66',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 6,
-    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+    width: '80%',
     alignItems: 'center',
+    // Adjusted: Added margin to prevent overlap with GIF; tweak this value to adjust spacing
+    marginBottom: 108, // Slightly more than GIF height to account for SafeAreaView padding
   },
   buttonText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
