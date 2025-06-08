@@ -1,1590 +1,1009 @@
-// import React, { useState, useRef, useEffect } from 'react';
-// import {
-//   View,
-//   Text,
-//   Pressable,
-//   Image,
-//   ScrollView,
-//   StyleSheet,
-//   TextInput,
-//   Alert,
-//   Animated,
-//   PanResponder,
-//   ActivityIndicator,
-// } from 'react-native';
-// import { router } from 'expo-router';
-// import { supabase } from '@/config/supabase';
-// import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
-// import * as SecureStore from 'expo-secure-store';
-// import { Ionicons } from '@expo/vector-icons';
-// import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from "@/constants/helper";
-
-// // Define the Provider interface
-// interface Provider {
-// 	id: number;
-// 	name: string;
-// 	image: any; // Changed from string to any to accommodate require() statements
-// 	code: string;
-// 	networkId: number;
-// 	apiDiscount: number;
-// }
-
-// // Placeholder images for each network
-// // const NETWORK_IMAGES: { [key: string]: string } = {
-// //   MTN: 'https://vtu.ng/wp-content/uploads/2023/08/mtn-logo.png',
-// //   GLO: 'https://vtu.ng/wp-content/uploads/2023/08/glo-logo.png',
-// //   AIRTEL: 'https://vtu.ng/wp-content/uploads/2023/08/airtel-logo.png',
-// //   '9MOBILE': 'https://vtu.ng/wp-content/uploads/2023/08/9mobile-logo.png',
-// // };
-
-// // Map API provider names to network IDs and discounts
-// const PROVIDER_CONFIG: { [key: string]: { networkId: number; apiDiscount: number } } = {
-//   MTN: { networkId: 1, apiDiscount: 98 },
-//   GLO: { networkId: 2, apiDiscount: 96 },
-//   AIRTEL: { networkId: 3, apiDiscount: 97 },
-//   '9MOBILE': { networkId: 4, apiDiscount: 98 }, // Fixed syntax error
-// };
-
-// // Predefined airtime amounts
-// const AIRTIME_AMOUNTS = [100, 200, 500, 1000, 2000, 3000, 5000, 10000];
-
-// const AirtimeProvider: React.FC = () => {
-//   const [providers, setProviders] = useState<Provider[]>([]);
-//   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-//   const [phoneNumber, setPhoneNumber] = useState<string>('');
-//   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-//   const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
-//   const [transactionPin, setTransactionPin] = useState<string>('');
-//   const [balance, setBalance] = useState<number>(0);
-//   const [userEmail, setUserEmail] = useState<string>('');
-//   const [referenceId, setReferenceId] = useState<string>('');
-//   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
-//   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
-//   const [loading, setLoading] = useState<boolean>(true);
-
-//   // Animation for slide to purchase
-//   const slideAnim = useRef(new Animated.Value(0)).current;
-
-//   // Fetch providers from Ebenkdata API
-//   const fetchProviders = async () => {
-//     try {
-//       const response = await fetch('https://ebenkdata.com/api/network/', {
-//         headers: {
-//           Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
-//         },
-//       });
-
-//       if (!response.ok) {
-//         throw new Error(`Failed to fetch providers: ${response.status}`);
-//       }
-
-//       const data = await response.json();
-//       console.log('API Response:', data);
-
-//       // Transform the API response into an array of Provider objects
-//       const providerMap: { [key: string]: Provider } = {};
-
-//       Object.keys(data).forEach((networkKey) => {
-//         const plans = data[networkKey];
-//         if (Array.isArray(plans) && plans.length > 0) {
-//           const networkName = plans[0].plan_network.toUpperCase();
-//           const config = PROVIDER_CONFIG[networkName];
-//           if (config && !providerMap[networkName]) {
-//             providerMap[networkName] = {
-//               id: plans[0].network,
-//               name: networkName,
-//               image: NETWORK_IMAGES[networkName] || 'https://example.com/default.png',
-//               code: networkName.toLowerCase(),
-//               networkId: config.networkId,
-//               apiDiscount: config.apiDiscount,
-//             };
-//           }
-//         }
-//       });
-
-//       const providerArray = Object.values(providerMap);
-//       setProviders(providerArray);
-
-//       if (providerArray.length === 0) {
-//         Alert.alert('Error', 'No valid providers found in the response.');
-//       }
-//     } catch (error) {
-//       console.error('Fetch error:', error);
-//       Alert.alert('Error', 'Could not load data providers.');
-//       setProviders([]);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     fetchProviders();
-//   }, []);
-
-//   // Handle provider selection
-//   const handleSelectProvider = (provider: Provider) => {
-//     console.log('Selected provider:', provider);
-//     setSelectedProvider(provider);
-//   };
-
-//   // Slide to purchase gesture
-//   const panResponder = useRef(
-//     PanResponder.create({
-//       onStartShouldSetPanResponder: () => !!selectedProvider, // Only allow gesture if provider is selected
-//       onPanResponderMove: (_, gestureState) => {
-//         if (gestureState.dx > 0) {
-//           slideAnim.setValue(gestureState.dx);
-//         }
-//       },
-//       onPanResponderRelease: (_, gestureState) => {
-//         if (gestureState.dx > 100 && selectedProvider) {
-//           handlePurchase();
-//         }
-//         Animated.spring(slideAnim, {
-//           toValue: 0,
-//           useNativeDriver: true,
-//         }).start();
-//       },
-//     })
-//   ).current;
-
-//   // Validate phone number against provider
-//   const validatePhoneNumber = (phone: string, provider: Provider | null): boolean => {
-//     if (!phone || phone.length !== 11 || !/^\d{11}$/.test(phone)) {
-//       return false;
-//     }
-//     if (!provider) return true;
-//     const prefix = phone.slice(0, 4);
-//     const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
-//     const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
-//     const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
-//     const etisalat = ['0809', '0817', '0818', '0909', '0908'];
-//     const providerPrefixes: { [key: string]: string[] } = {
-//       MTN: mtn,
-//       GLO: glo,
-//       AIRTEL: airtel,
-//       '9MOBILE': etisalat,
-//     };
-//     return providerPrefixes[provider.name]?.includes(prefix) || false;
-//   };
-
-//   // Calculate selling price and set discounted price
-//   const selectAmount = (amount: number) => {
-//     setSelectedAmount(amount);
-//     const sellingPrices: { [key: number]: number } = {
-//       100: 99,
-//       200: 198,
-//       500: 495,
-//       1000: 990,
-//     };
-//     const sellingPrice = sellingPrices[amount] || amount * 0.99;
-//     setDiscountedPrice(sellingPrice);
-//   };
-
-//   // Calculate API cost and profit
-//   const calculateApiCostAndProfit = (amount: number, provider: Provider): { apiCost: number; profit: number } => {
-//     const apiCost = (amount * provider.apiDiscount) / 100;
-//     const sellingPrice = discountedPrice || amount * 0.99;
-//     const profit = sellingPrice - apiCost;
-//     return { apiCost, profit };
-//   };
-
-//   // Fetch user email, balance, and generate referenceId
-//   useEffect(() => {
-//     const fetchUserData = async () => {
-//       try {
-//         const { data: { user }, error: userError } = await supabase.auth.getUser();
-//         if (userError || !user || !user.email) {
-//           throw new Error('User not authenticated');
-//         }
-//         setUserEmail(user.email);
-
-//         const { data: wallet, error: walletError } = await supabase
-//           .from('wallets')
-//           .select('balance')
-//           .eq('user_email', user.email)
-//           .single();
-
-//         if (walletError && walletError.code !== 'PGRST116') {
-//           throw walletError;
-//         }
-//         setBalance(wallet?.balance || 0);
-
-//         const newReferenceId = `EBENKDATA_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-//         setReferenceId(newReferenceId);
-//       } catch (error) {
-//         console.error('Error fetching user data:', error);
-//         Alert.alert('Error', 'Failed to load user data');
-//       }
-//     };
-//     fetchUserData();
-//   }, []);
-
-//   // Create Paystack transfer recipient
-//   const createRecipient = async (): Promise<string> => {
-//     const secretKey = await SecureStore.getItemAsync('PAYSTACK_SECRET_KEY');
-//     if (!secretKey) {
-//       throw new Error('Paystack secret key not found in .env');
-//     }
-//     const response = await fetch('https://api.paystack.co/transferrecipient', {
-//       method: 'POST',
-//       headers: {
-//         Authorization: `Bearer ${secretKey}`,
-//         'Content-Type': 'application/json',
-//       },
-//       body: JSON.stringify({
-//         type: 'nuban',
-//         name: 'Your Business Name',
-//         account_number: '0001234567', // Replace with your account number
-//         bank_code: '058', // Replace with your bank code (e.g., GTBank)
-//         currency: 'NGN',
-//       }),
-//     });
-//     const data = await response.json();
-//     if (!data.status || !data.data || !data.data.recipient_code) {
-//       throw new Error('Failed to create Paystack recipient: ' + JSON.stringify(data));
-//     }
-//     return data.data.recipient_code;
-//   };
-
-//   // Initiate Paystack transfer
-//   const initiateTransfer = async (recipientCode: string, amount: number): Promise<boolean> => {
-//     const secretKey = await SecureStore.getItemAsync('PAYSTACK_SECRET_KEY');
-//     if (!secretKey) {
-//       throw new Error('Paystack secret key not found in .env');
-//     }
-//     const response = await fetch('https://api.paystack.co/transfer', {
-//       method: 'POST',
-//       headers: {
-//         Authorization: `Bearer ${secretKey}`,
-//         'Content-Type': 'application/json',
-//       },
-//       body: JSON.stringify({
-//         source: 'balance',
-//         amount: amount * 100,
-//         recipient: recipientCode,
-//         reason: 'Airtime Purchase Profit',
-//       }),
-//     });
-//     const data = await response.json();
-//     return data.status === 'success';
-//   };
-
-//   // Deposit profit to Paystack
-//   const depositProfitToPaystack = async (profit: number) => {
-//     try {
-//       const recipientCode = await createRecipient();
-//       const transferSuccess = await initiateTransfer(recipientCode, profit);
-//       if (transferSuccess) {
-//         console.log(`Successfully deposited ₦${profit} to Paystack`);
-//       } else {
-//         console.error('Paystack transfer failed');
-//       }
-//       return transferSuccess;
-//     } catch (error) {
-//       console.error('Paystack deposit error:', error);
-//       return false;
-//     }
-//   };
-
-//   // Handle purchase with Ebenkdata API
-//   const handlePurchase = async () => {
-//     console.log('handlePurchase called, selectedProvider:', selectedProvider);
-//     if (!selectedProvider) {
-//       Alert.alert('Error', 'Please select a provider.');
-//       setTransactionModalVisible(true);
-//       setTransactionStatus('failed');
-//       return;
-//     }
-//     if (!phoneNumber || !validatePhoneNumber(phoneNumber, selectedProvider)) {
-//       Alert.alert('Error', `Please enter a valid 11-digit phone number for ${selectedProvider.name}.`);
-//       setTransactionModalVisible(true);
-//       setTransactionStatus('failed');
-//       return;
-//     }
-//     if (!selectedAmount) {
-//       Alert.alert('Error', 'Please select an airtime amount.');
-//       setTransactionModalVisible(true);
-//       setTransactionStatus('failed');
-//       return;
-//     }
-//     if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-//       Alert.alert('Error', 'Please enter a valid transaction PIN (4-6 digits).');
-//       setTransactionModalVisible(true);
-//       setTransactionStatus('failed');
-//       return;
-//     }
-//     if (balance < (discountedPrice || selectedAmount)) {
-//       Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
-//       setTransactionModalVisible(true);
-//       setTransactionStatus('failed');
-//       return;
-//     }
-
-//     // Verify transaction PIN
-//     try {
-//       const { data: userData, error: pinError } = await supabase
-//         .from('users')
-//         .select('transaction_pin')
-//         .eq('email', userEmail)
-//         .single();
-
-//       if (pinError || !userData || userData.transaction_pin !== transactionPin) {
-//         Alert.alert('Error', 'Invalid transaction PIN');
-//         setTransactionStatus('failed');
-//         setTransactionModalVisible(true);
-//         return;
-//       }
-//     } catch (error) {
-//       console.error('PIN verification error:', error);
-//       Alert.alert('Error', 'Failed to verify transaction PIN');
-//       setTransactionStatus('failed');
-//       setTransactionModalVisible(true);
-//       return;
-//     }
-
-//     setTransactionModalVisible(true);
-//     setTransactionStatus('processing');
-
-//     try {
-//       const { apiCost, profit } = calculateApiCostAndProfit(selectedAmount, selectedProvider);
-//       console.log(`API Cost: ₦${apiCost}, Selling Price: ₦${discountedPrice}, Profit: ₦${profit}`);
-
-//       const transactionData = {
-//         user_email: userEmail,
-//         amount: -(discountedPrice || selectedAmount),
-//         reference: referenceId,
-//         status: 'pending',
-//         metadata: {
-//           purchase: `Airtime ₦${selectedAmount.toLocaleString()} on ${selectedProvider.name}`,
-//           phone_number: phoneNumber,
-//           validity: 'N/A',
-//           type: 'airtime',
-//           actual_cost: discountedPrice || selectedAmount,
-//           api_cost: apiCost,
-//           profit: profit,
-//           custom_fields: [
-//             {
-//               display_name: 'Mobile Payment',
-//               variable_name: 'mobile_payment',
-//               value: 'Ebenkdata',
-//             },
-//           ],
-//         },
-//       };
-
-//       const { data: pendingTx, error: pendingTxError } = await supabase
-//         .from('transactions')
-//         .insert(transactionData)
-//         .select('id, created_at')
-//         .single();
-
-//       if (pendingTxError) {
-//         console.error('Pending transaction insert error:', pendingTxError.message);
-//         throw new Error('Failed to record pending transaction');
-//       }
-
-//       const apiUrl = 'https://ebenkdata.com/api/topup/';
-//       const requestBody = {
-//         network: selectedProvider.networkId,
-//         amount: selectedAmount,
-//         mobile_number: phoneNumber,
-//         Ported_number: true,
-//         airtime_type: 'VTU',
-//       };
-
-//       const purchaseResponse = await fetch(apiUrl, {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//           Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
-//         },
-//         body: JSON.stringify(requestBody),
-//       });
-
-//       console.log('Ebenkdata API Response Status:', purchaseResponse.status);
-
-//       if (purchaseResponse.status !== 200) {
-//         await supabase
-//           .from('transactions')
-//           .update({ status: 'failed' })
-//           .eq('id', pendingTx.id);
-//         setTransactionStatus('failed');
-//         Alert.alert('Error', 'Airtime purchase failed. Please try again.');
-//         return;
-//       }
-
-//       const depositSuccess = await depositProfitToPaystack(profit);
-//       if (!depositSuccess) {
-//         await supabase
-//           .from('transactions')
-//           .update({ status: 'failed' })
-//           .eq('id', pendingTx.id);
-//         setTransactionStatus('failed');
-//         Alert.alert('Error', 'Failed to deposit profit to Paystack.');
-//         return;
-//       }
-
-//       const newBalance = balance - (discountedPrice || selectedAmount);
-//       const { error: walletUpdateError } = await supabase
-//         .from('wallets')
-//         .update({ balance: newBalance })
-//         .eq('user_email', userEmail);
-
-//       if (walletUpdateError) {
-//         await supabase
-//           .from('transactions')
-//           .update({ status: 'failed' })
-//           .eq('id', pendingTx.id);
-//         throw new Error('Failed to update wallet balance');
-//       }
-
-//       const { error: successUpdateError } = await supabase
-//         .from('transactions')
-//         .update({ status: 'success' })
-//         .eq('id', pendingTx.id);
-
-//       if (successUpdateError) {
-//         console.error('Success transaction update error:', successUpdateError.message);
-//         throw new Error('Failed to update transaction status');
-//       }
-
-//       setBalance(newBalance);
-//       setTransactionStatus('success');
-
-//       router.push({
-//         pathname: '/success',
-//         params: {
-//           id: pendingTx.id,
-//           provider: selectedProvider.name,
-//           data: `Airtime ₦${selectedAmount.toLocaleString()}`,
-//           price: (discountedPrice || selectedAmount).toString(),
-//           date: new Date().toISOString(),
-//           status: 'Success',
-//           phoneNumber,
-//           reference: referenceId,
-//           metadata: JSON.stringify({
-//             validity: 'N/A',
-//             payment_method: 'Wallet',
-//             type: 'airtime',
-//             actual_cost: discountedPrice || selectedAmount,
-//             api_cost: apiCost,
-//             profit: profit,
-//           }),
-//         },
-//       });
-//     } catch (error) {
-//       console.error('Purchase error:', error);
-//       setTransactionStatus('failed');
-//       Alert.alert('Error', 'Failed to process purchase. Please try again.');
-//     }
-//   };
-
-//   // Close transaction modal
-//   const closeTransactionModal = () => {
-//     setTransactionModalVisible(false);
-//   };
-
-//   // Format number with commas
-//   const formatNumberWithCommas = (number: number | null): string => {
-//     if (number === null) return '';
-//     return number.toLocaleString();
-//   };
-
-//   return (
-// 		<ScrollView style={styles.container}>
-// 			{/* <Text style={styles.selectProviderTitle}>📞 Airtime Purchase</Text> */}
-
-// 			{/* Provider List */}
-// 			<Text style={styles.sectionTitle}>Select Provider</Text>
-// 			{loading ? (
-// 				<ActivityIndicator
-// 					size="large"
-// 					color="#00ff99"
-// 					style={{ marginTop: 20 }}
-// 				/>
-// 			) : providers.length === 0 ? (
-// 				<Text style={styles.noProviderText}>No providers available.</Text>
-// 			) : (
-// 				<View style={styles.providerContainer}>
-// 					{providers.map((provider) => (
-// 						<Pressable
-// 							key={provider.id}
-// 							onPress={() => handleSelectProvider(provider)}
-// 							style={[
-// 								styles.providerCard,
-// 								selectedProvider?.id === provider.id &&
-// 									styles.providerCardSelected,
-// 							]}
-// 						>
-// 							<Image
-// 								source={{ uri: provider.image }}
-// 								style={styles.providerLogo}
-// 								resizeMode="contain"
-// 							/>
-// 							<Text style={styles.providerName}>{provider.name}</Text>
-// 						</Pressable>
-// 					))}
-// 				</View>
-// 			)}
-
-// 			{/* Phone Number Input */}
-// 			<View style={styles.inputContainer}>
-// 				<Text style={styles.inputLabel}>Phone Number</Text>
-// 				<TextInput
-// 					style={styles.phoneInput}
-// 					value={phoneNumber}
-// 					onChangeText={setPhoneNumber}
-// 					placeholder="Enter 11-digit phone number"
-// 					placeholderTextColor="#A1A1AA"
-// 					keyboardType="numeric"
-// 					maxLength={11}
-// 				/>
-// 			</View>
-
-// 			{/* Transaction PIN Input */}
-// 			<View style={styles.inputContainer}>
-// 				<Text style={styles.inputLabel}>Transaction PIN</Text>
-// 				<TextInput
-// 					style={styles.phoneInput}
-// 					value={transactionPin}
-// 					onChangeText={setTransactionPin}
-// 					placeholder="Enter 4-6 digit PIN"
-// 					placeholderTextColor="#A1A1AA"
-// 					keyboardType="numeric"
-// 					maxLength={6}
-// 					secureTextEntry
-// 				/>
-// 			</View>
-
-// 			{/* Horizontal Amount List */}
-// 			<Text style={styles.sectionTitle}>Select Airtime Amount</Text>
-// 			<ScrollView
-// 				horizontal
-// 				showsHorizontalScrollIndicator={false}
-// 				style={styles.amountScroll}
-// 			>
-// 				{AIRTIME_AMOUNTS.map((amount) => (
-// 					<Pressable
-// 						key={amount}
-// 						onPress={() => selectAmount(amount)}
-// 						style={[
-// 							styles.amountButton,
-// 							selectedAmount === amount && styles.amountButtonSelected,
-// 						]}
-// 					>
-// 						<Text style={styles.amountText}>₦{amount.toLocaleString()}</Text>
-// 					</Pressable>
-// 				))}
-// 			</ScrollView>
-
-// 			{/* Discount Bar */}
-// 			<View style={styles.discountBar}>
-// 				<Text style={styles.discountLabel}>Amount to pay</Text>
-// 				<Text style={styles.discountValue}>
-// 					₦{formatNumberWithCommas(discountedPrice)}
-// 				</Text>
-// 			</View>
-
-// 			{/* Slide to Purchase */}
-// 			{selectedProvider ? (
-// 				<Animated.View
-// 					{...panResponder.panHandlers}
-// 					style={[
-// 						styles.slideContainer,
-// 						{ transform: [{ translateX: slideAnim }] },
-// 					]}
-// 				>
-// 					<View style={styles.slideTextContainer}>
-// 						<Text style={styles.slideText}>Slide to Purchase</Text>
-
-// 						<Text style={styles.arrow}>
-// 							<Ionicons name="arrow-forward-sharp" size={24} color="#D7A77F" />
-// 						</Text>
-// 					</View>
-// 				</Animated.View>
-// 			) : (
-// 				<View style={[styles.slideContainer, styles.slideContainerDisabled]}>
-// 					<View style={styles.slideTextContainer}>
-// 						<Text style={[styles.slideText, styles.slideTextDisabled]}>
-// 							Select a provider to purchase
-// 						</Text>
-// 					</View>
-// 				</View>
-// 			)}
-
-// 			<TransactionStatusModal
-// 				visible={transactionModalVisible}
-// 				onClose={closeTransactionModal}
-// 				transactionStatus={transactionStatus}
-// 				selectedPlan={{ amount: selectedAmount || 0, type: "airtime" }}
-// 				phoneNumber={phoneNumber}
-// 				networkProvider={selectedProvider?.name || ""}
-// 			/>
-// 		</ScrollView>
-// 	);
-// };
-
-// const styles = StyleSheet.create({
-// 	container: {
-// 		flex: 1,
-// 		backgroundColor: "black",
-// 		// paddingTop: 48,
-// 		paddingHorizontal: 16,
-// 	},
-// 	selectProviderTitle: {
-// 		fontSize: 20,
-// 		fontWeight: "bold",
-// 		color: "white",
-// 		marginBottom: 16,
-// 	},
-// 	sectionTitle: {
-// 		fontSize: 18,
-// 		fontWeight: "600",
-// 		color: "white",
-// 		marginBottom: 16,
-// 	},
-// 	providerContainer: {
-// 		flexDirection: "row",
-// 		justifyContent: "flex-start",
-// 		gap: 8,
-// 		marginBottom: 24,
-// 	},
-// 	providerCard: {
-// 		alignItems: "center",
-// 		backgroundColor: "#1E1E1E",
-// 		borderRadius: 12,
-// 		padding: 8,
-// 		width: 70,
-// 	},
-// 	providerCardSelected: {
-// 		borderColor: "#D7A77F",
-// 		borderWidth: 2,
-// 		backgroundColor: "transparent",
-// 	},
-// 	providerLogo: {
-// 		width: 36,
-// 		height: 36,
-// 		borderRadius: 18,
-// 		backgroundColor: "white",
-// 		marginBottom: 6,
-// 	},
-// 	providerName: {
-// 		fontSize: 11,
-// 		fontWeight: "600",
-// 		color: "white",
-// 	},
-// 	noProviderText: {
-// 		fontSize: 16,
-// 		color: "#A1A1AA",
-// 		textAlign: "center",
-// 		marginBottom: 24,
-// 	},
-// 	inputContainer: {
-// 		marginBottom: 24,
-// 	},
-// 	inputLabel: {
-// 		fontSize: 16,
-// 		color: "#A1A1AA",
-// 		marginBottom: 8,
-// 	},
-// 	phoneInput: {
-// 		backgroundColor: "#2D2D2D",
-// 		borderRadius: 8,
-// 		padding: 12,
-// 		fontSize: 16,
-// 		color: "white",
-// 	},
-// 	amountScroll: {
-// 		marginBottom: 24,
-// 	},
-// 	amountButton: {
-// 		backgroundColor: "#1E1E1E",
-// 		borderRadius: 8,
-// 		paddingVertical: 12,
-// 		paddingHorizontal: 16,
-// 		marginRight: 12,
-// 	},
-// 	amountButtonSelected: {
-// 		borderColor: "#D7A77F",
-// 		borderWidth: 2,
-// 		backgroundColor: "transparent",
-// 	},
-// 	amountText: {
-// 		fontSize: 16,
-// 		fontWeight: "600",
-// 		color: "white",
-// 	},
-// 	discountBar: {
-// 		flexDirection: "row",
-// 		justifyContent: "space-between",
-// 		backgroundColor: "#2D2D2D",
-// 		borderRadius: 8,
-// 		padding: 16,
-// 		marginBottom: 24,
-// 	},
-// 	discountLabel: {
-// 		fontSize: 16,
-// 		color: "#A1A1AA",
-// 	},
-// 	discountValue: {
-// 		fontSize: 16,
-// 		fontWeight: "600",
-// 		color: "#D7A77F",
-// 	},
-// 	slideContainer: {
-// 		marginTop: 16,
-// 		overflow: "hidden",
-// 		marginBottom: 24,
-// 	},
-// 	slideContainerDisabled: {
-// 		backgroundColor: "#2D2D2D",
-// 		opacity: 0.5,
-// 	},
-// 	slideTextContainer: {
-// 		flexDirection: "row",
-// 		alignItems: "center",
-// 		justifyContent: "space-between",
-// 		paddingVertical: 12,
-// 	},
-// 	slideText: {
-// 		fontSize: 16,
-// 		fontWeight: "600",
-// 		color: "#D7A77F",
-// 	},
-// 	slideTextDisabled: {
-// 		color: "#A1A1AA",
-// 	},
-// 	arrow: {
-// 		fontSize: 20,
-// 		color: "#D7A77F",
-// 	},
-// });
-
-// export default AirtimeProvider;
-
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-	View,
-	Text,
-	Pressable,
-	Image,
-	ScrollView,
-	StyleSheet,
-	TextInput,
-	Alert,
-	Animated,
-	PanResponder,
-	ActivityIndicator,
+  View,
+  Text,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  Alert,
+  Animated,
+  PanResponder,
+  ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/config/supabase";
 import TransactionStatusModal from "@/components/homescreen/TransactionStatusModal";
-import * as SecureStore from "expo-secure-store";
-import { Ionicons } from "@expo/vector-icons";
+import CreatePinModal from "@/components/homescreen/CreatePinModal";
 import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from "@/constants/helper";
+import { useRouter } from "expo-router";
 
 // Define the Provider interface
 interface Provider {
-	id: number;
-	name: string;
-	image: any; // Changed from string to any to accommodate require() statements
-	code: string;
-	networkId: number;
-	apiDiscount: number;
+  id: number;
+  name: string;
+  image: any;
+  code: string;
+  networkId: number;
 }
 
-// Map API provider names to network IDs and discounts
-const PROVIDER_CONFIG: {
-	[key: string]: { networkId: number; apiDiscount: number };
-} = {
-	MTN: { networkId: 1, apiDiscount: 98 },
-	GLO: { networkId: 2, apiDiscount: 96 },
-	AIRTEL: { networkId: 3, apiDiscount: 97 },
-	"9MOBILE": { networkId: 4, apiDiscount: 98 },
+// Map API provider names to network IDs
+const PROVIDER_CONFIG: { [key: string]: { networkId: number } } = {
+  MTN: { networkId: 1 },
+  GLO: { networkId: 2 },
+  AIRTEL: { networkId: 3 },
+  "9MOBILE": { networkId: 4 },
 };
 
 // Predefined airtime amounts
 const AIRTIME_AMOUNTS = [100, 200, 500, 1000, 2000, 3000, 5000, 10000];
 
 const AirtimeProvider: React.FC = () => {
-	const [providers, setProviders] = useState<Provider[]>([]);
-	const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
-		null,
-	);
-	const [phoneNumber, setPhoneNumber] = useState<string>("");
-	const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-	const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
-	const [transactionPin, setTransactionPin] = useState<string>("");
-	const [balance, setBalance] = useState<number>(0);
-	const [userEmail, setUserEmail] = useState<string>("");
-	const [referenceId, setReferenceId] = useState<string>("");
-	const [transactionModalVisible, setTransactionModalVisible] =
-		useState<boolean>(false);
-	const [transactionStatus, setTransactionStatus] = useState<
-		"processing" | "success" | "failed"
-	>("processing");
-	const [loading, setLoading] = useState<boolean>(true);
+  const router = useRouter();
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string>("");
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [referenceId, setReferenceId] = useState<string>("");
+  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
+  const [transactionStatus, setTransactionStatus] = useState<"processing" | "success" | "failed">("processing");
+  const [isPinCreationModalOpen, setIsPinCreationModalOpen] = useState<boolean>(false);
+  const [hasPin, setHasPin] = useState<boolean>(false);
+  const [newPin, setNewPin] = useState<string>("");
+  const [confirmPin, setConfirmPin] = useState<string>("");
+  const [isNewPinVisible, setIsNewPinVisible] = useState<boolean>(false);
+  const [isConfirmPinVisible, setIsConfirmPinVisible] = useState<boolean>(false);
+  const [detectedNetwork, setDetectedNetwork] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(true);
+  const [isSlideEnabled, setIsSlideEnabled] = useState<boolean>(false);
 
-	// Animation for slide to purchase
-	const slideAnim = useRef(new Animated.Value(0)).current;
+  // Persist state during gesture
+  const stateRef = useRef<{
+    selectedProvider: Provider | null;
+    phoneNumber: string;
+    selectedAmount: number | null;
+    discountedPrice: number | null;
+  }>({
+    selectedProvider: null,
+    phoneNumber: "",
+    selectedAmount: null,
+    discountedPrice: null,
+  });
 
-	// Fetch providers from Ebenkdata API
-	const fetchProviders = async () => {
-		try {
-			const response = await fetch("https://ebenkdata.com/api/network/", {
-				headers: {
-					Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
-				},
-			});
+  // Store gesture-critical data
+  const gestureRef = useRef<{
+    selectedProvider: Provider | null;
+    phoneNumber: string;
+    selectedAmount: number | null;
+    discountedPrice: number | null;
+  }>({
+    selectedProvider: null,
+    phoneNumber: "",
+    selectedAmount: null,
+    discountedPrice: null,
+  });
 
-			if (!response.ok) {
-				throw new Error(`Failed to fetch providers: ${response.status}`);
-			}
+  // Animation for slide to purchase
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Reference to control ScrollView scrolling
+  const scrollViewRef = useRef<ScrollView>(null);
 
-			const data = await response.json();
-			console.log("API Response:", data);
+  // Debug component mount/unmount
+  useEffect(() => {
+    console.log("AirtimeProvider mounted");
+    return () => console.log("AirtimeProvider unmounted");
+  }, []);
 
-			// Transform the API response into an array of Provider objects
-			const providerMap: { [key: string]: Provider } = {};
+  // Update stateRef when state changes
+  useEffect(() => {
+    stateRef.current = {
+      selectedProvider,
+      phoneNumber,
+      selectedAmount,
+      discountedPrice,
+    };
+    console.log("State updated:", stateRef.current);
+  }, [selectedProvider, phoneNumber, selectedAmount, discountedPrice]);
 
-			Object.keys(data).forEach((networkKey) => {
-				const plans = data[networkKey];
-				if (Array.isArray(plans) && plans.length > 0) {
-					const networkName = plans[0].plan_network.toUpperCase();
-					const config = PROVIDER_CONFIG[networkName];
-					if (config && !providerMap[networkName]) {
-						providerMap[networkName] = {
-							id: plans[0].network,
-							name: networkName,
-							image: NETWORK_IMAGES[networkName] || DEFAULT_PROVIDER_IMAGE, // Use local images
-							code: networkName.toLowerCase(),
-							networkId: config.networkId,
-							apiDiscount: config.apiDiscount,
-						};
-					}
-				}
-			});
+  // Check if slide gesture should be enabled
+  const canSlideToPurchase = useCallback(() => {
+    const isValid = !!selectedProvider && !!phoneNumber && phoneNumber.length === 11 && !!selectedAmount;
+    console.log("canSlideToPurchase:", { isValid, selectedProvider, phoneNumber, selectedAmount });
+    return isValid;
+  }, [selectedProvider, phoneNumber, selectedAmount]);
 
-			const providerArray = Object.values(providerMap);
-			setProviders(providerArray);
+  // Update slide enabled state incrementally
+  useEffect(() => {
+    const isValid = canSlideToPurchase();
+    setIsSlideEnabled(isValid);
+  }, [canSlideToPurchase]);
 
-			if (providerArray.length === 0) {
-				Alert.alert("Error", "No valid providers found in the response.");
-			}
-		} catch (error) {
-			console.error("Fetch error:", error);
-			Alert.alert("Error", "Could not load data providers.");
-			setProviders([]);
-		} finally {
-			setLoading(false);
-		}
-	};
+  // Fetch providers from Ebenkdata API
+  const fetchProviders = async () => {
+    try {
+      const response = await fetch("https://ebenkdata.com/api/network/", {
+        headers: {
+          Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
+        },
+      });
 
-	useEffect(() => {
-		fetchProviders();
-	}, []);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch providers: ${response.status}`);
+      }
 
-	// Handle provider selection
-	const handleSelectProvider = (provider: Provider) => {
-		console.log("Selected provider:", provider);
-		setSelectedProvider(provider);
-	};
+      const data = await response.json();
+      const providerMap: { [key: string]: Provider } = {};
+      Object.keys(data).forEach((networkKey) => {
+        const plans = data[networkKey];
+        if (Array.isArray(plans) && plans.length > 0) {
+          const networkName = plans[0].plan_network.toUpperCase();
+          const config = PROVIDER_CONFIG[networkName];
+          if (config && !providerMap[networkName]) {
+            providerMap[networkName] = {
+              id: plans[0].network,
+              name: networkName,
+              image: NETWORK_IMAGES[networkName] || DEFAULT_PROVIDER_IMAGE,
+              code: networkName.toLowerCase(),
+              networkId: config.networkId,
+            };
+          }
+        }
+      });
 
-	// Slide to purchase gesture
-	const panResponder = useRef(
-		PanResponder.create({
-			onStartShouldSetPanResponder: () => !!selectedProvider, // Only allow gesture if provider is selected
-			onPanResponderMove: (_, gestureState) => {
-				if (gestureState.dx > 0) {
-					slideAnim.setValue(gestureState.dx);
-				}
-			},
-			onPanResponderRelease: (_, gestureState) => {
-				if (gestureState.dx > 100 && selectedProvider) {
-					handlePurchase();
-				}
-				Animated.spring(slideAnim, {
-					toValue: 0,
-					useNativeDriver: true,
-				}).start();
-			},
-		}),
-	).current;
+      const providerArray = Object.values(providerMap);
+      console.log("Fetched providers:", providerArray);
+      setProviders(providerArray);
 
-	// Validate phone number against provider
-	const validatePhoneNumber = (
-		phone: string,
-		provider: Provider | null,
-	): boolean => {
-		if (!phone || phone.length !== 11 || !/^\d{11}$/.test(phone)) {
-			return false;
-		}
-		if (!provider) return true;
-		const prefix = phone.slice(0, 4);
-		const mtn = [
-			"0803",
-			"0806",
-			"0703",
-			"0706",
-			"0813",
-			"0816",
-			"0810",
-			"0814",
-			"0903",
-			"0906",
-			"0913",
-			"0916",
-		];
-		const glo = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
-		const airtel = [
-			"0802",
-			"0808",
-			"0708",
-			"0812",
-			"0701",
-			"0902",
-			"0907",
-			"0901",
-			"0912",
-		];
-		const etisalat = ["0809", "0817", "0818", "0909", "0908"];
-		const providerPrefixes: { [key: string]: string[] } = {
-			MTN: mtn,
-			GLO: glo,
-			AIRTEL: airtel,
-			"9MOBILE": etisalat,
-		};
-		return providerPrefixes[provider.name]?.includes(prefix) || false;
-	};
+      if (providerArray.length === 0) {
+        Alert.alert("Error", "No valid providers found in the response.");
+      }
+    } catch (error) {
+      console.error("Fetch error:", error);
+      Alert.alert("Error", "Could not load data providers.");
+      setProviders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-	// Calculate selling price and set discounted price
-	const selectAmount = (amount: number) => {
-		setSelectedAmount(amount);
-		const sellingPrices: { [key: number]: number } = {
-			100: 99,
-			200: 198,
-			500: 495,
-			1000: 990,
-		};
-		const sellingPrice = sellingPrices[amount] || amount * 0.99;
-		setDiscountedPrice(sellingPrice);
-	};
+  // Handle provider selection
+  const handleSelectProvider = (provider: Provider) => {
+    console.log("Provider clicked:", provider);
+    setSelectedProvider(provider);
+    console.log("Selected provider set to:", provider);
+  };
 
-	// Calculate API cost and profit
-	const calculateApiCostAndProfit = (
-		amount: number,
-		provider: Provider,
-	): { apiCost: number; profit: number } => {
-		const apiCost = (amount * provider.apiDiscount) / 100;
-		const sellingPrice = discountedPrice || amount * 0.99;
-		const profit = sellingPrice - apiCost;
-		return { apiCost, profit };
-	};
+  // Verify transaction PIN existence
+  const verifyTransactionPin = useCallback(async (email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("email", email)
+        .single();
 
-	// Fetch user email, balance, and generate referenceId
-	useEffect(() => {
-		const fetchUserData = async () => {
-			try {
-				const {
-					data: { user },
-					error: userError,
-				} = await supabase.auth.getUser();
-				if (userError || !user || !user.email) {
-					throw new Error("User not authenticated");
-				}
-				setUserEmail(user.email);
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
 
-				const { data: wallet, error: walletError } = await supabase
-					.from("wallets")
-					.select("balance")
-					.eq("user_email", user.email)
-					.single();
+      const pinExists = !!data?.transaction_pin;
+      return pinExists;
+    } catch (error) {
+      console.error("PIN Check Error:", error);
+      Alert.alert("Error", "Unable to verify PIN. Please retry.");
+      return false;
+    }
+  }, []);
 
-				if (walletError && walletError.code !== "PGRST116") {
-					throw walletError;
-				}
-				setBalance(wallet?.balance || 0);
+  // Create transaction reference
+  const createTransactionReference = async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user || !user.id) {
+        throw new Error("Authentication failed or user ID missing");
+      }
+      const reference = `EBENKDATA_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      return reference;
+    } catch (error) {
+      console.error("Reference Creation Error:", error);
+      throw error;
+    }
+  };
 
-				const newReferenceId = `EBENKDATA_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-				setReferenceId(newReferenceId);
-			} catch (error) {
-				console.error("Error fetching user data:", error);
-				Alert.alert("Error", "Failed to load user data");
-			}
-		};
-		fetchUserData();
-	}, []);
+  // Fetch user data and set up wallet subscription
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user || !user.email) {
+          throw new Error("User not authenticated");
+        }
+        setUserEmail(user.email);
 
-	// Create Paystack transfer recipient
-	const createRecipient = async (): Promise<string> => {
-		const secretKey = await SecureStore.getItemAsync("PAYSTACK_SECRET_KEY");
-		if (!secretKey) {
-			throw new Error("Paystack secret key not found in .env");
-		}
-		const response = await fetch("https://api.paystack.co/transferrecipient", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${secretKey}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				type: "nuban",
-				name: "Your Business Name",
-				account_number: "0001234567", // Replace with your account number
-				bank_code: "058", // Replace with your bank code (e.g., GTBank)
-				currency: "NGN",
-			}),
-		});
-		const data = await response.json();
-		if (!data.status || !data.data || !data.data.recipient_code) {
-			throw new Error(
-				"Failed to create Paystack recipient: " + JSON.stringify(data),
-			);
-		}
-		return data.data.recipient_code;
-	};
+        const { data: wallet, error: walletError } = await supabase
+          .from("wallets")
+          .select("balance")
+          .eq("user_email", user.email)
+          .single();
 
-	// Initiate Paystack transfer
-	const initiateTransfer = async (
-		recipientCode: string,
-		amount: number,
-	): Promise<boolean> => {
-		const secretKey = await SecureStore.getItemAsync("PAYSTACK_SECRET_KEY");
-		if (!secretKey) {
-			throw new Error("Paystack secret key not found in .env");
-		}
-		const response = await fetch("https://api.paystack.co/transfer", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${secretKey}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				source: "balance",
-				amount: amount * 100,
-				recipient: recipientCode,
-				reason: "Airtime Purchase Profit",
-			}),
-		});
-		const data = await response.json();
-		return data.status === "success";
-	};
+        if (walletError && walletError.code !== "PGRST116") {
+          throw walletError;
+        }
+        setBalance(wallet?.balance || 0);
+        setIsBalanceLoading(false);
 
-	// Deposit profit to Paystack
-	const depositProfitToPaystack = async (profit: number) => {
-		try {
-			const recipientCode = await createRecipient();
-			const transferSuccess = await initiateTransfer(recipientCode, profit);
-			if (transferSuccess) {
-				console.log(`Successfully deposited ₦${profit} to Paystack`);
-			} else {
-				console.error("Paystack transfer failed");
-			}
-			return transferSuccess;
-		} catch (error) {
-			console.error("Paystack deposit error:", error);
-			return false;
-		}
-	};
+        const pinExists = await verifyTransactionPin(user.email);
+        setHasPin(pinExists);
 
-	// Handle purchase with Ebenkdata API
-	const handlePurchase = async () => {
-		console.log("handlePurchase called, selectedProvider:", selectedProvider);
-		if (!selectedProvider) {
-			Alert.alert("Error", "Please select a provider.");
-			setTransactionModalVisible(true);
-			setTransactionStatus("failed");
-			return;
-		}
-		if (!phoneNumber || !validatePhoneNumber(phoneNumber, selectedProvider)) {
-			Alert.alert(
-				"Error",
-				`Please enter a valid 11-digit phone number for ${selectedProvider.name}.`,
-			);
-			setTransactionModalVisible(true);
-			setTransactionStatus("failed");
-			return;
-		}
-		if (!selectedAmount) {
-			Alert.alert("Error", "Please select an airtime amount.");
-			setTransactionModalVisible(true);
-			setTransactionStatus("failed");
-			return;
-		}
-		if (
-			!transactionPin ||
-			transactionPin.length < 4 ||
-			transactionPin.length > 6
-		) {
-			Alert.alert(
-				"Error",
-				"Please enter a valid transaction PIN (4-6 digits).",
-			);
-			setTransactionModalVisible(true);
-			setTransactionStatus("failed");
-			return;
-		}
-		if (balance < (discountedPrice || selectedAmount)) {
-			Alert.alert("Error", "Insufficient balance. Please fund your wallet.");
-			setTransactionModalVisible(true);
-			setTransactionStatus("failed");
-			return;
-		}
+        const subscription = supabase
+          .channel(`wallet-updates:${user.email}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "wallets",
+              filter: `user_email=eq.${user.email}`,
+            },
+            (payload) => {
+              setBalance(payload.new.balance ?? 0);
+            }
+          )
+          .subscribe((status, err) => {
+            if (err) console.error("Subscription error:", err);
+          });
 
-		// Verify transaction PIN
-		try {
-			const { data: userData, error: pinError } = await supabase
-				.from("users")
-				.select("transaction_pin")
-				.eq("email", userEmail)
-				.single();
+        return () => {
+          supabase.removeChannel(subscription);
+        };
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        Alert.alert("Error", "Failed to load user data");
+        setIsBalanceLoading(false);
+      }
+    };
+    fetchUserData();
+    fetchProviders();
+  }, [verifyTransactionPin]);
 
-			if (
-				pinError ||
-				!userData ||
-				userData.transaction_pin !== transactionPin
-			) {
-				Alert.alert("Error", "Invalid transaction PIN");
-				setTransactionStatus("failed");
-				setTransactionModalVisible(true);
-				return;
-			}
-		} catch (error) {
-			console.error("PIN verification error:", error);
-			Alert.alert("Error", "Failed to verify transaction PIN");
-			setTransactionStatus("failed");
-			setTransactionModalVisible(true);
-			return;
-		}
+  // Detect network from phone number
+  const detectProviderFromNumber = (phone: string): string => {
+    if (phone.length !== 11) return "";
+    const prefix = phone.slice(0, 4);
+    const mtnPrefixes = ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"];
+    const gloPrefixes = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
+    const airtelPrefixes = ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"];
+    const nineMobilePrefixes = ["0809", "0817", "0818", "0909", "0908"];
 
-		setTransactionModalVisible(true);
-		setTransactionStatus("processing");
+    if (mtnPrefixes.includes(prefix)) return "MTN";
+    if (gloPrefixes.includes(prefix)) return "GLO";
+    if (airtelPrefixes.includes(prefix)) return "AIRTEL";
+    if (nineMobilePrefixes.includes(prefix)) return "9MOBILE";
+    return "";
+  };
 
-		try {
-			const { apiCost, profit } = calculateApiCostAndProfit(
-				selectedAmount,
-				selectedProvider,
-			);
-			console.log(
-				`API Cost: ₦${apiCost}, Selling Price: ₦${discountedPrice}, Profit: ₦${profit}`,
-			);
+  useEffect(() => {
+    if (phoneNumber.length === 11 && selectedProvider) {
+      const provider = detectProviderFromNumber(phoneNumber);
+      setDetectedNetwork(provider === selectedProvider.name ? provider : "");
+      if (provider && provider !== selectedProvider.name) {
+        Alert.alert("Warning", `Phone number corresponds to ${provider}, but ${selectedProvider.name} is selected.`);
+      }
+    } else {
+      setDetectedNetwork("");
+    }
+  }, [phoneNumber, selectedProvider]);
 
-			const transactionData = {
-				user_email: userEmail,
-				amount: -(discountedPrice || selectedAmount),
-				reference: referenceId,
-				status: "pending",
-				metadata: {
-					purchase: `Airtime ₦${selectedAmount.toLocaleString()} on ${selectedProvider.name}`,
-					phone_number: phoneNumber,
-					validity: "N/A",
-					type: "airtime",
-					actual_cost: discountedPrice || selectedAmount,
-					api_cost: apiCost,
-					profit: profit,
-					custom_fields: [
-						{
-							display_name: "Mobile Payment",
-							variable_name: "mobile_payment",
-							value: "Ebenkdata",
-						},
-					],
-				},
-			};
+  // Calculate selling price
+  const selectAmount = (amount: number) => {
+    setSelectedAmount(amount);
+    const sellingPrices: { [key: number]: number } = {
+      100: 99,
+      200: 198,
+      500: 495,
+      1000: 990,
+    };
+    const sellingPrice = sellingPrices[amount] || amount * 0.99;
+    setDiscountedPrice(sellingPrice);
+  };
 
-			const { data: pendingTx, error: pendingTxError } = await supabase
-				.from("transactions")
-				.insert(transactionData)
-				.select("id, created_at")
-				.single();
+  // Validate phone number
+  const validatePhoneNumber = (phone: string, provider: Provider | null): boolean => {
+    if (!phone || phone.length !== 11 || !/^\d{11}$/.test(phone)) {
+      return false;
+    }
+    if (!provider) return false;
+    const prefix = phone.slice(0, 4);
+    const mtn = ["0803", "0806", "0703", "0706", "0813", "0816", "0810", "0814", "0903", "0906", "0913", "0916"];
+    const glo = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
+    const airtel = ["0802", "0808", "0708", "0812", "0701", "0902", "0907", "0901", "0912"];
+    const etisalat = ["0809", "0817", "0818", "0909", "0908"];
+    const providerPrefixes: { [key: string]: string[] } = {
+      MTN: mtn,
+      GLO: glo,
+      AIRTEL: airtel,
+      "9MOBILE": etisalat,
+    };
+    return providerPrefixes[provider.name]?.includes(prefix) || false;
+  };
 
-			if (pendingTxError) {
-				console.error(
-					"Pending transaction insert error:",
-					pendingTxError.message,
-				);
-				throw new Error("Failed to record pending transaction");
-			}
+  // Memoized PanResponder
+  const panResponder = useMemo(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => isSlideEnabled,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        console.log("Move should set responder:", { isSlideEnabled, dx: gestureState.dx, dy: gestureState.dy });
+        return isSlideEnabled && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 5;
+      },
+      onPanResponderGrant: () => {
+        console.log("PanResponder granted");
+        gestureRef.current = { ...stateRef.current }; // Capture state at gesture start
+        console.log("Gesture ref captured:", gestureRef.current);
+        scrollViewRef.current?.setNativeProps({ scrollEnabled: false });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        console.log("PanResponder move:", { dx: gestureState.dx });
+        if (gestureState.dx > 0 && gestureState.dx <= 200) {
+          slideAnim.setValue(gestureState.dx);
+        }
+      },
+      onPanResponderRelease: async (_, gestureState) => {
+        console.log("PanResponder released:", { dx: gestureState.dx });
+        scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+        if (gestureState.dx >= 100 && isSlideEnabled) {
+          console.log("Slide completed, triggering handlePurchase with:", gestureRef.current);
+          await handlePurchase();
+        }
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        console.log("PanResponder terminated");
+        scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
+      },
+    }),
+    [isSlideEnabled]
+  );
 
-			const apiUrl = "https://ebenkdata.com/api/topup/";
-			const requestBody = {
-				network: selectedProvider.networkId,
-				amount: selectedAmount,
-				mobile_number: phoneNumber,
-				Ported_number: true,
-				airtime_type: "VTU",
-			};
+  // Handle purchase (modeled after ConfirmationPage)
+  const handlePurchase = async () => {
+    const { selectedProvider, phoneNumber, selectedAmount, discountedPrice } = gestureRef.current;
+    console.log("handlePurchase called with:", { selectedProvider, phoneNumber, selectedAmount, discountedPrice, userEmail, balance });
 
-			const purchaseResponse = await fetch(apiUrl, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
-				},
-				body: JSON.stringify(requestBody),
-			});
+    if (!selectedProvider || !phoneNumber || !selectedAmount || balance === null || !userEmail) {
+      Alert.alert("Error", "Missing required information.");
+      setTransactionModalVisible(true);
+      setTransactionStatus("failed");
+      return;
+    }
 
-			console.log("Ebenkdata API Response Status:", purchaseResponse.status);
+    if (!validatePhoneNumber(phoneNumber, selectedProvider)) {
+      Alert.alert("Error", `Invalid phone number for ${selectedProvider.name}.`);
+      setTransactionModalVisible(true);
+      setTransactionStatus("failed");
+      return;
+    }
 
-			if (purchaseResponse.status !== 200) {
-				await supabase
-					.from("transactions")
-					.update({ status: "failed" })
-					.eq("id", pendingTx.id);
-				setTransactionStatus("failed");
-				Alert.alert("Error", "Airtime purchase failed. Please try again.");
-				return;
-			}
+    if (!hasPin) {
+      Alert.alert("Error", "Create a transaction PIN first.");
+      setIsPinCreationModalOpen(true);
+      setTransactionModalVisible(true);
+      setTransactionStatus("failed");
+      return;
+    }
 
-			const depositSuccess = await depositProfitToPaystack(profit);
-			if (!depositSuccess) {
-				await supabase
-					.from("transactions")
-					.update({ status: "failed" })
-					.eq("id", pendingTx.id);
-				setTransactionStatus("failed");
-				Alert.alert("Error", "Failed to deposit profit to Paystack.");
-				return;
-			}
+    if (discountedPrice && balance < discountedPrice) {
+      Alert.alert(
+        "Error",
+        `Insufficient balance. Required: ₦${formatNumberWithCommas(discountedPrice)}, Available: ₦${formatNumberWithCommas(balance)}`
+      );
+      setTransactionModalVisible(true);
+      setTransactionStatus("failed");
+      return;
+    }
 
-			const newBalance = balance - (discountedPrice || selectedAmount);
-			const { error: walletUpdateError } = await supabase
-				.from("wallets")
-				.update({ balance: newBalance })
-				.eq("user_email", userEmail);
+    if (detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
+      Alert.alert("Error", `Phone number does not match the selected provider (${selectedProvider.name})`);
+      setTransactionModalVisible(true);
+      setTransactionStatus("failed");
+      return;
+    }
 
-			if (walletUpdateError) {
-				await supabase
-					.from("transactions")
-					.update({ status: "failed" })
-					.eq("id", pendingTx.id);
-				throw new Error("Failed to update wallet balance");
-			}
+    let currentBalance = balance;
+    try {
+      setTransactionModalVisible(true);
+      setTransactionStatus("processing");
 
-			const { error: successUpdateError } = await supabase
-				.from("transactions")
-				.update({ status: "success" })
-				.eq("id", pendingTx.id);
+      const reference = await createTransactionReference();
+      setReferenceId(reference);
 
-			if (successUpdateError) {
-				console.error(
-					"Success transaction update error:",
-					successUpdateError.message,
-				);
-				throw new Error("Failed to update transaction status");
-			}
+      const actualCost = discountedPrice || selectedAmount;
 
-			setBalance(newBalance);
-			setTransactionStatus("success");
+      // Verify wallet balance
+      const { data: wallet, error: walletError } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_email", userEmail)
+        .single();
 
-			router.push({
-				pathname: "/success",
-				params: {
-					id: pendingTx.id,
-					provider: selectedProvider.name,
-					data: `Airtime ₦${selectedAmount.toLocaleString()}`,
-					price: (discountedPrice || selectedAmount).toString(),
-					date: new Date().toISOString(),
-					status: "Success",
-					phoneNumber,
-					reference: referenceId,
-					metadata: JSON.stringify({
-						validity: "N/A",
-						payment_method: "Wallet",
-						type: "airtime",
-						actual_cost: discountedPrice || selectedAmount,
-						api_cost: apiCost,
-						profit: profit,
-					}),
-				},
-			});
-		} catch (error) {
-			console.error("Purchase error:", error);
-			setTransactionStatus("failed");
-			Alert.alert("Error", "Failed to process purchase. Please try again.");
-		}
-	};
+      if (walletError && walletError.code !== "PGRST116") {
+        throw new Error(`Failed to fetch wallet balance: ${walletError.message}`);
+      }
 
-	// Close transaction modal
-	const closeTransactionModal = () => {
-		setTransactionModalVisible(false);
-	};
+      currentBalance = wallet?.balance ?? balance;
+      if (currentBalance < actualCost) {
+        Alert.alert(
+          "Error",
+          `Insufficient balance. Required: ₦${formatNumberWithCommas(actualCost)}, Available: ₦${formatNumberWithCommas(currentBalance)}`
+        );
+        setTransactionModalVisible(false);
+        return;
+      }
 
-	// Format number with commas
-	const formatNumberWithCommas = (number: number | null): string => {
-		if (number === null) return "";
-		return number.toLocaleString();
-	};
+      // Record pending transaction
+      const transactionData = {
+        user_email: userEmail,
+        amount: -actualCost,
+        reference,
+        status: "pending",
+        env: "live",
+        metadata: {
+          purchase: `Airtime ₦${selectedAmount.toLocaleString()} on ${selectedProvider.name}`,
+          phone_number: phoneNumber,
+          validity: "N/A",
+          type: "airtime",
+          actual_cost: actualCost,
+          fees: {
+            vat: 10,
+            total_fee: 50,
+            net_amount: actualCost - 50,
+            transfer_fee: 10,
+            api_network_fee: 20,
+            wallet_management_fee: 10,
+          },
+          payment_date: new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }),
+          custom_fields: [
+            {
+              value: "Edges Network",
+              display_name: "Mobile Payment",
+              variable_name: "mobile_payment",
+            },
+          ],
+          payment_method: "Wallet",
+        },
+      };
 
-	return (
-		<ScrollView style={styles.container}>
-			{/* <Text style={styles.selectProviderTitle}>📞 Airtime Purchase</Text> */}
+      const { data: pendingTx, error: pendingTxError } = await supabase
+        .from("transactions")
+        .insert(transactionData)
+        .select("id, created_at")
+        .single();
 
-			{/* Provider List */}
-			<Text style={styles.sectionTitle}>Select Provider</Text>
-			{loading ? (
-				<ActivityIndicator
-					size="large"
-					color="#00ff99"
-					style={{ marginTop: 20 }}
-				/>
-			) : providers.length === 0 ? (
-				<Text style={styles.noProviderText}>No providers available.</Text>
-			) : (
-				<View style={styles.providerContainer}>
-					{providers.map((provider) => (
-						<Pressable
-							key={provider.id}
-							onPress={() => handleSelectProvider(provider)}
-							style={[
-								styles.providerCard,
-								selectedProvider?.id === provider.id &&
-									styles.providerCardSelected,
-							]}
-						>
-							<Image
-								source={provider.image} // Now uses local require() statements
-								style={styles.providerLogo}
-								resizeMode="contain"
-							/>
-							<Text style={styles.providerName}>{provider.name}</Text>
-						</Pressable>
-					))}
-				</View>
-			)}
+      if (pendingTxError) {
+        throw new Error(`Failed to record pending transaction: ${pendingTxError.message}`);
+      }
 
-			{/* Phone Number Input */}
-			<View style={styles.inputContainer}>
-				<Text style={styles.inputLabel}>Phone Number</Text>
-				<TextInput
-					style={styles.phoneInput}
-					value={phoneNumber}
-					onChangeText={setPhoneNumber}
-					placeholder="Enter 11-digit phone number"
-					placeholderTextColor="#A1A1AA"
-					keyboardType="numeric"
-					maxLength={11}
-				/>
-			</View>
+      // Deduct balance
+      const newBalance = currentBalance - actualCost;
+      const { error: walletUpdateError } = await supabase
+        .from("wallets")
+        .update({ balance: newBalance })
+        .eq("user_email", userEmail);
 
-			{/* Transaction PIN Input */}
-			<View style={styles.inputContainer}>
-				<Text style={styles.inputLabel}>Transaction PIN</Text>
-				<TextInput
-					style={styles.phoneInput}
-					value={transactionPin}
-					onChangeText={setTransactionPin}
-					placeholder="Enter 4-6 digit PIN"
-					placeholderTextColor="#A1A1AA"
-					keyboardType="numeric"
-					maxLength={6}
-					secureTextEntry
-				/>
-			</View>
+      if (walletUpdateError) {
+        throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
+      }
 
-			{/* Horizontal Amount List */}
-			<Text style={styles.sectionTitle}>Select Airtime Amount</Text>
-			<ScrollView
-				horizontal
-				showsHorizontalScrollIndicator={false}
-				style={styles.amountScroll}
-			>
-				{AIRTIME_AMOUNTS.map((amount) => (
-					<Pressable
-						key={amount}
-						onPress={() => selectAmount(amount)}
-						style={[
-							styles.amountButton,
-							selectedAmount === amount && styles.amountButtonSelected,
-						]}
-					>
-						<Text style={styles.amountText}>₦{amount.toLocaleString()}</Text>
-					</Pressable>
-				))}
-			</ScrollView>
+      setBalance(newBalance);
 
-			{/* Discount Bar */}
-			<View style={styles.discountBar}>
-				<Text style={styles.discountLabel}>Amount to pay</Text>
-				<Text style={styles.discountValue}>
-					₦{formatNumberWithCommas(discountedPrice)}
-				</Text>
-			</View>
+      // Call Ebenkdata API
+      const requestBody = {
+        network: selectedProvider.networkId,
+        amount: selectedAmount,
+        mobile_number: phoneNumber,
+        Ported_number: true,
+        airtime_type: "VTU",
+      };
 
-			{/* Slide to Purchase */}
-			{selectedProvider ? (
-				<Animated.View
-					{...panResponder.panHandlers}
-					style={[
-						styles.slideContainer,
-						{ transform: [{ translateX: slideAnim }] },
-					]}
-				>
-					<View style={styles.slideTextContainer}>
-						<Text style={styles.slideText}>Slide to Purchase</Text>
+      console.log("Ebenkdata API request:", requestBody);
 
-						<Text style={styles.arrow}>
-							<Ionicons name="arrow-forward-sharp" size={24} color="#D7A77F" />
-						</Text>
-					</View>
-				</Animated.View>
-			) : (
-				<View style={[styles.slideContainer, styles.slideContainerDisabled]}>
-					<View style={styles.slideTextContainer}>
-						<Text style={[styles.slideText, styles.slideTextDisabled]}>
-							Select a provider to purchase
-						</Text>
-					</View>
-				</View>
-			)}
+      const purchaseResponse = await fetch("https://ebenkdata.com/api/topup/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-			<TransactionStatusModal
-				visible={transactionModalVisible}
-				onClose={closeTransactionModal}
-				transactionStatus={transactionStatus}
-				selectedPlan={{ amount: selectedAmount || 0, type: "airtime" }}
-				phoneNumber={phoneNumber}
-				networkProvider={selectedProvider?.name || ""}
-			/>
-		</ScrollView>
-	);
+      const responseText = await purchaseResponse.text();
+      console.log("Ebenkdata API response:", {
+        status: purchaseResponse.status,
+        responseText: responseText.slice(0, 100),
+      });
+
+      if (!purchaseResponse.ok) {
+        await supabase
+          .from("transactions")
+          .update({ status: "failed" })
+          .eq("id", pendingTx.id);
+        setTransactionStatus("failed");
+        Alert.alert("Error", "Airtime purchase failed. Please try again.");
+        return;
+      }
+
+      // Update transaction status
+      const { error: successUpdateError } = await supabase
+        .from("transactions")
+        .update({ status: "success" })
+        .eq("id", pendingTx.id);
+
+      if (successUpdateError) {
+        throw new Error(`Failed to update transaction status: ${successUpdateError.message}`);
+      }
+
+      setTransactionStatus("success");
+
+      Alert.alert(
+        "Success",
+        `Successfully purchased Airtime ₦${formatNumberWithCommas(selectedAmount)} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${phoneNumber}.`
+      );
+
+      router.push({
+        pathname: "/success",
+        params: {
+          id: pendingTx.id,
+          provider: selectedProvider.name,
+          data: `Airtime ₦${selectedAmount.toLocaleString()}`,
+          price: actualCost.toString(),
+          date: new Date().toISOString(),
+          status: "Success",
+          phoneNumber,
+          reference,
+          metadata: JSON.stringify({
+            validity: "N/A",
+            payment_method: "Wallet",
+            type: "airtime",
+            actual_cost: actualCost,
+          }),
+        },
+      });
+    } catch (error: any) {
+      console.error("Purchase error:", error);
+      setTransactionStatus("failed");
+      if (currentBalance !== undefined) {
+        await supabase
+          .from("wallets")
+          .update({ balance: currentBalance })
+          .eq("user_email", userEmail);
+      }
+      setTransactionModalVisible(false);
+      Alert.alert("Error", `Failed to process purchase: ${error.message || "Please try again."}`);
+    }
+  };
+
+  // Save transaction PIN
+  const savePin = async () => {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+      Alert.alert("Error", "PIN must be 4-6 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      Alert.alert("Error", "PINs do not match.");
+      return;
+    }
+    if (!userEmail) {
+      Alert.alert("Error", "User not authenticated.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data: profile, error: fetchError } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("email", userEmail)
+        .single();
+
+      if (fetchError && fetchError.code !== "PGRST116") {
+        throw fetchError;
+      }
+
+      if (profile) {
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ transaction_pin: newPin })
+          .eq("email", userEmail);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from("profiles")
+          .insert({ email: userEmail, transaction_pin: newPin });
+        if (insertError) throw insertError;
+      }
+
+      const pinExists = await verifyTransactionPin(userEmail);
+      if (!pinExists) {
+        throw new Error("PIN verification failed after saving");
+      }
+
+      setHasPin(true);
+      setIsPinCreationModalOpen(false);
+      setNewPin("");
+      setConfirmPin("");
+      Alert.alert("Success", "Transaction PIN created.");
+    } catch (error) {
+      console.error("PIN Save Error:", error);
+      Alert.alert("Error", "Unable to create PIN. Please retry.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Close modals
+  const closeTransactionModal = () => {
+    console.log("Closing TransactionStatusModal");
+    setTransactionModalVisible(false);
+  };
+
+  const closePinCreationModal = () => {
+    console.log("Closing CreatePinModal");
+    setIsPinCreationModalOpen(false);
+    setNewPin("");
+    setConfirmPin("");
+  };
+
+  // Format number with commas
+  const formatNumberWithCommas = (number: number | null): string => {
+    if (number === null) return "";
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.fixedHeader}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Buy Airtime</Text>
+        </View>
+        <View style={styles.walletBalanceContainer}>
+          <Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
+          <Text style={styles.walletBalanceValue}>
+            {isBalanceLoading ? "Loading..." : `₦${formatNumberWithCommas(balance)}`}
+          </Text>
+        </View>
+      </View>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={true}
+      >
+        <Text style={styles.sectionTitle}>Select Provider</Text>
+        <Text style={styles.debugText}>
+          Selected Provider: {selectedProvider ? selectedProvider.name : "None"}
+        </Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#00ff99" style={styles.loader} />
+        ) : providers.length === 0 ? (
+          <Text style={styles.noProviderText}>No providers available.</Text>
+        ) : (
+          <View style={styles.providerContainer}>
+            {providers.map((provider) => (
+              <TouchableOpacity
+                key={provider.id}
+                onPress={() => handleSelectProvider(provider)}
+                style={[
+                  styles.providerCard,
+                  selectedProvider?.id === provider.id && styles.providerCardSelected,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={provider.image}
+                  style={styles.providerLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.providerName}>{provider.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Phone Number</Text>
+          <TextInput
+            style={styles.phoneInput}
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            placeholder="Enter 11-digit phone number"
+            placeholderTextColor="#A1A1AA"
+            keyboardType="numeric"
+            maxLength={11}
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>Select Airtime Amount</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.amountScroll}
+        >
+          {AIRTIME_AMOUNTS.map((amount) => (
+            <TouchableOpacity
+              key={amount}
+              onPress={() => selectAmount(amount)}
+              style={[
+                styles.amountButton,
+                selectedAmount === amount && styles.amountButtonSelected,
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.amountText}>₦{formatNumberWithCommas(amount)}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={styles.discountBar}>
+          <Text style={styles.discountLabel}>Amount to pay:</Text>
+          <Text style={styles.discountValue}>
+            ₦{formatNumberWithCommas(discountedPrice)}
+          </Text>
+        </View>
+
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.slideContainer,
+            { transform: [{ translateX: slideAnim }] },
+            !isSlideEnabled && styles.slideContainerDisabled,
+          ]}
+          accessible
+          accessibilityLabel="Slide to confirm purchase"
+          accessibilityRole="button"
+        >
+          <View style={styles.slideTextContainer}>
+            <Text
+              style={[
+                styles.slideText,
+                !isSlideEnabled && styles.slideTextDisabled,
+              ]}
+            >
+              {isSlideEnabled ? "Slide to Purchase" : "Complete all fields to purchase"}
+            </Text>
+            {isSlideEnabled && (
+              <Ionicons name="arrow-forward" size={20} color="#3B82F6" />
+            )}
+          </View>
+        </Animated.View>
+
+        <TransactionStatusModal
+          visible={transactionModalVisible}
+          onClose={closeTransactionModal}
+          transactionStatus={transactionStatus}
+          selectedPlan={{ amount: selectedAmount || 0, type: "airtime" }}
+          phoneNumber={phoneNumber}
+          networkProvider={selectedProvider?.name || ""}
+        />
+
+        <CreatePinModal
+          visible={isPinCreationModalOpen}
+          onClose={closePinCreationModal}
+          newPin={newPin}
+          setNewPin={setNewPin}
+          confirmPin={confirmPin}
+          setConfirmPin={setConfirmPin}
+          showNewPin={isNewPinVisible}
+          setShowNewPin={setIsNewPinVisible}
+          showConfirmPin={isConfirmPinVisible}
+          setShowConfirmPin={setIsConfirmPinVisible}
+          onSave={savePin}
+          isLoading={loading}
+        />
+      </ScrollView>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: "black",
-		// paddingTop: 48,
-		paddingHorizontal: 16,
-	},
-	selectProviderTitle: {
-		fontSize: 20,
-		fontWeight: "bold",
-		color: "white",
-		marginBottom: 16,
-	},
-	sectionTitle: {
-		fontSize: 18,
-		fontWeight: "600",
-		color: "white",
-		marginBottom: 16,
-	},
-	providerContainer: {
-		flexDirection: "row",
-		justifyContent: "flex-start",
-		gap: 8,
-		marginBottom: 24,
-	},
-	providerCard: {
-		alignItems: "center",
-		backgroundColor: "#1E1E1E",
-		borderRadius: 12,
-		padding: 8,
-		width: 70,
-	},
-	providerCardSelected: {
-		borderColor: "#D7A77F",
-		borderWidth: 2,
-		backgroundColor: "transparent",
-	},
-	providerLogo: {
-		width: 36,
-		height: 36,
-		borderRadius: 18,
-		backgroundColor: "white",
-		marginBottom: 6,
-	},
-	providerName: {
-		fontSize: 11,
-		fontWeight: "600",
-		color: "white",
-	},
-	noProviderText: {
-		fontSize: 16,
-		color: "#A1A1AA",
-		textAlign: "center",
-		marginBottom: 24,
-	},
-	inputContainer: {
-		marginBottom: 24,
-	},
-	inputLabel: {
-		fontSize: 16,
-		color: "#A1A1AA",
-		marginBottom: 8,
-	},
-	phoneInput: {
-		backgroundColor: "#2D2D2D",
-		borderRadius: 8,
-		padding: 12,
-		fontSize: 16,
-		color: "white",
-	},
-	amountScroll: {
-		marginBottom: 24,
-	},
-	amountButton: {
-		backgroundColor: "#1E1E1E",
-		borderRadius: 8,
-		paddingVertical: 12,
-		paddingHorizontal: 16,
-		marginRight: 12,
-	},
-	amountButtonSelected: {
-		borderColor: "#D7A77F",
-		borderWidth: 2,
-		backgroundColor: "transparent",
-	},
-	amountText: {
-		fontSize: 16,
-		fontWeight: "600",
-		color: "white",
-	},
-	discountBar: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		backgroundColor: "#2D2D2D",
-		borderRadius: 8,
-		padding: 16,
-		marginBottom: 24,
-	},
-	discountLabel: {
-		fontSize: 16,
-		color: "#A1A1AA",
-	},
-	discountValue: {
-		fontSize: 16,
-		fontWeight: "600",
-		color: "#D7A77F",
-	},
-	slideContainer: {
-		marginTop: 16,
-		overflow: "hidden",
-		marginBottom: 24,
-	},
-	slideContainerDisabled: {
-		backgroundColor: "#2D2D2D",
-		opacity: 0.5,
-	},
-	slideTextContainer: {
-		flexDirection: "row",
-		alignItems: "center",
-		justifyContent: "space-between",
-		paddingVertical: 12,
-	},
-	slideText: {
-		fontSize: 16,
-		fontWeight: "600",
-		color: "#D7A77F",
-	},
-	slideTextDisabled: {
-		color: "#A1A1AA",
-	},
-	arrow: {
-		fontSize: 20,
-		color: "#D7A77F",
-	},
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  fixedHeader: {
+    backgroundColor: "#000",
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    zIndex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  walletBalanceContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  walletBalanceLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#A1A1AA",
+  },
+  walletBalanceValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 12,
+  },
+  debugText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#00ff99",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  providerContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 24,
+  },
+  providerCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    width: 100,
+    height: 100,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  providerCardSelected: {
+    borderColor: "#00ff99",
+    borderWidth: 3,
+    backgroundColor: "#2F2F2F",
+  },
+  providerLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  providerName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  noProviderText: {
+    fontSize: 16,
+    color: "#A1A1AA",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  inputContainer: {
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 16,
+    color: "#A1A1AA",
+    marginBottom: 8,
+  },
+  phoneInput: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: "#fff",
+  },
+  amountScroll: {
+    marginBottom: 24,
+  },
+  amountButton: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginRight: 12,
+  },
+  amountButtonSelected: {
+    borderColor: "#00ff99",
+    borderWidth: 2,
+    backgroundColor: "#2F2F2F",
+  },
+  amountText: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: "#fff",
+  },
+  discountBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+  },
+  discountLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#A1A1AA",
+  },
+  discountValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#00ff99",
+  },
+  slideContainer: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  slideContainerDisabled: {
+    backgroundColor: "#2D2D2D",
+    opacity: 0.6,
+  },
+  slideTextContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  slideText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+  slideTextDisabled: {
+    fontWeight: "600",
+    color: "#A1A1AA",
+  },
+  loader: {
+    marginTop: 20,
+  },
 });
 
 export default AirtimeProvider;
