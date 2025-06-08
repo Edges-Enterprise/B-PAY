@@ -227,7 +227,8 @@ export default function HistoryScreen() {
               style={styles.closeButton}
               onPress={() => setSelectedTransaction(null)}
             >
-              <Ionic-Resizable><Ionicons name="close" size={24} color="#FFF" /></Pressable>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </Pressable>
             <ScrollView>
               <Text style={styles.receiptTitle}>
                 {type.toLowerCase() === "deposit" ? "Deposit Receipt" : "Purchase Receipt"}
