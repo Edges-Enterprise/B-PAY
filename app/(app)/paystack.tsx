@@ -441,10 +441,10 @@ const PaymentScreen = () => {
   };
 
   const generatePaystackHTML = (): string => {
-    const reference = paymentReference || `EDGES_${userId}_${Date.now()}`;
-    console.log(`Generating Paystack HTML with reference: ${reference}`);
-    return `
-     <!DOCTYPE html>
+  const reference = paymentReference || `EDGES_${userId}_${Date.now()}`;
+  console.log(`Generating Paystack HTML with reference: ${reference}`);
+  return `
+    <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
@@ -491,7 +491,7 @@ const PaymentScreen = () => {
           email: '${userEmail}',
           amount: ${parseFloat(amount as string) * 100},
           currency: 'NGN',
-          channels: ['card', 'bank', 'ussd', 'qr', 'opay', 'visa_qr'],
+          channels: ['card', 'bank_transfer','bank', 'ussd', 'qr'],
           ref: '${reference}',
           metadata: {
             custom_fields: [
@@ -574,7 +574,8 @@ const PaymentScreen = () => {
       </script>
     </body>
     </html>
-    `;
+  `;
+
   };
 
   // Automatically initiate payment on mount
