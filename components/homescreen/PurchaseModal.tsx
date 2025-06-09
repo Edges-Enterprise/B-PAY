@@ -106,7 +106,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
             <Text style={sharedStyles.label}>Phone Number</Text>
             <TextInput
               style={sharedStyles.input}
-              placeholder="08012345678"
+              placeholder="Enter Phone Number"
               placeholderTextColor="#999"
               keyboardType="phone-pad"
               maxLength={11}

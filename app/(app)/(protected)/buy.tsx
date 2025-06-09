@@ -23,6 +23,12 @@ interface Provider {
 
 const SUPPORTED_PROVIDERS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
 const VALID_PLAN_TYPES = ["SME", "Corporate Gifting", "Gifting", "Standard"];
+const AVAILABLE_PLAN_TYPES = {
+  MTN: ["SME", "Gifting"],
+  AIRTEL: ["Standard"], // Based on no specific type in codes
+  GLO: ["Standard"], // No Gifting code
+  "9MOBILE": ["Gifting"],
+};
 
 const ServiceProviderScreen: React.FC = () => {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -87,10 +93,14 @@ const ServiceProviderScreen: React.FC = () => {
 
           const networkName = firstPlan.plan_network.toUpperCase();
           if (!providerMap[networkName]) {
-            // Extract unique plan types for this provider
+            // Extract unique plan types for this provider, filtered by availability
             const availablePlanTypes = Array.from(
               new Set(plans.map((plan: any) => plan.plan_type || "Standard"))
-            ).filter((type: string) => VALID_PLAN_TYPES.includes(type));
+            )
+              .filter((type: string) => VALID_PLAN_TYPES.includes(type))
+              .filter((type: string) =>
+                AVAILABLE_PLAN_TYPES[networkName]?.includes(type) || type === "Standard"
+              );
 
             providerMap[networkName] = {
               id: Number(firstPlan.network),

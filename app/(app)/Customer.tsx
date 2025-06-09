@@ -6,39 +6,35 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
-  StatusBar,
   TextInput,
   TouchableOpacity,
-  Alert,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
-import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Dimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL or Anon Key is missing in environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Auth context
+import { useAuth } from '@/context/supabase-provider'; // Adjust path as needed
 
 // Get screen dimensions
-const { width, height } = Dimensions.get('window');
-const scaleFont = (size: number) => (width / 375) * size;
+const { width } = Dimensions.get('window');
 const scaleSize = (size: number) => (width / 375) * size;
+const scaleFont = (size: number) => (width / 375) * size;
 
 const CustomerCare: React.FC = () => {
- 
-  const [user, setUser] = useState<any>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const whatsappPulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Use centralized auth state
+  const { user, profile } = useAuth();
 
   // Animations
   useEffect(() => {
@@ -57,104 +53,109 @@ const CustomerCare: React.FC = () => {
       ])
     ).start();
 
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(whatsappPulseAnim, {
+          toValue: 1.05,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(whatsappPulseAnim, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500,
       useNativeDriver: true,
     }).start();
-
-    fetchUserData();
   }, []);
 
-  // Fetch user data
-  const fetchUserData = async () => {
-    try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session) throw new Error('No active session');
-
-      const userId = sessionData.session.user.id;
-      const { data: userData, error: userError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      if (userError) throw userError;
-
-      setUser(userData);
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      Alert.alert('Error', 'Failed to load user data.');
-    }
-  };
-
-  // Submit issue to Supabase and simulate email
   const submitIssue = async () => {
     if (!title || !description) {
-      Alert.alert('Error', 'Please fill in all fields.');
+      const username = profile?.username || user?.email.split('@')[0] || 'User';
+      setModalMessage(`Hello ${username}, please fill in the title and description of your issue.`);
+      setModalVisible(true);
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('customer_issues')
-        .insert({
+      const { error } = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_FUNCTION_URL}/submit-issue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await getAccessToken()}`,
+        },
+        body: JSON.stringify({
           user_id: user?.id,
           title,
           description,
-          email: user?.email || 'no-email@edgesnetwork.app',
-        });
+          email: profile?.email || user?.email,
+        }),
+      });
+
       if (error) throw error;
 
-      // Simulate sending email to Edgesenterprice@outlook.com
-      const emailBody = `New Issue from ${user?.email || 'Unknown'}:\nTitle: ${title}\nDescription: ${description}\nTime: ${new Date().toISOString()}`;
-      console.log(`Email sent to Edgesenterprice@outlook.com:\n${emailBody}`);
       Alert.alert('Success', 'Issue submitted! Our team will contact you soon.');
-
-      // Clear form
       setTitle('');
       setDescription('');
-    } catch (error) {
-      console.error('Error submitting issue:', error);
+    } catch (err) {
+      console.error('Error submitting issue:', err);
       Alert.alert('Error', 'Failed to submit issue. Please try again.');
     }
   };
 
-  // Handle back navigation
-  const handleBack = () => {
-    router.back();
+  const handleWhatsAppContact = () => {
+    if (!title || !description) {
+      const username = profile?.username || user?.email.split('@')[0] || 'User';
+      setModalMessage(`Hello ${username}, please fill in the title and description of your issue.`);
+      setModalVisible(true);
+      return;
+    }
+
+    const adminWhatsAppNumber = '+2347015888155';
+    const userIdentifier = profile?.username || user?.email || 'Anonymous';
+    const message = `Hello, I am ${userIdentifier} requesting assistance from Edges Network with an issue
+Title: ${title}
+Description: ${description}`;
+    const whatsappUrl = `https://wa.me/${adminWhatsAppNumber}?text=${encodeURIComponent(message)}`;
+
+    Linking.openURL(whatsappUrl).catch((err) => {
+      console.error('Error opening WhatsApp:', err);
+      Alert.alert('Error', 'Unable to open WhatsApp. Please try again.');
+    });
+  };
+
+  const getAccessToken = async () => {
+    const { data } = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_FUNCTION_URL}/get-access-token`);
+    return data.access_token;
   };
 
   return (
     <Animated.View style={[styles.rootContainer, { opacity: fadeAnim }]}>
-      {/* <StatusBar barStyle="light-content" backgroundColor="#000000" /> */}
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.innerContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* <View style={styles.headerContainer}>
-          <Pressable onPress={handleBack} style={styles.backButton}>
-            <Text style={styles.backArrow}>←</Text>
-          </Pressable>
-          <View>
-            <Text style={styles.title}>Customer Care</Text>
-            <View style={styles.headerUnderline} />
-          </View>
-        </View> */}
-
         <View style={styles.contentContainer}>
           <View style={styles.heroCard}>
             <Text style={styles.headline}>Need Help?</Text>
             <Text style={styles.subheadline}>
-              Submit your issue below. Our team at <Text style={styles.subheadlines}>edgesenterprice@outlook.com </Text> will assist you.
+              Submit your issue below or{' '}
+              <Text style={styles.subheadlines}>contact us on WhatsApp</Text>. Our team at{' '}
+              <Text style={styles.subheadlines}>edgesenterprice@outlook.com</Text> will assist you.
             </Text>
-
             <TextInput
               style={styles.input}
               value={title}
               onChangeText={setTitle}
               placeholder="Issue Title"
-              placeholderTextColor="#B0B0B0"
+              placeholderTextColor="#B0B0B0" 
             />
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -192,11 +193,30 @@ const CustomerCare: React.FC = () => {
               </Text>
             </View>
           </View>
+
+          <Animated.View style={{ transform: [{ scale: whatsappPulseAnim }] }}>
+            <TouchableOpacity style={styles.whatsappButton} onPress={handleWhatsAppContact}>
+              <Ionicons name="logo-whatsapp" size={scaleFont(32)} color="#FFFFFF" />
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       </ScrollView>
+
+      {/* Custom Modal */}
+      {modalVisible && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalText}>{modalMessage}</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </Animated.View>
   );
 };
+
 
 const styles = StyleSheet.create({
   rootContainer: {
@@ -208,36 +228,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   innerContainer: {
-    // paddingTop: scaleSize(60),
     paddingHorizontal: scaleSize(16),
     flexGrow: 1,
     backgroundColor: '#000000',
     paddingBottom: scaleSize(20),
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: scaleSize(24),
-  },
-  title: {
-    fontSize: scaleFont(24),
-    fontWeight: '700',
-    color: '#d7a77f',
-    flex: 1,
-  },
-  headerUnderline: {
-    height: scaleSize(2),
-    backgroundColor: '#FFD700',
-    width: scaleSize(120),
-    marginTop: scaleSize(4),
-  },
-  backButton: {
-    padding: scaleSize(8),
-    marginRight: scaleSize(8),
-  },
-  backArrow: {
-    fontSize: scaleFont(20),
-    color: '#FFD700',
   },
   contentContainer: {
     marginTop: scaleSize(16),
@@ -267,7 +261,6 @@ const styles = StyleSheet.create({
   subheadlines: {
     color: '#3B82F6',
   },
-  
   subheadline: {
     fontSize: scaleFont(14),
     fontWeight: '400',
@@ -298,6 +291,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFF',
   },
+  whatsappButton: {
+    backgroundColor: '#25D366',
+    borderRadius: scaleSize(50),
+    width: scaleSize(60),
+    height: scaleSize(60),
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    bottom: scaleSize(10),
+    left: scaleSize(110),
+    zIndex: 10,
+  },
   tierCard: {
     backgroundColor: 'rgba(28, 28, 30, 0.9)',
     borderRadius: scaleSize(12),
@@ -320,6 +325,7 @@ const styles = StyleSheet.create({
   },
   faqItem: {
     marginHorizontal: scaleSize(12),
+    marginBottom: scaleSize(12),
   },
   faqQuestion: {
     fontSize: scaleFont(14),
@@ -331,6 +337,41 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#B0B0B0',
     marginTop: scaleSize(4),
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  modalContainer: {
+    backgroundColor: '#1C1C1E',
+    padding: scaleSize(20),
+    borderRadius: scaleSize(12),
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalText: {
+    color: '#FFFFFF',
+    fontSize: scaleFont(16),
+    textAlign: 'center',
+    marginBottom: scaleSize(16),
+  },
+  modalButton: {
+    backgroundColor: '#744925',
+    paddingVertical: scaleSize(8),
+    paddingHorizontal: scaleSize(16),
+    borderRadius: scaleSize(8),
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: scaleFont(14),
+    fontWeight: '600',
   },
 });
 
