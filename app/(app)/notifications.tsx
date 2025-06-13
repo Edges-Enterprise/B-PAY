@@ -17,6 +17,7 @@ import { supabase } from '@/config/supabase';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { DEFAULT_PROVIDER_IMAGE, NETWORK_IMAGES } from '@/constants/helper';
+import { Swipeable } from 'react-native-gesture-handler';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -58,7 +59,7 @@ const NewTagBadge: React.FC<{ isNew: boolean }> = ({ isNew }) => {
       const rotate = Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1,
-          duration: 8000, // 8s for slow rotation
+          duration: 8000,
           useNativeDriver: true,
         }),
       );
@@ -269,39 +270,53 @@ export default function NotificationsPage() {
     return DEFAULT_PROVIDER_IMAGE;
   };
 
+  const renderLeftActions = (notificationId: string) => (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={() => dismissNotification(notificationId)}
+    >
+      <Ionicons name="trash" size={24} color="#FFFFFF" />
+    </Pressable>
+  );
+
   const renderNotification = ({ item }: { item: Notification }) => {
     console.log('Rendering notification:', item);
     const logoSource = getNetworkLogo(item.message);
     const isNew = new Date().getTime() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
 
     return (
-      <Pressable onPress={() => handleNotificationPress(item)} style={styles.notificationItem}>
-        <Image
-          source={typeof logoSource === 'string' ? { uri: logoSource } : logoSource}
-          style={styles.networkLogo}
-          resizeMode="contain"
-        />
-        <View style={styles.notificationContent}>
-          <View style={styles.messageContainer}>
-            <Text style={styles.notificationMessage} numberOfLines={1} ellipsizeMode="tail">
-              {typeof item.message === 'string' ? item.message : item.message.text}
+      <Swipeable
+        renderLeftActions={() => renderLeftActions(item.id)}
+        overshootLeft={false}
+      >
+        <Pressable onPress={() => handleNotificationPress(item)} style={styles.notificationItem}>
+          <Image
+            source={typeof logoSource === 'string' ? { uri: logoSource } : logoSource}
+            style={styles.networkLogo}
+            resizeMode="contain"
+          />
+          <View style={styles.notificationContent}>
+            <View style={styles.messageContainer}>
+              <Text style={styles.notificationMessage} numberOfLines={1} ellipsizeMode="tail">
+                {typeof item.message === 'string' ? item.message : item.message.text}
+              </Text>
+              <NewTagBadge isNew={isNew} />
+            </View>
+            <Text style={styles.notificationTime}>
+              {new Date(item.created_at).toLocaleString('en-US', {
+                hour: 'numeric',
+                minute: 'numeric',
+                hour12: true,
+              })}
             </Text>
-            <NewTagBadge isNew={isNew} />
           </View>
-          <Text style={styles.notificationTime}>
-            {new Date(item.created_at).toLocaleString('en-US', {
-              hour: 'numeric',
-              minute: 'numeric',
-              hour12: true,
-            })}
-          </Text>
-        </View>
-        {['hot_data', 'special_data', 'weekend_plan', 'weekly_plan'].includes(item.type) && (
-          <Pressable onPress={() => dismissNotification(item.id)} style={styles.dismissButton}>
-            <Ionicons name="close" size={20} color="#FFFFFF" />
-          </Pressable>
-        )}
-      </Pressable>
+          {['hot_data', 'special_data', 'weekend_plan', 'weekly_plan'].includes(item.type) && (
+            <Pressable onPress={() => dismissNotification(item.id)} style={styles.dismissButton}>
+              <Ionicons name="close" size={20} color="#FFFFFF" />
+            </Pressable>
+          )}
+        </Pressable>
+      </Swipeable>
     );
   };
 
@@ -316,13 +331,13 @@ export default function NotificationsPage() {
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
       </View>
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
-        ListEmptyComponent={<Text style={styles.emptyText}>No notifications available</Text>}
-        contentContainerStyle={styles.listContent}
-      />
+    <FlatList
+  data={notifications}
+  renderItem={renderNotification}
+  keyExtractor={(item) => item.id}
+  ListEmptyComponent={<Text style={styles.emptyText}>No notifications available</Text>}
+  contentContainerStyle={styles.listContent}
+/>
     </View>
   );
 }
@@ -330,7 +345,7 @@ export default function NotificationsPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000', // Black background
+    backgroundColor: '#000000',
     paddingHorizontal: 16,
     paddingTop: (StatusBar.currentHeight || 0) + 16,
   },
@@ -339,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     paddingVertical: 12,
-    backgroundColor: '#000000', // Black header
+    backgroundColor: '#000000',
     paddingHorizontal: 16,
     borderRadius: 8,
   },
@@ -349,7 +364,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#FFFFFF', // White text
+    color: '#FFFFFF',
     marginLeft: 8,
   },
   notificationItem: {
@@ -357,11 +372,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#000000', // Black card
+    backgroundColor: '#000000',
     borderRadius: 8,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#FFFFFF', // White border
+    borderColor: '#FFFFFF',
   },
   networkLogo: {
     width: 24,
@@ -380,17 +395,17 @@ const styles = StyleSheet.create({
   },
   notificationMessage: {
     fontSize: 14,
-    color: '#FFFFFF', // White text
+    color: '#FFFFFF',
     fontWeight: '500',
     flexShrink: 1,
   },
   notificationTime: {
     fontSize: 12,
-    color: '#8B4513', // Brown timestamp
+    color: '#8B4513',
     marginTop: 4,
   },
   newTag: {
-    backgroundColor: '#FFFFFF', // White background
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -398,7 +413,7 @@ const styles = StyleSheet.create({
   },
   newTagText: {
     fontSize: 10,
-    color: '#000000', // Black text
+    color: '#000000',
     fontWeight: '600',
   },
   dismissButton: {
@@ -406,11 +421,25 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#FFFFFF', // White text
+    color: '#FFFFFF',
     textAlign: 'center',
     marginTop: 32,
   },
   listContent: {
     paddingBottom: 20,
+  },
+  deleteAction: {
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 70,
+    height: '75%',
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  deleteActionText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

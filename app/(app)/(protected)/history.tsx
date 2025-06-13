@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   SafeAreaView,
   View,
@@ -12,9 +12,10 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import moment from "moment-timezone";
 import { supabase } from "@/config/supabase";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
 interface HistoryItem {
   id: string;
@@ -58,11 +59,17 @@ const statusColors: { [key: string]: string } = {
 };
 
 export default function HistoryScreen() {
+  const pathname = usePathname();
   const [filter, setFilter] = useState<"All" | "Success" | "Failed" | "Pending">("All");
   const [refreshing, setRefreshing] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
   const [selectedTransaction, setSelectedTransaction] = useState<HistoryItem | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    console.log(`HistoryScreen mounted, pathname: ${pathname}`);
+  }, [pathname]);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -150,7 +157,6 @@ export default function HistoryScreen() {
           provider = tx.metadata?.payment_method || "Payment Gateway";
           phoneNumber = tx.metadata?.phone_number || "N/A";
         } else {
-          // Handle other transaction types (e.g., airtime, electricity)
           data = tx.metadata?.purchase || transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
           provider = tx.metadata?.provider || "Unknown Provider";
           phoneNumber = tx.metadata?.phone_number || "N/A";
@@ -206,6 +212,15 @@ export default function HistoryScreen() {
 
   const formatAmount = (amount: number) => {
     return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+  };
+
+  const handleScroll = (event: any) => {
+    const { velocity } = event.nativeEvent;
+    if (velocity && Math.abs(velocity.y) > 0.5) {
+      flatListRef.current?.setNativeProps({ scrollEnabled: true });
+    } else {
+      flatListRef.current?.setNativeProps({ scrollEnabled: true });
+    }
   };
 
   const renderReceipt = () => {
@@ -302,59 +317,64 @@ export default function HistoryScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back-outline" size={24} color="white" />
-        </Pressable>
-        <Text style={styles.title}>Transaction History</Text>
-        <View style={{ width: 24 }} />
-      </View>
-      <View style={styles.filterTabs}>
-        {["All", "Success", "Failed", "Pending"].map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setFilter(item as typeof filter)}
-            style={[
-              styles.filterButton,
-              filter === item && styles.activeFilterButton,
-            ]}
-          >
-            <Text
+    <SwipeWrapper flatListRef={flatListRef}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
+            <Ionicons name="arrow-back-outline" size={24} color="white" />
+          </Pressable>
+          <Text style={styles.title}>Transaction History</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.filterTabs}>
+          {["All", "Success", "Failed", "Pending"].map((item) => (
+            <Pressable
+              key={item}
+              onPress={() => setFilter(item as typeof filter)}
               style={[
-                styles.filterButtonText,
-                filter === item && styles.activeFilterButtonText,
+                styles.filterButton,
+                filter === item && styles.activeFilterButton,
               ]}
             >
-              {item}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <FlatList
-        data={filteredHistory}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 40 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={48} color="#888" />
-            <Text style={styles.emptyStateText}>No history to show</Text>
-          </View>
-        }
-      />
-      {renderReceipt()}
-    </SafeAreaView>
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  filter === item && styles.activeFilterButtonText,
+                ]}
+              >
+                {item}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <FlatList
+          ref={flatListRef}
+          data={filteredHistory}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={48} color="#888" />
+              <Text style={styles.emptyStateText}>No history to show</Text>
+            </View>
+          }
+        />
+        {renderReceipt()}
+      </SafeAreaView>
+    </SwipeWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1A2526",
+    backgroundColor: "black",
   },
   header: {
     flexDirection: "row",
@@ -380,26 +400,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#3A4A4B",
-    backgroundColor: "#2A3A3B",
+    backgroundColor: "black",
+    marginTop: 10,
   },
   activeFilterButton: {
-    backgroundColor: "#00FF00",
-    borderColor: "#00FF00",
+    backgroundColor: "#8B4513",
+    borderColor: "#8B4513",
   },
   filterButtonText: {
     fontSize: 14,
     color: "#fff",
   },
   activeFilterButtonText: {
-    color: "#000",
+    color: "#fff",
     fontWeight: "bold",
   },
   historyItem: {
-    backgroundColor: "#2A3A3B",
+    backgroundColor: "black",
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
     marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#8B4513",
   },
   historyItemHeader: {
     flexDirection: "row",

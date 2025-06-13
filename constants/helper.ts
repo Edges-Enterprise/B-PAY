@@ -198,7 +198,7 @@ export const actions = [
 		title: "Buy Data",
 		icon: ICONS.DATA,
 		color: "#22C55E",
-		route: "/(app)/(protected)/buy" as const,
+		route: "../buy" as const,
 	},
 	{
 		title: "Buy Airtime",

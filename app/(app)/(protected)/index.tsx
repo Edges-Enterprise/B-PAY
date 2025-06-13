@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, StatusBar, ActivityIndicator } from "react-native";
+import React, { useState, useContext } from "react";
+import { View, Text, Pressable, StyleSheet, StatusBar, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router, UnknownInputParams } from "expo-router";
+import { router } from "expo-router";
 import { useAuth } from "@/context/supabase-provider";
 import { useFont } from "@/context/font-context";
 import { supabase } from "@/config/supabase";
@@ -10,8 +10,9 @@ import { actions, DEFAULT_PROVIDER_IMAGE, NETWORK_IMAGES } from "@/constants/hel
 import { useNotificationSubscription } from "@/hooks/useHomeScreenData";
 import PlanItemWithSwipe from "@/components/homescreen/PlanItemWithSwipe";
 import CreatePinModal from "@/components/homescreen/CreatePinModal";
+import { DataContext } from "@/context/DataProvider";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
-// Define types
 interface DataBundle {
   id: number;
   data: string;
@@ -26,8 +27,9 @@ interface DataBundle {
 interface Provider {
   id: number;
   name: string;
-  image: string;
+  image: any;
   code: string;
+  imageKey: string;
 }
 
 interface ConfirmationParams {
@@ -52,7 +54,6 @@ interface Purchase {
   user_email: string;
 }
 
-// Hook to fetch purchase history
 const usePurchaseHistory = () => {
   const { user } = useAuth();
   return useQuery<Purchase[]>({
@@ -72,7 +73,6 @@ const usePurchaseHistory = () => {
   });
 };
 
-// Hook to count new notifications
 const useNewNotificationCount = () => {
   const { user } = useAuth();
   return useQuery<number>({
@@ -94,12 +94,12 @@ const useNewNotificationCount = () => {
 export default function HomeScreen() {
   const { selectedFont } = useFont();
   const { user } = useAuth();
+  const { providerPlans, isLoading: isPlansLoading, errorMessage } = useContext(DataContext);
 
   const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
   const username = user?.user_metadata?.username || "Guest";
   const userEmail = user?.email || "";
 
-  // Modal states
   const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -107,29 +107,25 @@ export default function HomeScreen() {
   const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [isPinLoading, setIsPinLoading] = useState(false);
 
-  // Fetch recent purchases
   const {
     data: purchaseHistory = [],
     isLoading: isPurchaseHistoryLoading,
     error: purchaseHistoryError,
   } = usePurchaseHistory();
 
-  // Fetch new notification count
   const {
     data: newNotificationCount = 0,
     isLoading: isNewNotificationCountLoading,
   } = useNewNotificationCount();
 
-  // Set up real-time notification subscription
   useNotificationSubscription();
 
-  // Process purchase history data
   const popularPlans = purchaseHistory.map((p) => {
     const amountMatch = p.plan_name?.match(/₦(\d+)/);
     const provider = p.provider_name || getProviderFromPlan(p.plan_name || "");
-    const displayPlanName = p.plan_name?.includes(provider) 
-      ? p.plan_name 
-      : `${provider} ${p.plan_name || "Unknown Plan"}`; // Prepend provider to plan_name
+    const displayPlanName = p.plan_name?.includes(provider)
+      ? p.plan_name
+      : `${provider} ${p.plan_name || "Unknown Plan"}`;
     return {
       plan_name: displayPlanName,
       provider,
@@ -144,24 +140,21 @@ export default function HomeScreen() {
 
   console.log("Popular Plans (from purchase history):", popularPlans);
 
-  // Computed values
   const hasPlans = popularPlans.length > 0;
   const phoneNumber = hasPlans
     ? popularPlans[0].phone_number
     : user?.user_metadata?.phone || "";
 
-  // Utility functions
   const getProviderFromPlan = (plan: string): string => {
     const planUpper = plan.toUpperCase();
     if (planUpper.includes("MTN")) return "MTN";
     if (planUpper.includes("GLO")) return "GLO";
     if (planUpper.includes("AIRTEL")) return "AIRTEL";
-    if (planUpper.includes("9MOBILE") || planUpper.includes("ETISALAT"))
-      return "9MOBILE";
-    return "Unknown";
+    if (planUpper.includes("9MOBILE") || planUpper.includes("ETISALAT")) return "9MOBILE";
+    return "";
   };
 
-  const closeCreatePinModal = () => {
+  const closeCreateModal = () => {
     setCreatePinModalVisible(false);
     setNewPin("");
     setConfirmPin("");
@@ -169,17 +162,12 @@ export default function HomeScreen() {
   };
 
   const handleCreatePin = async () => {
-    if (
-      newPin.length < 4 ||
-      newPin.length > 6 ||
-      confirmPin.length < 4 ||
-      confirmPin.length > 6
-    ) {
-      alert("PIN must be between 4 and 6 digits.");
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+      Alert.alert("Error", "PIN must be between 4 and 6 digits.");
       return;
     }
     if (newPin !== confirmPin) {
-      alert("PINs do not match.");
+      Alert.alert("Error", "PINs do not match.");
       return;
     }
 
@@ -192,15 +180,25 @@ export default function HomeScreen() {
         },
       });
       if (error) throw error;
-      closeCreatePinModal();
+      closeCreateModal();
+      Alert.alert("Success", "Transaction PIN created successfully.");
     } catch (error) {
-      alert("Failed to save PIN. Please try again.");
+      Alert.alert("Error", "Failed to save PIN. Please try again.");
     } finally {
       setIsPinLoading(false);
     }
   };
 
-  const handleSwipePurchase = (plan: { plan_name: string; provider: string; image: string; amount: number; validity: string; phone_number: string; network_id: string; plan_id: string }) => {
+  const handleSwipePurchase = (plan: {
+    plan_name: string;
+    provider: string;
+    image: string;
+    amount: number;
+    validity: string;
+    phone_number: string;
+    network_id: string;
+    plan_id: string;
+  }) => {
     console.log("handleSwipePurchase called with plan:", plan);
     if (!hasTransactionPin) {
       setCreatePinModalVisible(true);
@@ -208,7 +206,7 @@ export default function HomeScreen() {
     }
 
     const bundle: DataBundle = {
-      id: Date.now(),
+      id: parseInt(plan.plan_id) || 0,
       data: plan.plan_name,
       price: plan.amount,
       validity: plan.validity,
@@ -219,17 +217,23 @@ export default function HomeScreen() {
     };
 
     const provider: Provider = {
-      id: Date.now(),
+      id: parseInt(plan.network_id) || 0,
       name: plan.provider,
       image: plan.image,
       code: plan.provider.toLowerCase(),
+      imageKey: plan.provider.toUpperCase(),
     };
 
     const params: ConfirmationParams = {
       bundle: JSON.stringify(bundle),
-      provider: JSON.stringify(provider),
+      provider: JSON.stringify({
+        id: provider.id,
+        name: provider.name,
+        code: provider.code,
+        imageKey: provider.imageKey,
+      }),
       phoneNumber: plan.phone_number || phoneNumber,
-      userEmail: userEmail,
+      userEmail,
       transactionPin: user?.user_metadata?.transaction_pin,
       source: "index",
       networkId: plan.network_id,
@@ -239,170 +243,148 @@ export default function HomeScreen() {
     console.log("Navigating to Confirmation with params:", params);
 
     router.push({
-      pathname: "../Confirmation",
-      params: params as UnknownInputParams,
+      pathname: "/Confirmation",
+      params: params as any,
     });
   };
 
-  // Handle loading states
-  if (isPurchaseHistoryLoading || isNewNotificationCountLoading) {
+  if (isPurchaseHistoryLoading || isNewNotificationCountLoading || isPlansLoading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator color="#D7A77F" />
-        <Text style={styles.loadingText}>Loading popular plans...</Text>
-      </View>
+      <SwipeWrapper>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color="#D7A77F" />
+          <Text style={styles.loadingText}>Loading data...</Text>
+        </View>
+      </SwipeWrapper>
     );
   }
 
-  // Handle errors
   if (purchaseHistoryError) {
     console.error("Purchase history error:", purchaseHistoryError);
   }
+  if (errorMessage) {
+    console.error("Data provider error:", errorMessage);
+  }
 
   return (
-    <View style={styles.container}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.push("../notifications")}
-          style={styles.notificationIcon}
-        >
-          <View>
-            <Ionicons name="notifications-outline" size={24} color="white" />
-            {newNotificationCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {newNotificationCount > 99 ? "99+" : newNotificationCount}
-                </Text>
-              </View>
-            )}
-          </View>
-        </Pressable>
-      </View>
-
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 8,
-          alignItems: "center",
-          marginTop: 14,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: selectedFont,
-            fontSize: 20,
-            fontWeight: "600",
-            color: "white",
-          }}
-        >
-          Hi,
-        </Text>
-        <Text style={[styles.username, { textTransform: "capitalize" }]}>
-          {username} 👋
-        </Text>
-      </View>
-      <Text style={styles.welcomeSubtitle}>Your dashboard is here 🔥</Text>
-
-      <View style={styles.quickActionsHeader}>
-        <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-      </View>
-
-      <View style={styles.quickActionsCard}>
-        <View style={styles.quickActionsGrid}>
-          {actions.map((action, index) => (
-            <Pressable
-              key={index}
-              onPress={() => router.push(action.route)}
-              style={styles.quickActionCard}
-            >
-              <Ionicons name={action.icon} size={24} color={action.color} />
-              <Text style={styles.quickActionTitle}>
-                {action.title.length > 12
-                  ? action.title.slice(0, 11) + "..."
-                  : action.title}
-              </Text>
-            </Pressable>
-          ))}
+    <SwipeWrapper>
+      <View style={styles.container}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+        />
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => router.push("/notifications")}
+            style={styles.notificationIcon}
+          >
+            <View>
+              <Ionicons name="notifications" size={24} color="#666" />
+              {newNotificationCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {newNotificationCount > 99 ? "99+" : newNotificationCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
         </View>
-      </View>
 
-      <View style={styles.popularPlansHeader}>
-        <Text style={styles.sectionTitle}>🔥 Popular Plans</Text>
-      </View>
-
-      {hasPlans ? (
-        popularPlans.map((plan, index) => (
-          <PlanItemWithSwipe
-            key={`${plan.plan_name}-${index}`}
-            plan={plan.plan_name}
-            image={plan.image}
-            index={index}
-            onSwipePurchase={() => handleSwipePurchase(plan)}
-          />
-        ))
-      ) : (
-        <View style={styles.noPlansContainer}>
-          <Text style={styles.noPlansText}>
-            No recent purchases found in the last 24 hours.
+        <View style={styles.greetingContainer}>
+          <Text style={[styles.headerTitle, { fontFamily: selectedFont }]}>
+            Hi,
+          </Text>
+          <Text style={[styles.headerTitle, { textTransform: "capitalize" }]}>
+            {username} 👋
           </Text>
         </View>
-      )}
+        <Text style={styles.headerSubtitle}>Your dashboard is here 🔥</Text>
 
-      <CreatePinModal
-        visible={createPinModalVisible}
-        onClose={closeCreatePinModal}
-        newPin={newPin}
-        setNewPin={setNewPin}
-        confirmPin={confirmPin}
-        setConfirmPin={setConfirmPin}
-        showNewPin={showNewPin}
-        setShowNewPin={setShowNewPin}
-        showConfirmPin={showConfirmPin}
-        setShowConfirmPin={setShowConfirmPin}
-        onSave={handleCreatePin}
-        isLoading={isPinLoading}
-      />
-    </View>
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
+          <View style={styles.quickActions}>
+            <View style={styles.quickActionsGrid}>
+              {actions.map((action, index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => router.push(`/${action.route}`)}
+                  style={styles.button}
+                >
+                  <Ionicons name={action.icon} size={24} color={action.color} />
+                  <Text style={styles.buttonTitle}>
+                    {action.title.length > 12
+                      ? action.title.slice(0, 11) + "..."
+                      : action.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.popularPlansSection}>
+          <Text style={styles.sectionTitle}>🔥 Recent Plans</Text>
+        </View>
+        {hasPlans ? (
+          popularPlans.map((plan, index) => (
+            <PlanItemWithSwipe
+              key={`${plan.plan_id}-${index}`}
+              plan={plan.plan_name}
+              image={plan.image}
+              index={index}
+              onSwipePurchase={() => handleSwipePurchase(plan)}
+            />
+          ))
+        ) : (
+          <View style={styles.popularPlansContainer}>
+            <Text style={styles.noPlansText}>
+              No recent purchases found in the last 24 hours.
+            </Text>
+          </View>
+        )}
+
+        <CreatePinModal
+          visible={createPinModalVisible}
+          onClose={closeCreateModal}
+          newPin={newPin}
+          setNewPin={setNewPin}
+          confirmPin={confirmPin}
+          setConfirmPin={setConfirmPin}
+          showNewPin={showNewPin}
+          setShowNewPin={setShowNewPin}
+          showConfirmPin={showConfirmPin}
+          setShowConfirmPin={setShowConfirmPin}
+          onSave={handleCreatePin}
+          isLoading={isPinLoading}
+        />
+      </View>
+    </SwipeWrapper>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: "#000",
     paddingHorizontal: 16,
-    paddingTop: StatusBar.currentHeight,
-  },
-  centerContent: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "500",
-    marginTop: 8,
+    paddingTop: StatusBar.currentHeight || 40,
   },
   header: {
     position: "absolute",
-    top: StatusBar.currentHeight || 48,
+    top: StatusBar.currentHeight || 40,
     right: 16,
-    zIndex: 1,
+    zIndex: 10,
   },
   notificationIcon: {
     padding: 8,
-    paddingTop: StatusBar.currentHeight,
   },
   badge: {
     position: "absolute",
     top: -4,
     right: -4,
-    backgroundColor: "#8B4513",
+    backgroundColor: "#f42",
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -410,78 +392,82 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   badgeText: {
-    color: "white",
+    color: "#fff",
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
-  username: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "white",
-    marginBottom: 4,
+  greetingContainer: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginTop: 14,
   },
-  welcomeSubtitle: {
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  headerSubtitle: {
     fontSize: 16,
-    color: "gray",
+    color: "#888",
     marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "white",
+    color: "#fff",
+    marginBottom: 12,
   },
-  quickActionsHeader: {
-    marginVertical: 24,
-    paddingRight: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  quickActionsSection: {
+    marginVertical: 16,
   },
-  popularPlansHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  quickActionsCard: {
-    backgroundColor: "#171717",
+  quickActions: {
+    backgroundColor: "#111",
     borderRadius: 16,
     paddingHorizontal: 12,
-    paddingTop: 12,
-    marginBottom: 24,
+    paddingVertical: 12,
   },
   quickActionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+    gap: 8,
   },
-  quickActionCard: {
+  button: {
     width: "30%",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "#222",
     borderRadius: 12,
     paddingVertical: 16,
-    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
-  quickActionTitle: {
-    color: "white",
+  buttonTitle: {
+    color: "#fff",
     fontSize: 10,
     fontWeight: "500",
     marginTop: 6,
     textAlign: "center",
   },
-  noPlansContainer: {
-    alignItems: "center",
+  popularPlansSection: {
+    marginVertical: 16,
+  },
+  popularPlansContainer: {
     padding: 16,
-    backgroundColor: "#171717",
+    backgroundColor: "#111",
     borderRadius: 8,
+    alignItems: "center",
   },
   noPlansText: {
-    color: "white",
+    color: "#999",
     fontSize: 14,
     textAlign: "center",
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#fff",
+    fontSize: 16,
+    marginTop: 10,
   },
 });

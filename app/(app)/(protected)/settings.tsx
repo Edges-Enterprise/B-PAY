@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Vibration,
   Alert,
   Switch,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -32,6 +34,7 @@ import { fonts } from "@/constants/fonts";
 import { colors } from "@/constants/colors";
 import { availableThemes, sections } from "@/constants/helper";
 import ReusableModal from "@/components/ReusableModal";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
 const { width } = Dimensions.get("window");
 
@@ -50,6 +53,7 @@ export default function Settings() {
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [sectionOrder, setSectionOrder] = useState(sections);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Animation values
   const slideAnim = useSharedValue(width);
@@ -200,352 +204,369 @@ export default function Settings() {
     ]);
   };
 
-  return (
-    <GestureHandlerRootView
-      style={{ flex: 1, backgroundColor: colors[colorScheme]?.background }}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 36,
-          paddingBottom: 120,
-          backgroundColor: colors[colorScheme]?.background,
-        }}
-      >
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: 12,
-            marginBottom: 24,
-          }}
-        >
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={colors[colorScheme]?.foreground}
-            />
-          </TouchableOpacity>
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: colors[colorScheme]?.foreground,
-              fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-            }}
-          >
-            Settings
-          </Text>
-          <View style={{ width: 24 }} />
-        </View>
+  // Prevent swipe gestures during vertical scrolling
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { velocity } = event.nativeEvent;
+    if (velocity && Math.abs(velocity.y) > 0.5) {
+      // Disable horizontal swipe when scrolling vertically
+      scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+    } else {
+      scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+    }
+  };
 
-        {/* Sections */}
-        {sectionOrder.map((section, index) => (
-          <PanGestureHandler
-            key={section.title}
-            onGestureEvent={gestureHandler}
-            onHandlerStateChange={({ nativeEvent }) => {
-              if (nativeEvent.state === 2) {
-                setDraggingIndex(index);
-              }
+  return (
+    <SwipeWrapper scrollViewRef={scrollViewRef}>
+      <GestureHandlerRootView
+        style={{ flex: 1, backgroundColor: colors[colorScheme]?.background }}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 36,
+            paddingBottom: 120,
+            backgroundColor: colors[colorScheme]?.background,
+          }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 12,
+              marginBottom: 24,
             }}
           >
-            <Animated.View
-              style={[
-                { marginBottom: 16 },
-                draggingIndex === index && {
-                  opacity: 0.7,
-                  transform: [{ scale: 1.05 }],
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.8,
-                  shadowRadius: 8,
-                  elevation: 5,
-                },
-              ]}
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={colors[colorScheme]?.foreground}
+              />
+            </TouchableOpacity>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                color: colors[colorScheme]?.foreground,
+                fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+              }}
             >
-              <TouchableOpacity
-                onPress={() => handleSectionToggle(section.title)}
-                style={{
-                  padding: 16,
-                  borderRadius: 16,
-                  backgroundColor: colors[colorScheme]?.card,
-                }}
+              Settings
+            </Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          {/* Sections */}
+          {sectionOrder.map((section, index) => (
+            <PanGestureHandler
+              key={section.title}
+              onGestureEvent={gestureHandler}
+              onHandlerStateChange={({ nativeEvent }) => {
+                if (nativeEvent.state === 2) {
+                  setDraggingIndex(index);
+                }
+              }}
+              shouldCancelWhenOutside={true}
+            >
+              <Animated.View
+                style={[
+                  { marginBottom: 16 },
+                  draggingIndex === index && {
+                    opacity: 0.7,
+                    transform: [{ scale: 1.05 }],
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.8,
+                    shadowRadius: 8,
+                    elevation: 5,
+                  },
+                ]}
               >
-                <Text
+                <TouchableOpacity
+                  onPress={() => handleSectionToggle(section.title)}
                   style={{
-                    fontSize: 16,
-                    fontWeight: "500",
-                    color: colors[colorScheme]?.foreground,
-                    fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                    padding: 16,
+                    borderRadius: 16,
+                    backgroundColor: colors[colorScheme]?.card,
                   }}
                 >
-                  {section.title}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Glass Card */}
-              {openSection === section.title && (
-                <Animated.View
-                  style={[{ marginTop: 12 }, cardAnimatedStyle]}
-                >
-                  <BlurView
-                    intensity={100}
-                    tint={colorScheme === "dark" ? "dark" : "light"}
+                  <Text
                     style={{
-                      borderRadius: 20,
-                      padding: 20,
-                      width: width * 0.9,
-                      backgroundColor: colors[colorScheme]?.card,
+                      fontSize: 16,
+                      fontWeight: "500",
+                      color: colors[colorScheme]?.foreground,
+                      fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
                     }}
                   >
-                    {section.title === "Account" && (
-                      <View style={{ marginBottom: 16 }}>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            marginBottom: 4,
-                            color: colors[colorScheme]?.foreground,
-                            fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-                          }}
-                        >
-                          Username: {profile?.username || "N/A"}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            marginBottom: 4,
-                            color: colors[colorScheme]?.foreground,
-                            fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-                          }}
-                        >
-                          Email: {profile?.email || "N/A"}
-                        </Text>
-                        <View style={{ height: 12 }} />
-                      </View>
-                    )}
+                    {section.title}
+                  </Text>
+                </TouchableOpacity>
 
-                    {section.items.map((item, idx) => (
-                      <TouchableOpacity
-                        key={idx}
-                        style={{
-                          padding: 12,
-                          borderRadius: 12,
-                          marginBottom: 8,
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          backgroundColor: `${colors[colorScheme]?.card}99`,
-                        }}
-                        onPress={() => handleItemPress(section.title, item)}
-                      >
-                        <Text
+                {/* Glass Card */}
+                {openSection === section.title && (
+                  <Animated.View
+                    style={[{ marginTop: 12 }, cardAnimatedStyle]}
+                  >
+                    <BlurView
+                      intensity={100}
+                      tint={colorScheme === "dark" ? "dark" : "light"}
+                      style={{
+                        borderRadius: 20,
+                        padding: 20,
+                        width: width * 0.9,
+                        backgroundColor: colors[colorScheme]?.card,
+                      }}
+                    >
+                      {section.title === "Account" && (
+                        <View style={{ marginBottom: 16 }}>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: colors[colorScheme]?.foreground,
+                              fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                            }}
+                          >
+                            Username: {profile?.username || "N/A"}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: colors[colorScheme]?.foreground,
+                              fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                            }}
+                          >
+                            Email: {profile?.email || "N/A"}
+                          </Text>
+                          <View style={{ height: 12 }} />
+                        </View>
+                      )}
+
+                      {section.items.map((item, idx) => (
+                        <TouchableOpacity
+                          key={idx}
                           style={{
-                            fontSize: 14,
-                            color: colors[colorScheme]?.foreground,
-                            fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                            padding: 12,
+                            borderRadius: 12,
+                            marginBottom: 8,
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            backgroundColor: `${colors[colorScheme]?.card}99`,
                           }}
+                          onPress={() => handleItemPress(section.title, item)}
                         >
-                          {item}
-                        </Text>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: colors[colorScheme]?.foreground,
+                              fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                            }}
+                          >
+                            {item}
+                          </Text>
 
-                        {item === "Notifications" && (
-                          <Switch
-                            value={notificationsEnabled}
-                            onValueChange={toggleNotifications}
-                            trackColor={{ false: "#767577", true: "#D7A77F" }}
-                            thumbColor={notificationsEnabled ? "#E9C9AF" : "#f4f3f4"}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </BlurView>
-                </Animated.View>
-              )}
-            </Animated.View>
-          </PanGestureHandler>
-        ))}
-      </ScrollView>
+                          {item === "Notifications" && (
+                            <Switch
+                              value={notificationsEnabled}
+                              onValueChange={toggleNotifications}
+                              trackColor={{ false: "#767577", true: "#D7A77F" }}
+                              thumbColor={notificationsEnabled ? "#E9C9AF" : "#f4f3f4"}
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </BlurView>
+                  </Animated.View>
+                )}
+              </Animated.View>
+            </PanGestureHandler>
+          ))}
+        </ScrollView>
 
-      {/* Logout */}
-      {logoutVisible && (
-        <Animated.View
-          style={[{ paddingVertical: 10, paddingHorizontal: 14, width: "100%",marginBottom: 50 }, logoutAnimatedStyle]}
+        {/* Logout */}
+        {logoutVisible && (
+          <Animated.View
+            style={[{ paddingVertical: 10, paddingHorizontal: 14, width: "100%", marginBottom: 50 }, logoutAnimatedStyle]}
+          >
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors[colorScheme]?.destructive,
+                padding: 16,
+                borderRadius: 16,
+              }}
+              onPress={handleLogout}
+            >
+              <Text
+                style={{
+                  textAlign: "center",
+                  color: colors[colorScheme]?.destructiveForeground,
+                  fontWeight: "600",
+                  fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                }}
+              >
+                Log Out
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* Font Selection Modal */}
+        <ReusableModal
+          visible={fontModalVisible}
+          onClose={() => setFontModalVisible(false)}
+          title="Select Font"
+          colorScheme={colorScheme}
+          selectedFont={selectedFont}
         >
-          <TouchableOpacity
-            style={{
-              backgroundColor: colors[colorScheme]?.destructive,
-              padding: 16,
-              borderRadius: 16,
-            }}
-            onPress={handleLogout}
-          >
-            <Text
-              style={{
-                textAlign: "center",
-                color: colors[colorScheme]?.destructiveForeground,
-                fontWeight: "600",
-                fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-              }}
-            >
-              Log Out
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {/* Font Selection Modal */}
-      <ReusableModal
-        visible={fontModalVisible}
-        onClose={() => setFontModalVisible(false)}
-        title="Select Font"
-        colorScheme={colorScheme}
-        selectedFont={selectedFont}
-      >
-        {fontOptions.map((fontKey) => (
-          <TouchableOpacity
-            key={fontKey}
-            style={[
-              { padding: 16, borderRadius: 12, marginBottom: 8 },
-              selectedFont === fonts[fontKey] && {
-                borderWidth: 1,
-                borderColor: colors[colorScheme]?.border,
-                backgroundColor: colors[colorScheme]?.primary,
-              },
-              {
-                backgroundColor:
-                  selectedFont !== fonts[fontKey]
-                    ? `${colors[colorScheme]?.card}99`
-                    : undefined,
-              },
-            ]}
-            onPress={() => handleFontSelect(fontKey)}
-          >
-            <Text
-              style={{
-                fontSize: 16,
-                textAlign: "center",
-                fontFamily: fonts[fontKey].fontFamily,
-                color:
-                  selectedFont === fonts[fontKey]
-                    ? colors[colorScheme]?.primaryForeground
-                    : colors[colorScheme]?.foreground,
-              }}
-            >
-              {fontKey}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ReusableModal>
-
-      {/* Theme Selection Modal */}
-      <ReusableModal
-        visible={themeModalVisible}
-        onClose={() => setThemeModalVisible(false)}
-        title="Select Theme"
-        colorScheme={colorScheme}
-        selectedFont={selectedFont}
-      >
-        {availableThemes.map((theme) => (
-          <TouchableOpacity
-            key={theme}
-            style={[
-              styles.themeOption,
-              colorScheme === theme && styles.selectedOption,
-              {
-                backgroundColor:
-                  colorScheme === theme
-                    ? colors[colorScheme]?.background
-                    : `${colors[colorScheme]?.card}90`,
-              },
-            ]}
-            onPress={() => handleThemeSelect(theme)}
-          >
-            <View
+          {fontOptions.map((fontKey) => (
+            <TouchableOpacity
+              key={fontKey}
               style={[
-                styles.themeColorIndicator,
-                { backgroundColor: colors[colorScheme]?.indicator },
+                { padding: 16, borderRadius: 12, marginBottom: 8 },
+                selectedFont === fonts[fontKey] && {
+                  borderWidth: 1,
+                  borderColor: colors[colorScheme]?.border,
+                  backgroundColor: colors[colorScheme]?.primary,
+                },
+                {
+                  backgroundColor:
+                    selectedFont !== fonts[fontKey]
+                      ? `${colors[colorScheme]?.card}99`
+                      : undefined,
+                },
               ]}
-            />
-            <Text
-              style={{
-                fontSize: 16,
-                fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-                color:
-                  colorScheme === theme
-                    ? "#fff"
-                    : colors[colorScheme]?.foreground || "#fff",
-              }}
+              onPress={() => handleFontSelect(fontKey)}
             >
-              {theme.charAt(0).toUpperCase() + theme.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ReusableModal>
+              <Text
+                style={{
+                  fontSize: 16,
+                  textAlign: "center",
+                  fontFamily: fonts[fontKey].fontFamily,
+                  color:
+                    selectedFont === fonts[fontKey]
+                      ? colors[colorScheme]?.primaryForeground
+                      : colors[colorScheme]?.foreground,
+                }}
+              >
+                {fontKey}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ReusableModal>
 
-      {/* Delete Account Modal */}
-      <ReusableModal
-        visible={deleteModalVisible}
-        onClose={() => setDeleteModalVisible(false)}
-        title="Delete Account"
-        colorScheme={colorScheme}
-        selectedFont={selectedFont}
-      >
-        <Text
-          style={{
-            fontSize: 16,
-            color: colors[colorScheme]?.foreground,
-            fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-            marginBottom: 16,
-            textAlign: "center",
-          }}
+        {/* Theme Selection Modal */}
+        <ReusableModal
+          visible={themeModalVisible}
+          onClose={() => setThemeModalVisible(false)}
+          title="Select Theme"
+          colorScheme={colorScheme}
+          selectedFont={selectedFont}
         >
-          Are you sure you want to delete your account? This action is irreversible.
-        </Text>
-        <TouchableOpacity
-          style={{
-            padding: 16,
-            borderRadius: 12,
-            backgroundColor: colors[colorScheme]?.destructive,
-            marginBottom: 8,
-          }}
-          onPress={confirmDeleteAccount}
+          {availableThemes.map((theme) => (
+            <TouchableOpacity
+              key={theme}
+              style={[
+                styles.themeOption,
+                colorScheme === theme && styles.selectedOption,
+                {
+                  backgroundColor:
+                    colorScheme === theme
+                      ? colors[colorScheme]?.background
+                      : `${colors[colorScheme]?.card}90`,
+                },
+              ]}
+              onPress={() => handleThemeSelect(theme)}
+            >
+              <View
+                style={[
+                  styles.themeColorIndicator,
+                  { backgroundColor: colors[colorScheme]?.indicator },
+                ]}
+              />
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+                  color:
+                    colorScheme === theme
+                      ? "#fff"
+                      : colors[colorScheme]?.foreground || "#fff",
+                }}
+              >
+                {theme.charAt(0).toUpperCase() + theme.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ReusableModal>
+
+        {/* Delete Account Modal */}
+        <ReusableModal
+          visible={deleteModalVisible}
+          onClose={() => setDeleteModalVisible(false)}
+          title="Delete Account"
+          colorScheme={colorScheme}
+          selectedFont={selectedFont}
         >
           <Text
             style={{
               fontSize: 16,
-              textAlign: "center",
-              color: colors[colorScheme]?.destructiveForeground,
-              fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
-            }}
-          >
-            Confirm Deletion
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            padding: 16,
-            borderRadius: 12,
-            backgroundColor: colors[colorScheme]?.card,
-          }}
-          onPress={() => setDeleteModalVisible(false)}
-        >
-          <Text
-            style={{
-              fontSize: 16,
-              textAlign: "center",
               color: colors[colorScheme]?.foreground,
               fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+              marginBottom: 16,
+              textAlign: "center",
             }}
           >
-            Cancel
+            Are you sure you want to delete your account? This action is irreversible.
           </Text>
-        </TouchableOpacity>
-      </ReusableModal>
-    </GestureHandlerRootView>
+          <TouchableOpacity
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              backgroundColor: colors[colorScheme]?.destructive,
+              marginBottom: 8,
+            }}
+            onPress={confirmDeleteAccount}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                textAlign: "center",
+                color: colors[colorScheme]?.destructiveForeground,
+                fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+              }}
+            >
+              Confirm Deletion
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              backgroundColor: colors[colorScheme]?.card,
+            }}
+            onPress={() => setDeleteModalVisible(false)}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                textAlign: "center",
+                color: colors[colorScheme]?.foreground,
+                fontFamily: selectedFont?.fontFamily || fonts.default.fontFamily,
+              }}
+            >
+              Cancel
+            </Text>
+          </TouchableOpacity>
+        </ReusableModal>
+      </GestureHandlerRootView>
+    </SwipeWrapper>
   );
 }
 

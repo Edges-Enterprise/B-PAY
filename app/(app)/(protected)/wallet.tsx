@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   StatusBar,
   SafeAreaView,
   FlatList,
+  RefreshControl,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { MotiView } from "moti";
 import { supabase } from "@/config/supabase";
 import { usePurchaseHistory } from "@/hooks/useHomeScreenData";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
 // Transaction interface
 interface Transaction {
@@ -67,10 +71,13 @@ export default function WalletScreen() {
   const [transactionPin, setTransactionPin] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [hasPriorPurchase, setHasPriorPurchase] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
   // Fetch user and wallet data
   const fetchUserAndWallet = useCallback(async () => {
     try {
+      setRefreshing(true);
       const {
         data: { user },
         error: authError,
@@ -93,6 +100,25 @@ export default function WalletScreen() {
       if (!walletError) {
         setBalance(wallet?.balance || 0);
       }
+
+      // Subscribe to real-time wallet balance updates
+      const subscription = supabase
+        .channel(`wallets:user_email=${user.email}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "wallets",
+            filter: `user_email=eq.${user.email}`,
+          },
+          (payload) => {
+            const newBalance = payload.new.balance;
+            setBalance(newBalance ?? 0);
+            console.log("Wallet balance updated:", newBalance);
+          }
+        )
+        .subscribe();
 
       // Fetch transactions from one source only
       const { data: txData, error: txError } = await supabase
@@ -145,12 +171,25 @@ export default function WalletScreen() {
         (dataPurchases?.length > 0 || airtimePurchases?.length > 0) &&
         !!user.user_metadata?.transaction_pin;
       setHasPriorPurchase(hasPurchases);
+
+      return () => {
+        supabase.removeChannel(subscription);
+      };
     } catch (error) {
       console.error("Error fetching wallet data:", error);
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
+  // Auto-refresh every 5 minutes
   useEffect(() => {
+    fetchUserAndWallet();
+    const interval = setInterval(fetchUserAndWallet, 5 * 60 * 1000); // 5 minutes
+    return () => clearInterval(interval);
+  }, [fetchUserAndWallet]);
+
+  const onRefresh = useCallback(() => {
     fetchUserAndWallet();
   }, [fetchUserAndWallet]);
 
@@ -189,11 +228,24 @@ export default function WalletScreen() {
         source: "wallet",
         networkId: "0",
         planId: 0,
+        balance: balance.toString(), // Pass balance
       };
       router.push({
         pathname: "../Confirmation",
         params: params as any,
       });
+    });
+  };
+
+  const handleProviderPress = (provider: Provider) => {
+    const params = {
+      provider: JSON.stringify(provider),
+      networkId: provider.id.toString(),
+      balance: balance.toString(), // Pass balance
+    };
+    router.push({
+      pathname: "/(app)/(protected)/buy",
+      params,
     });
   };
 
@@ -247,114 +299,146 @@ export default function WalletScreen() {
     </Text>
   );
 
+  // Prevent swipe gestures during vertical scrolling
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { velocity } = event.nativeEvent;
+    if (velocity && Math.abs(velocity.y) > 0.5) {
+      // Disable horizontal swipe when scrolling vertically
+      flatListRef.current?.setNativeProps({ scrollEnabled: true });
+    } else {
+      flatListRef.current?.setNativeProps({ scrollEnabled: true });
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Wallet 💼</Text>
-        <Text style={styles.subtitle}>Manage your balance and transactions</Text>
-      </View>
-
-      {/* Balance Card */}
-      <View style={styles.balanceCard}>
-        <View style={styles.balanceHeader}>
-          <Text style={{ color: "rgba(255,255,255,0.7)" }}>
-            Wallet Balance
-          </Text>
-          <Ionicons name="eye-outline" size={20} color="white" />
-        </View>
-        <Text style={{ color: "white", fontSize: 32, fontWeight: "bold" }}>
-          {formattedBalance}
-        </Text>
-      </View>
-
-      {/* Fund Button */}
-      <MotiView
-        from={{ scale: 1 }}
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{ loop: true, duration: 1500 }}
-        style={styles.fundButtonContainer}
-      >
-        <Pressable
-          onPress={() => router.push("/(app)/fund")}
-          style={styles.fundButton}
-        >
-          <Ionicons name="add-circle-outline" size={20} color="white" />
-          <Text style={{ color: "white", marginLeft: 8, fontWeight: "600" }}>
-            Fund Wallet
-          </Text>
-        </Pressable>
-      </MotiView>
-
-      {/* Transactions Toggle */}
-      <Pressable
-        onPress={() => setShowTransactions(!showTransactions)}
-        style={styles.transactionToggle}
-      >
-        <Text style={styles.transactionTitle}>🧾 Recent Transactions</Text>
-        <Ionicons
-          name={showTransactions ? "chevron-up-outline" : "chevron-down-outline"}
-          size={22}
-          color="#fff"
-        />
-      </Pressable>
-
-      {/* Scrollable Transaction List */}
-      {showTransactions && (
+    <SwipeWrapper>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <FlatList
-          data={transactions}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={renderTransactionItem}
-          contentContainerStyle={styles.transactionList}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={emptyTransactions}
-        />
-      )}
+          ref={flatListRef}
+          data={[{ key: "wallet" }]} // Dummy data to enable pull-to-refresh
+          renderItem={() => (
+            <>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.title}>Wallet 💼</Text>
+                <Text style={styles.subtitle}>Manage your balance and transactions</Text>
+              </View>
 
-      {/* Recommendations Section */}
-      {!showTransactions && hasPriorPurchase && (
-        <View style={styles.recommendationsSection}>
-          <Text style={styles.recommendationsTitle}>💡 Recommended Purchases</Text>
-          {currentRecommendations.length > 0 ? (
-            <View style={styles.recommendationsList}>
-              {currentRecommendations.map((rec, index) => (
-                <MotiView
-                  key={rec.id}
-                  from={{ translateX: index % 2 === 0 ? -100 : 100, opacity: 0 }}
-                  animate={{ translateX: 0, opacity: 1 }}
-                  transition={{ delay: index * 500 }}
-                  style={[
-                    styles.recommendationContainer,
-                    index % 2 === 0
-                      ? { alignSelf: "flex-start", backgroundColor: "#1e3a8a" }
-                      : { alignSelf: "flex-end", backgroundColor: "#6d28d9" },
-                  ]}
+              {/* Balance Card */}
+              <View style={styles.balanceCard}>
+                <View style={styles.balanceHeader}>
+                  <Text style={{ color: "rgba(255,255,255,0.7)" }}>
+                    Wallet Balance
+                  </Text>
+                  <Ionicons name="eye-outline" size={20} color="white" />
+                </View>
+                <Text style={{ color: "white", fontSize: 32, fontWeight: "bold" }}>
+                  {formattedBalance}
+                </Text>
+              </View>
+
+              {/* Fund Button */}
+              <MotiView
+                from={{ scale: 1 }}
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ loop: true, duration: 1500 }}
+                style={styles.fundButtonContainer}
+              >
+                <Pressable
+                  onPress={() => router.push("/(app)/fund")}
+                  style={styles.fundButton}
                 >
-                  <Pressable onPress={() => handleRecommendationPress(rec)}>
-                    <Text style={{ color: "white" }}>
-                      {rec.plan_name} - ₦{rec.price}
-                    </Text>
-                  </Pressable>
-                </MotiView>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.recommendationText}>
-              No recent purchases found in the last 24 hours.
-            </Text>
-          )}
-        </View>
-      )}
+                  <Ionicons name="add-circle-outline" size={20} color="white" />
+                  <Text style={{ color: "white", marginLeft: 8, fontWeight: "600" }}>
+                    Fund Wallet
+                  </Text>
+                </Pressable>
+              </MotiView>
 
-      {/* Fallback message */}
-      {!showTransactions && !hasPriorPurchase && (
-        <Text style={styles.recommendationsTitle}>
-          Make a purchase and set a transaction PIN to see recommendations!
-        </Text>
-      )}
-    </SafeAreaView>
+              {/* Transactions Toggle */}
+              <Pressable
+                onPress={() => setShowTransactions(!showTransactions)}
+                style={styles.transactionToggle}
+              >
+                <Text style={styles.transactionTitle}>🧾 Recent Transactions</Text>
+                <Ionicons
+                  name={showTransactions ? "chevron-up-outline" : "chevron-down-outline"}
+                  size={22}
+                  color="#fff"
+                />
+              </Pressable>
+
+              {/* Scrollable Transaction List */}
+              {showTransactions && (
+                <FlatList
+                  data={transactions}
+                  keyExtractor={(item, index) => index.toString()}
+                  renderItem={renderTransactionItem}
+                  contentContainerStyle={styles.transactionList}
+                  showsVerticalScrollIndicator={false}
+                  ListEmptyComponent={emptyTransactions}
+                  nestedScrollEnabled
+                />
+              )}
+
+              {/* Recommendations Section */}
+              {!showTransactions && hasPriorPurchase && (
+                <View style={styles.recommendationsSection}>
+                  <Text style={styles.recommendationsTitle}>💡 Recommended Purchases</Text>
+                  {currentRecommendations.length > 0 ? (
+                    <View style={styles.recommendationsList}>
+                      {currentRecommendations.map((rec, index) => (
+                        <MotiView
+                          key={rec.id}
+                          from={{ translateX: index % 2 === 0 ? -100 : 100, opacity: 0 }}
+                          animate={{ translateX: 0, opacity: 1 }}
+                          transition={{ delay: index * 500 }}
+                          style={[
+                            styles.recommendationContainer,
+                            index % 2 === 0
+                              ? { alignSelf: "flex-start", backgroundColor: "#1e3a8a" }
+                              : { alignSelf: "flex-end", backgroundColor: "#6d28d9" },
+                          ]}
+                        >
+                          <Pressable onPress={() => handleRecommendationPress(rec)}>
+                            <Text style={{ color: "white" }}>
+                              {rec.plan_name} - ₦{rec.price}
+                            </Text>
+                          </Pressable>
+                        </MotiView>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.recommendationText}>
+                      No recent purchases found in the last 24 hours.
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Fallback message */}
+              {!showTransactions && !hasPriorPurchase && (
+                <Text style={styles.recommendationsTitle}>
+                  Make a purchase and set a transaction PIN to see recommendations!
+                </Text>
+              )}
+            </>
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#fff"
+              colors={["#744925"]}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        />
+      </SafeAreaView>
+    </SwipeWrapper>
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
@@ -62,9 +62,48 @@ const ConfirmationPage: React.FC = () => {
   const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
   const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(true);
+  const [errorModalVisible, setErrorModalVisible] = useState<boolean>(false);
+  const [userName, setUserName] = useState<string>('User');
+  const [timeLeft, setTimeLeft] = useState<number>(4 * 60 * 60); // 4 hours in seconds
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseNetworkAnim = useRef(new Animated.Value(1)).current;
+
+  // Fetch user name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('email', userEmail)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user name:', error);
+        } else if (data?.username) {
+          setUserName(data.username);
+        }
+      } catch (err) {
+        console.error('Error in fetchUserName:', err);
+      }
+    };
+
+    if (userEmail) {
+      fetchUserName();
+    }
+  }, [userEmail]);
+
+  // Timer for error modal
+  useEffect(() => {
+    if (errorModalVisible && timeLeft > 0) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [errorModalVisible, timeLeft]);
 
   // Log initial parameters
   useEffect(() => {
@@ -137,7 +176,7 @@ const ConfirmationPage: React.FC = () => {
     };
   }, [userEmail, balanceValue]);
 
-  // Pulse animation for edit button
+  // Pulse animation for edit button and network text
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -149,6 +188,21 @@ const ConfirmationPage: React.FC = () => {
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseNetworkAnim, {
+          toValue: 0.8,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseNetworkAnim, {
+          toValue: 1,
+          duration: 1500,
           useNativeDriver: true,
         }),
       ])
@@ -236,6 +290,13 @@ const ConfirmationPage: React.FC = () => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handlePurchase = async () => {
     let currentBalance: number | undefined;
     try {
@@ -314,12 +375,31 @@ const ConfirmationPage: React.FC = () => {
       });
 
       if (!ebenkdataResponse.ok) {
+        // Refund the deducted amount if API call fails
+        const { error: refundError } = await supabase
+          .from('wallets')
+          .update({ balance: currentBalance })
+          .eq('user_email', userEmail);
+
+        if (refundError) {
+          console.error('Error refunding wallet balance:', refundError);
+          throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+        }
+
+        setBalanceValue(currentBalance);
+
+        if (ebenkdataResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
+          setTransactionModalVisible(false);
+          setErrorModalVisible(true);
+          return;
+        }
+
         throw new Error(`Ebenkdata API request failed: ${ebenkdataResponse.status} ${responseText.slice(0, 100)}`);
       }
 
       const actualCost = basePrice;
 
-      // Record transaction
+      // Record transaction only if API call is successful
       const transactionData = {
         user_email: userEmail,
         amount: -basePrice,
@@ -352,6 +432,18 @@ const ConfirmationPage: React.FC = () => {
         .insert(transactionData);
 
       if (txError) {
+        // Refund the amount if transaction recording fails
+        const { error: refundError } = await supabase
+          .from('wallets')
+          .update({ balance: currentBalance })
+          .eq('user_email', userEmail);
+
+        if (refundError) {
+          console.error('Error refunding wallet balance after transaction failure:', refundError);
+          throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+        }
+
+        setBalanceValue(currentBalance);
         throw new Error(`Transaction recording failed: ${txError.message}`);
       }
 
@@ -384,14 +476,10 @@ const ConfirmationPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error initiating purchase:', error);
       setTransactionStatus('failed');
-      if (currentBalance !== undefined) {
-        await supabase
-          .from('wallets')
-          .update({ balance: currentBalance })
-          .eq('user_email', userEmail);
-      }
       setTransactionModalVisible(false);
-      Alert.alert('Error', `Failed to initiate purchase: ${error.message || 'Please try again.'}`);
+      if (!errorModalVisible) {
+        Alert.alert('Error', `Failed to initiate purchase: ${error.message || 'Please try again.'}`);
+      }
     }
   };
 
@@ -401,6 +489,11 @@ const ConfirmationPage: React.FC = () => {
 
   const closeTransactionModal = () => {
     setTransactionModalVisible(false);
+  };
+
+  const closeErrorModal = () => {
+    setErrorModalVisible(false);
+    router.back();
   };
 
   const toggleEditMobile = () => {
@@ -443,7 +536,7 @@ const ConfirmationPage: React.FC = () => {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Wallet Balance</Text>
             <Text style={styles.detailValue}>
-              {isBalanceLoading ? 'Loading...' : `₦${formatNumberWithCommas(balanceValue)}`}
+              {isBalanceLoading ? 'Loading...' : `₦${formatNumberWithCommas(balanceValue)} `}
             </Text>
           </View>
           {selectedBundle.validity && (
@@ -511,6 +604,31 @@ const ConfirmationPage: React.FC = () => {
         phoneNumber={editableMobileNumber}
         networkProvider={networkProvider}
       />
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={errorModalVisible}
+        onRequestClose={closeErrorModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.errorModal}>
+            <Text style={styles.errorModalTitle}>Hi, {userName} 😢</Text>
+            <Text style={styles.errorModalText}>
+              <Animated.Text style={[styles.networkText, { transform: [{ scale: pulseNetworkAnim }] }]}>
+                Edges Network
+              </Animated.Text>{' '}
+              for {purchaseDescription} is currently unavailable.
+            </Text>
+            <Text style={styles.errorModalText}>
+              Server is down. Please try again in:
+            </Text>
+            <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+            <Pressable onPress={closeErrorModal} style={styles.closeErrorButton}>
+              <Text style={styles.closeErrorButtonText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -642,6 +760,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#3B82F6',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModal: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    alignItems: 'center',
+    backdropFilter: 'blur(10px)', // Note: backdropFilter is not supported in React Native; using semi-transparent background for glassmorphism effect
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  errorModalText: {
+    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  networkText: {
+    fontWeight: 'bold',
+    color: '#3B82F6',
+  },
+  timerText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#FF5555',
+    marginVertical: 16,
+    fontFamily: 'monospace',
+  },
+  closeErrorButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  closeErrorButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 });
 

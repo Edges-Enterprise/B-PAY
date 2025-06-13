@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -8,32 +8,30 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
-import { router } from "expo-router";
-import { DEFAULT_PROVIDER_IMAGE, NETWORK_IMAGES } from "@/constants/helper";
+import { router, useLocalSearchParams } from "expo-router";
+import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from "@/constants/helper";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
-// Define the Provider interface
 interface Provider {
   id: number;
   name: string;
-  image: any;
+  image: number;
   code: string;
-  availablePlanTypes: string[];
+  imageKey?: string;
 }
 
 const SUPPORTED_PROVIDERS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
-const VALID_PLAN_TYPES = ["SME", "Corporate Gifting", "Gifting", "Standard"];
-const AVAILABLE_PLAN_TYPES = {
-  MTN: ["SME", "Gifting"],
-  AIRTEL: ["Standard"], // Based on no specific type in codes
-  GLO: ["Standard"], // No Gifting code
-  "9MOBILE": ["Gifting"],
-};
 
 const ServiceProviderScreen: React.FC = () => {
+  const params = useLocalSearchParams<{ balance?: string }>();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>({});
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const fetchProviders = async () => {
     try {
@@ -48,12 +46,12 @@ const ServiceProviderScreen: React.FC = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("API Error Response:", {
+        console.error("API Error:", {
           status: response.status,
-          text: errorText.slice(0, 200),
+          errorText: errorText.slice(0, 200),
           url: response.url,
         });
-        throw new Error(`Failed to fetch providers: ${response.status} - ${errorText.slice(0, 100)}...`);
+        throw new Error(`Failed to fetch providers: ${response.status}`);
       }
 
       const rawResponse = await response.text();
@@ -66,23 +64,29 @@ const ServiceProviderScreen: React.FC = () => {
           error: parseError,
           rawResponse: rawResponse.slice(0, 200),
         });
-        throw new Error(`Failed to parse API response: ${rawResponse.slice(0, 100)}...`);
+        throw new Error("Invalid API response format");
       }
 
-      // Transform the API response into an array of Provider objects
       const providerMap: { [key: string]: Provider } = {};
+      const networkNameMap: { [key: string]: string } = {
+        mtn_ng: "MTN",
+        "airtel-ng": "AIRTEL",
+        glo_ng: "GLO",
+        "9mobile_ng": "9MOBILE",
+        mtn: "MTN",
+        airtel: "AIRTEL",
+        glo: "GLO",
+        "9mobile": "9MOBILE",
+      };
 
-      // Iterate through each network plan array
       Object.keys(data).forEach((networkKey) => {
         const plans = data[networkKey];
         if (Array.isArray(plans) && plans.length > 0) {
           const firstPlan = plans[0];
-          // Validate required fields
           if (
             !firstPlan.plan_network ||
             !firstPlan.network ||
-            isNaN(firstPlan.network) ||
-            !SUPPORTED_PROVIDERS.includes(firstPlan.plan_network.toUpperCase())
+            isNaN(firstPlan.network)
           ) {
             console.warn(`Skipping invalid plan for ${networkKey}:`, {
               plan_network: firstPlan.plan_network,
@@ -91,46 +95,51 @@ const ServiceProviderScreen: React.FC = () => {
             return;
           }
 
-          const networkName = firstPlan.plan_network.toUpperCase();
-          if (!providerMap[networkName]) {
-            // Extract unique plan types for this provider, filtered by availability
-            const availablePlanTypes = Array.from(
-              new Set(plans.map((plan: any) => plan.plan_type || "Standard"))
-            )
-              .filter((type: string) => VALID_PLAN_TYPES.includes(type))
-              .filter((type: string) =>
-                AVAILABLE_PLAN_TYPES[networkName]?.includes(type) || type === "Standard"
-              );
+          const rawNetworkName = firstPlan.plan_network.toLowerCase();
+          const networkName = networkNameMap[rawNetworkName] || firstPlan.plan_network.toUpperCase();
+          
+          if (!SUPPORTED_PROVIDERS.includes(networkName)) {
+            console.warn(`Unsupported provider ${networkName} for ${networkKey}`);
+            return;
+          }
 
+          if (!providerMap[networkName]) {
+            const imageKey = networkName;
+            const providerImage = NETWORK_IMAGES[imageKey] || DEFAULT_PROVIDER_IMAGE;
             providerMap[networkName] = {
               id: Number(firstPlan.network),
               name: networkName,
-              image:
-                NETWORK_IMAGES[networkName as keyof typeof NETWORK_IMAGES] ||
-                DEFAULT_PROVIDER_IMAGE,
+              image: providerImage,
               code: networkName.toLowerCase(),
-              availablePlanTypes,
+              imageKey: networkName,
             };
+            console.log(`Assigned image for ${networkName}:`, {
+              image: providerImage === DEFAULT_PROVIDER_IMAGE ? "Default" : "Loaded",
+              imageKey,
+              rawNetworkName,
+            });
           }
         } else {
           console.warn(`Invalid or empty plans for ${networkKey}:`, plans);
         }
       });
 
-      // Convert providerMap to array
       const providerArray = Object.values(providerMap);
       setProviders(providerArray);
 
       if (providerArray.length === 0) {
-        throw new Error("No valid providers found in the response.");
+        throw new Error("No valid providers found");
       }
-      console.log("Fetched Providers:", providerArray);
+      console.log(
+        "Fetched Providers:",
+        providerArray.map((p) => ({ name: p.name, imageKey: p.imageKey }))
+      );
     } catch (error: any) {
       console.error("Fetch error:", {
         message: error.message,
         stack: error.stack,
       });
-      setError(`Could not load data providers: ${error.message}`);
+      setError("Could not load providers. Please try again.");
       setProviders([]);
     } finally {
       setLoading(false);
@@ -142,39 +151,32 @@ const ServiceProviderScreen: React.FC = () => {
   }, []);
 
   const selectProvider = (provider: Provider) => {
-    // Validate networkId
     if (isNaN(provider.id) || provider.id <= 0) {
       console.error("Invalid networkId for provider:", provider);
-      Alert.alert("Error", "Invalid provider data. Please try again.");
+      Alert.alert("Error", "Invalid provider data.");
       return;
     }
 
-    // Create a serializable version of the provider for navigation
     const serializableProvider = {
       id: provider.id,
       name: provider.name,
       code: provider.code,
-      imageKey:
-        Object.keys(NETWORK_IMAGES).find(
-          (key) =>
-            NETWORK_IMAGES[key as keyof typeof NETWORK_IMAGES] === provider.image
-        ) || "DEFAULT",
-      availablePlanTypes: provider.availablePlanTypes,
+      imageKey: provider.imageKey || "DEFAULT",
+      image: provider.image,
     };
 
-    console.log("Selecting provider:", {
-      name: provider.name,
-      id: provider.id,
-      code: provider.code,
-      availablePlanTypes: provider.availablePlanTypes,
+    const balance = params.balance || "0";
+    console.log("Navigating to BuyDataScreen with provider and balance:", {
+      ...serializableProvider,
+      balance,
     });
-    console.log("Serializable provider:", serializableProvider);
 
     router.push({
-      pathname: "/(app)/serviceprovider",
+      pathname: "/(app)/buy-data", // Confirm this is the correct route
       params: {
         provider: JSON.stringify(serializableProvider),
         networkId: provider.id.toString(),
+        balance,
       },
     });
   };
@@ -184,74 +186,93 @@ const ServiceProviderScreen: React.FC = () => {
     fetchProviders();
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.selectProviderTitle}>📱 Select Data Provider</Text>
+  const handleImageError = (providerName: string) => {
+    console.warn(`Image failed to load for ${providerName}`);
+    setImageErrors((prev) => ({ ...prev, [providerName]: true }));
+  };
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00ff99" />
-          <Text style={styles.loadingText}>Loading providers...</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable onPress={handleRetry} style={styles.retryButton}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </Pressable>
-        </View>
-      ) : providers.length === 0 ? (
-        <Text style={styles.noProvidersText}>No providers available.</Text>
-      ) : (
-        <View style={styles.providerGrid}>
-          {providers.map((provider) => (
-            <Pressable
-              key={provider.id}
-              onPress={() => {
-                console.log("Provider card pressed:", provider.name);
-                selectProvider(provider);
-              }}
-              style={styles.providerCard}
-              accessible={true}
-              accessibilityLabel={`Select ${provider.name} provider`}
-              accessibilityRole="button"
-            >
-              <View style={styles.providerCardContent}>
-                <Image
-                  source={provider.image}
-                  style={styles.providerLogoLarge}
-                  resizeMode="contain"
-                  onError={(error) => {
-                    console.log(
-                      "Image loading error for",
-                      provider.name,
-                      ":",
-                      error.nativeEvent.error
-                    );
-                  }}
-                />
-                <Text style={styles.providerCardName}>{provider.name}</Text>
-              </View>
+  // Prevent swipe gestures during vertical scrolling
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { velocity } = event.nativeEvent;
+    if (velocity && Math.abs(velocity.y) > 0.5) {
+      scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+    } else {
+      scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
+    }
+  };
+
+  return (
+    <SwipeWrapper scrollViewRef={scrollViewRef}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        <Text style={styles.title}>📱 Select Data Provider</Text>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#00ff88" />
+            <Text style={styles.loadingText}>Loading providers...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={handleRetry} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Retry</Text>
             </Pressable>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+          </View>
+        ) : providers.length === 0 ? (
+          <Text style={styles.noProvidersText}>No providers available.</Text>
+        ) : (
+          <View style={styles.providerGrid}>
+            {providers.map((provider) => (
+              <Pressable
+                key={provider.id}
+                onPress={() => selectProvider(provider)}
+                style={styles.providerCard}
+                accessible={true}
+                accessibilityLabel={`Select ${provider.name} provider`}
+                accessibilityRole="button"
+              >
+                <View style={styles.providerCardContent}>
+                  {imageErrors[provider.name] ? (
+                    <View style={styles.fallbackContainer}>
+                      <Text style={styles.fallbackText}>{provider.name}</Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={provider.image}
+                      style={styles.providerLogo}
+                      resizeMode="contain"
+                      onError={() => handleImageError(provider.name)}
+                    />
+                  )}
+                  <Text style={styles.providerName}>{provider.name}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SwipeWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: "#000",
     paddingTop: 48,
     paddingHorizontal: 16,
   },
-  selectProviderTitle: {
+  title: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "white",
+    fontWeight: "700",
+    color: "#fff",
     marginBottom: 24,
+    textAlign: "center",
   },
   providerGrid: {
     flexDirection: "row",
@@ -259,30 +280,49 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   providerCard: {
-    width: "48%",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    width: "45%",
+    aspectRatio: 1,
+    backgroundColor: "#111",
+    borderRadius: 180,
+    padding: 2,
+    marginBottom: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   providerCardContent: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
   },
-  providerLogoLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "white",
-    marginBottom: 12,
+  providerLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 8,
   },
-  providerCardName: {
-    fontSize: 16,
+  providerName: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "white",
+    color: "#fff",
+    textAlign: "center",
+  },
+  fallbackContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#333",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  fallbackText: {
+    fontSize: 12,
+    color: "#fff",
+    textAlign: "center",
   },
   noProvidersText: {
     fontSize: 16,
-    color: "white",
+    color: "#999",
     textAlign: "center",
     marginTop: 50,
   },
@@ -292,7 +332,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: "white",
+    color: "#fff",
     marginTop: 10,
   },
   errorContainer: {
@@ -301,12 +341,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: "#FF6666",
+    color: "#ff3333",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: "#00ff99",
+    backgroundColor: "#00ff88",
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -314,7 +354,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "black",
+    color: "#000",
   },
 });
 
