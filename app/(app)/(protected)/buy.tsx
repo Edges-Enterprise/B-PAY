@@ -172,7 +172,7 @@ const ServiceProviderScreen: React.FC = () => {
     });
 
     router.push({
-      pathname: "/(app)/buy-data", // Confirm this is the correct route
+      pathname: "/(app)/serviceprovider", // Confirm this is the correct route
       params: {
         provider: JSON.stringify(serializableProvider),
         networkId: provider.id.toString(),
