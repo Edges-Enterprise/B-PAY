@@ -31,9 +31,35 @@ interface Provider {
 const VALID_PLAN_TYPES = [
   "SME",
   "SME_GIFTING",
-  "CORPORATE GIFTING",
+  "CORPORATE_GIFTING",
   "GIFTING",
   "STANDARD",
+];
+
+// Define HOT_PLANS with Lizzysub IDs replacing Ujaydata plans
+const HOT_PLANS: DataBundle[] = [
+  { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
+  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
+  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
+  { id: 236, data: "3GB", price: 1500, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
+  { id: 213, data: "5GB", price: 2910, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
+  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
+  { id: 136, data: "10GB", price: 4410, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
+  { id: 216, data: "20GB", price: 4950, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
+  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
+  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
+  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
+  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
+  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
+  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
+  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
+  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
+  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
+  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
+  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
+  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
+  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
+  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
 ];
 
 const formatNumberWithCommas = (number: number): string => {
@@ -41,12 +67,12 @@ const formatNumberWithCommas = (number: number): string => {
 };
 
 const BuyDataScreen: React.FC = () => {
-  const { providerPlans, userEmail, errorMessage } = useContext(DataContext);
+  const { providerPlans, userEmail, error: errorMessage } = useContext(DataContext);
   const params = useLocalSearchParams<{ provider?: string; networkId?: string }>();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [networkId, setNetworkId] = useState<number | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>("Daily Plans");
-  const [activePlanType, setActivePlanType] = useState<string>("GIFTING");
+  const [activeCategory, setActiveCategory] = useState<string>("Hot");
+  const [activePlanType, setActivePlanType] = useState<string>("");
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState<boolean>(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState<boolean>(false);
   const [isPinCreationModalOpen, setIsPinCreationModalOpen] = useState<boolean>(false);
@@ -61,12 +87,46 @@ const BuyDataScreen: React.FC = () => {
   const [confirmPin, setConfirmPin] = useState<string>("");
   const [isNewPinVisible, setIsNewPinVisible] = useState<boolean>(false);
   const [isConfirmPinVisible, setIsConfirmPinVisible] = useState<boolean>(false);
-  const [recentBundle, setRecentBundle] = useState<DataBundle | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [transactionReference, setTransactionReference] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const pinVerified = useRef<boolean>(false);
+
+  // Synchronize networkId with selectedBundle for Hot plans
+  useEffect(() => {
+    if (selectedBundle && activeCategory === "Hot") {
+      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
+      if (plan) {
+        const networkIds: { [key: string]: number } = {
+          MTN: 1,
+          GLO: 3,
+          '9MOBILE': 4,
+          AIRTEL: 2,
+        };
+        const expectedNetworkId = networkIds[plan.planType];
+        if (expectedNetworkId && networkId !== expectedNetworkId) {
+          console.log('Synchronizing networkId for Hot plan:', {
+            bundleId: selectedBundle.id,
+            currentNetworkId: networkId,
+            expectedNetworkId,
+            planType: plan.planType,
+            providerName: selectedProvider?.name,
+          });
+          setNetworkId(expectedNetworkId);
+          if (selectedProvider && selectedProvider.name.toUpperCase() !== plan.planType) {
+            setSelectedProvider({
+              ...selectedProvider,
+              name: plan.planType,
+              id: expectedNetworkId,
+              image: NETWORK_IMAGES[plan.planType.toUpperCase()] || DEFAULT_PROVIDER_IMAGE,
+              imageKey: plan.planType.toUpperCase(),
+            });
+          }
+        }
+      }
+    }
+  }, [selectedBundle, activeCategory, networkId, selectedProvider]);
 
   // Reset modal states when the screen regains focus
   useFocusEffect(
@@ -120,21 +180,18 @@ const BuyDataScreen: React.FC = () => {
 
     // Subscribe to real-time updates
     const subscription = supabase
-      .channel('wallet_balance_changes')
+      .channel(`wallet-changes:${userEmail}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
-          table: 'profiles',
-          filter: `email=eq.${userEmail}`,
+          table: 'wallets',
+          filter: `user_email=eq.${userEmail}`,
         },
         (payload) => {
-          if (payload.new && 'wallet_balance' in payload.new) {
-            const newBalance = payload.new.wallet_balance ?? 0;
-            setWalletBalance(newBalance);
-            console.log("Real-time wallet balance update:", newBalance);
-          }
+          console.log("Real-time wallet balance update:", payload);
+          setWalletBalance(payload.new.balance ?? 0);
         }
       )
       .subscribe();
@@ -145,6 +202,7 @@ const BuyDataScreen: React.FC = () => {
     };
   }, [userEmail, fetchWalletBalance]);
 
+  // Initialize provider and set activePlanType
   useEffect(() => {
     if (params.provider && params.networkId) {
       try {
@@ -170,7 +228,8 @@ const BuyDataScreen: React.FC = () => {
             };
             setSelectedProvider(normalizedProvider);
             setNetworkId(id);
-            console.log("Initialized provider:", normalizedProvider);
+            setActivePlanType(normalizedProvider.name.toUpperCase());
+            console.log("Initialized provider:", normalizedProvider, "networkId:", id, "activePlanType:", normalizedProvider.name.toUpperCase());
           }
         } else {
           console.error("Invalid provider or networkId:", { provider, id });
@@ -230,37 +289,33 @@ const BuyDataScreen: React.FC = () => {
     if (!dataBundles.length) return [];
     const planTypes = [...new Set(
       dataBundles
-        .filter((bundle) => activeCategory === "Hot" || bundle.category === activeCategory)
+        .filter((bundle) => bundle.category === activeCategory)
         .map((bundle) => bundle.planType)
     )].filter((planType) => VALID_PLAN_TYPES.includes(planType));
     console.log(`PlanTypes for ${activeCategory}:`, planTypes);
     return planTypes;
   }, [dataBundles, activeCategory]);
 
+  // Update activePlanType when category changes
   useEffect(() => {
-    if (categoryPlanTypes.length === 0) {
-      console.log(`No plan types available for ${activeCategory}, resetting to GIFTING`);
-      if (activePlanType !== "GIFTING") {
-        setActivePlanType("GIFTING");
-      }
+    if (activeCategory === "Hot" && selectedProvider) {
+      setActivePlanType(selectedProvider.name.toUpperCase());
       return;
     }
-
-    if (!categoryPlanTypes.includes(activePlanType)) {
-      let newPlanType: string;
-      if (categoryPlanTypes.includes("GIFTING")) {
-        newPlanType = "GIFTING";
-      } else if (categoryPlanTypes.includes("CORPORATE GIFTING")) {
-        newPlanType = "CORPORATE GIFTING";
-      } else {
-        newPlanType = categoryPlanTypes[0];
-      }
-      if (activePlanType !== newPlanType) {
-        console.log(`Setting activePlanType to ${newPlanType} for ${activeCategory}`);
-        setActivePlanType(newPlanType);
-      }
+    if (categoryPlanTypes.length === 0) {
+      setActivePlanType("GIFTING");
+      return;
     }
-  }, [activeCategory, categoryPlanTypes, activePlanType]);
+    if (!categoryPlanTypes.includes(activePlanType)) {
+      setActivePlanType(
+        categoryPlanTypes.includes("GIFTING")
+          ? "GIFTING"
+          : categoryPlanTypes.includes("CORPORATE_GIFTING")
+          ? "CORPORATE_GIFTING"
+          : categoryPlanTypes[0]
+      );
+    }
+  }, [activeCategory, categoryPlanTypes, activePlanType, selectedProvider]);
 
   const planTypeOptions = useMemo(() => {
     console.log("Processing PlanTypeOptions:", {
@@ -270,6 +325,10 @@ const BuyDataScreen: React.FC = () => {
       provider: selectedProvider?.name,
       availablePlanTypes: categoryPlanTypes.length,
     });
+
+    if (activeCategory === "Hot") {
+      return [];
+    }
 
     if (!dataBundles.length) {
       console.warn("No dataBundles available");
@@ -289,38 +348,17 @@ const BuyDataScreen: React.FC = () => {
         );
       });
       types = [...new Set(results.map((bundle: DataBundle) => bundle.planType))];
-    } else if (activeCategory === "Hot" && recentBundle) {
-      types = [
-        ...new Set(
-          dataBundles
-            .filter((bundle: DataBundle) => {
-              try {
-                const sameType = bundle.planType === recentBundle.planType;
-                const sameCategory = bundle.category === recentBundle.category;
-                const recentData = parseFloat(recentBundle.data.match(/[\d.]+/)?.[0] || "0");
-                const recentUnit = recentBundle.data.match(/[MG]B/)?.[0] || "";
-                const recentMB = recentUnit === "GB" ? recentData * 1000 : recentData;
-                const bundleData = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
-                const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-                const bundleMB = bundleUnit === "GB" ? bundleData * 1000 : bundleData;
-                const similarData = bundleMB >= recentMB * 0.5 && bundleMB <= recentMB * 1.5;
-                return sameType && sameCategory && similarData;
-              } catch (error) {
-                console.error("Error processing bundle:", error);
-                return false;
-              }
-            })
-            .map((bundle: DataBundle) => bundle.planType)
-        ),
-      ];
     } else {
       types = categoryPlanTypes;
     }
 
     types = types.filter((planType: string) => VALID_PLAN_TYPES.includes(planType));
+    if (!types.length) {
+      console.warn(`No plan types available for ${activeCategory} with searchTerm: ${searchTerm}`);
+    }
     console.log("Computed planTypeOptions:", types);
     return types;
-  }, [dataBundles, activeCategory, searchTerm, recentBundle, categoryPlanTypes]);
+  }, [dataBundles, activeCategory, searchTerm, categoryPlanTypes]);
 
   const updateHasPin = useCallback((value: boolean) => {
     if (!pinVerified.current || value) {
@@ -428,14 +466,36 @@ const BuyDataScreen: React.FC = () => {
         `Insufficient balance: ₦${formatNumberWithCommas(selectedBundle.price)} needed, ₦${formatNumberWithCommas(walletBalance)} available`
       );
     }
-    if (detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
-      console.error("Network mismatch:", { detected: detectedNetwork, provider: selectedProvider.name });
-      return Alert.alert("Error", `Phone number does not match provider (${selectedProvider.name})`);
+
+    // Validate phone number for Hot plans
+    if (activeCategory === "Hot") {
+      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
+      if (plan && detectedNetwork && detectedNetwork.toUpperCase() !== plan.planType.toUpperCase()) {
+        console.error("Network mismatch for Hot plan:", {
+          detectedNetwork,
+          planType: plan.planType,
+          bundleId: selectedBundle.id,
+        });
+        return Alert.alert(
+          "Error",
+          `Phone number does not match the required network (${plan.planType}). Please use a ${plan.planType} number.`
+        );
+      }
+    } else if (detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
+      console.error("Network mismatch:", { detectedNetwork, provider: selectedProvider.name });
+      return Alert.alert(
+        "Error",
+        `Phone number does not match provider (${selectedProvider.name})`
+      );
     }
 
     setIsLoading(true);
     try {
-      const { data: profileData, error: pinError } = await supabase.from("profiles").select("transaction_pin").eq("email", userEmail).single();
+      const { data: profileData, error: pinError } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("email", userEmail)
+        .single();
       if (pinError) {
         console.error("PIN verification error:", pinError);
         if (pinError.code === "PGRST116") {
@@ -462,6 +522,22 @@ const BuyDataScreen: React.FC = () => {
       console.log("Generated reference:", reference);
       setTransactionReference(reference);
 
+      // Determine networkId for navigation
+      let finalNetworkId = networkId;
+      if (activeCategory === "Hot") {
+        const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
+        if (plan) {
+          const networkIds: { [key: string]: number } = {
+            MTN: 1,
+            GLO: 3,
+            '9MOBILE': 4,
+            AIRTEL: 2,
+          };
+          finalNetworkId = networkIds[plan.planType];
+          console.log("Using Hot plan networkId:", finalNetworkId, "for planType:", plan.planType);
+        }
+      }
+
       // Hide modal synchronously before navigation
       setIsPurchaseModalOpen(false);
       setPhoneNumberInput("");
@@ -481,7 +557,7 @@ const BuyDataScreen: React.FC = () => {
         userEmail,
         referenceId: reference,
         balance: walletBalance,
-        networkId,
+        networkId: finalNetworkId,
         planId: selectedBundle.id,
       });
 
@@ -502,7 +578,7 @@ const BuyDataScreen: React.FC = () => {
             userEmail,
             referenceId: reference,
             balance: walletBalance.toString(),
-            networkId: networkId.toString(),
+            networkId: finalNetworkId.toString(),
             planId: selectedBundle.id.toString(),
           },
         });
@@ -587,9 +663,9 @@ const BuyDataScreen: React.FC = () => {
         bundleCategories={["Hot", ...bundleCategories]}
         activeCategory={activeCategory}
         chooseCategory={chooseCategory}
-        planTypeOptions={planTypeOptions}
+        planTypeOptions={activeCategory === "Hot" ? [] : planTypeOptions}
         activePlanType={activePlanType}
-        choosePlanType={choosePlanType}
+        choosePlanType={activeCategory === "Hot" ? () => {} : choosePlanType}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         resetSearch={resetSearch}

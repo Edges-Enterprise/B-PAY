@@ -152,14 +152,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setErrorMessage(null);
 
-      // Authenticate user
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user?.email) {
-        throw new Error("User authentication failed or email missing");
-      }
-      setUserEmail(user.email);
-      console.log("Authenticated user:", user.email);
-
       // Fetch wallet balance
       let walletData = null;
       let attempts = 0;
@@ -169,7 +161,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data, error } = await supabase
             .from("wallets")
             .select("balance")
-            .eq("user_email", user.email)
+            .eq("user_email", userEmail)
             .single();
 
           if (error && error.code !== "PGRST116") {
@@ -193,14 +185,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Subscribe to wallet updates
       const subscription = supabase
-        .channel(`wallet-updates:${user.email}`)
+        .channel(`wallet-updates:${userEmail}`)
         .on(
           "postgres_changes",
           {
             event: "UPDATE",
             schema: "public",
             table: "wallets",
-            filter: `user_email=eq.${user.email}`,
+            filter: `user_email=eq.${userEmail}`,
           },
           (payload) => {
             console.log("Wallet balance updated:", payload.new.balance);
@@ -217,9 +209,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const cacheKey = provider.toUpperCase();
         let plans: DataBundle[] = [];
 
-        // Force refresh for debugging
         console.log(`Checking cache for ${provider}, cacheExists: ${!!planCache[cacheKey]}, age: ${planCache[cacheKey] ? (Date.now() - planCache[cacheKey].timestamp) / 1000 / 60 : "N/A"} minutes`);
-        if (planCache[cacheKey] && Date.now() - planCache[cacheKey].timestamp < CACHE_DURATION && false) {
+        if (planCache[cacheKey] && Date.now() - planCache[cacheKey].timestamp < CACHE_DURATION) {
           console.log(`Using cached plans for ${provider}`, { planCount: planCache[cacheKey].data.length });
           plans = planCache[cacheKey].data;
         } else {
@@ -294,10 +285,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userEmail]);
 
   useEffect(() => {
-    fetchData();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user?.email) {
+        console.log("User signed in:", session.user.email);
+        setUserEmail(session.user.email);
+        fetchData();
+      } else if (event === "SIGNED_OUT") {
+        console.log("User signed out");
+        setUserEmail(null);
+        setProviderPlans({});
+        setWalletBalance(null);
+        setErrorMessage(null);
+        Object.keys(planCache).forEach((key) => delete planCache[key]);
+      }
+    });
+
+    // Check initial auth state
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (user?.email && !error) {
+        console.log("Initial auth check: User signed in:", user.email);
+        setUserEmail(user.email);
+        fetchData();
+      } else {
+        console.log("Initial auth check: No user authenticated");
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [fetchData]);
 
   return (

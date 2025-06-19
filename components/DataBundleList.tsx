@@ -54,7 +54,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     const normalized = input.toLowerCase().trim();
     const dataMatch = normalized.match(/(\d*\.?\d*)\s*(gb|mb)/i);
     const validityMatch = normalized.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
-    const planMatch = normalized.match(/(sme|gifting|corporate|standard)/i);
+    const planMatch = normalized.match(/(mtn|airtel|glo|9mobile)/i);
 
     return {
       dataAmount: dataMatch ? parseFloat(dataMatch[1]) : null,
@@ -115,6 +115,31 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
       .sort((a, b) => a.price - b.price);
   };
 
+  const hotDeals: DataBundle[] = [
+    { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
+  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
+  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
+  { id: 236, data: "3GB", price: 1550, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" }, // Replaces Ujaydata ID 265
+  { id: 213, data: "5GB", price: 2980, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" }, // Replaces Ujaydata ID 272
+  { id: 136, data: "10GB", price: 4480, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" }, // Replaces Ujaydata ID 293
+  { id: 216, data: "20GB", price: 5000, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" }, // Replaces Ujaydata ID 339
+  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
+  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
+  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
+  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
+  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
+  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
+  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
+  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
+  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
+  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
+  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
+  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
+  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
+  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
+  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
+];
+
   const getCategoryBundles = useMemo(() => {
     if (!dataBundles || !Array.isArray(dataBundles)) {
       return [];
@@ -123,16 +148,16 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
       const results = searchBundles(searchTerm);
       return results || [];
     }
+    if (activeCategory === "Hot") {
+      // Return hot deals filtered by activePlanType
+      return hotDeals
+        .filter((bundle) => bundle.planType.toLowerCase() === activePlanType.toLowerCase())
+        .sort((a, b) => a.price - b.price);
+    }
     let filtered = dataBundles;
     filtered = filtered.filter(
       (bundle) => bundle.planType.toLowerCase() === activePlanType.toLowerCase()
     );
-
-    if (activeCategory === "Hot") {
-      return filtered
-        .sort((a, b) => a.price - b.price)
-        .slice(0, 5);
-    }
 
     return filtered
       .filter((bundle) => bundle.category === activeCategory)
@@ -183,10 +208,9 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
             </View>
             <Text style={styles.bundlePrice}>₦{formatNumberWithCommas(bundle.price)}</Text>
           </View>
-          <Text style={styles.bundleDescription} numberOfLines={2} ellipsizeMode="tail">
-            {bundle.description || "No description available"}
-          </Text>
-          {bundle.planType && <Text style={styles.planTypeText}>{bundle.planType}</Text>}
+          {activeCategory !== "Hot" && (
+            <Text style={styles.planTypeText}>{bundle.planType}</Text>
+          )}
           {bundle.validity === "Not Specified" && (
             <Text style={styles.warningPreviewText}>Note: Plan duration unclear. Check with provider.</Text>
           )}
@@ -196,9 +220,9 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
               animate={{ scale: [1, 1.1, 1] }}
               transition={{
                 type: "timing",
-                duration: 2000, // Slow pulse duration
-                loop: true, // Continuous looping
-                repeatReverse: true, // Smoothly reverses the animation
+                duration: 2000,
+                loop: true,
+                repeatReverse: true,
               }}
             >
               <Pressable onPress={handlePurchase} style={styles.buyButton}>
@@ -307,11 +331,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
     textAlign: "right",
-  },
-  bundleDescription: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 8,
   },
   planTypeText: {
     fontSize: 14,

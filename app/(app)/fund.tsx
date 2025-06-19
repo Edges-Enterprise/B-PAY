@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,65 +8,153 @@ import {
   SafeAreaView,
   Alert,
   Dimensions,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
-import { MotiView } from "moti";
-import { StatusBar } from "expo-status-bar";
-import { supabase } from "@/config/supabase";
-import { v4 as uuidv4 } from "uuid";
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { MotiView } from 'moti';
+import { StatusBar } from 'expo-status-bar';
+import { supabase } from '@/config/supabase';
+import { WebView } from 'react-native-webview';
+import { v4 as uuidv4 } from 'uuid';
+import 'react-native-get-random-values';
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 
 const FundScreen = () => {
-  const [amount, setAmount] = useState("");
-  const [error, setError] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [userName, setUserName] = useState("");
-  const [userId, setUserId] = useState("");
+  const [amount, setAmount] = useState('');
+  const [error, setError] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+  const [userId, setUserId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showWebView, setShowWebView] = useState(false);
+  const [paymentReference, setPaymentReference] = useState('');
+  const [isUserLoading, setIsUserLoading] = useState(true);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError || !user) {
-          throw new Error("User not authenticated");
-        }
-        if (!user.email) {
-          throw new Error("User email not found");
-        }
-        if (!user.user_metadata?.username) {
-          throw new Error("User username not found");
-        }
-        setUserEmail(user.email);
-        setUserName(user.user_metadata.username);
-        setUserId(user.id);
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        Alert.alert("Error", "Failed to load user data. Please sign in again.");
-        router.replace("/sign-in");
-      }
-    };
+    console.log('EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY:', process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY);
+    console.log('EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+    console.log('EXPO_PUBLIC_SUPABASE_ANON_KEY:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+    if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || !process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY.startsWith('pk_')) {
+      Alert.alert('Error', 'Invalid or missing Paystack public key. Please contact support.');
+      router.replace('/sign-in');
+    }
+  }, []);
 
+  useEffect(() => {
+    console.log('showWebView changed to:', showWebView);
+  }, [showWebView]);
+
+  const fetchUserData = async () => {
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('User not authenticated');
+      }
+      if (!user.email) {
+        throw new Error('User email not found');
+      }
+      if (!user.user_metadata?.username) {
+        throw new Error('User username not found');
+      }
+      setUserEmail(user.email);
+      setUserName(user.user_metadata.username);
+      setUserId(user.id);
+      console.log('User data fetched:', {
+        userEmail: user.email,
+        userName: user.user_metadata.username,
+        userId: user.id,
+      });
+      await fetchWalletBalance(user.email);
+    } catch (error: any) {
+      console.error('Error fetching user data:', error.message);
+      Alert.alert('Error', 'Failed to load user data. Please sign in again.');
+      router.replace('/sign-in');
+    } finally {
+      setIsUserLoading(false);
+    }
+  };
+
+  const fetchWalletBalance = async (email: string) => {
+    try {
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_email', email)
+        .single();
+      if (walletError && walletError.code !== 'PGRST116') {
+        throw new Error(`Wallet query failed: ${walletError.message}`);
+      }
+      setWalletBalance(wallet?.balance || 0);
+      console.log('Wallet balance fetched:', wallet?.balance || 0);
+    } catch (error: any) {
+      console.error('Error fetching wallet balance:', error.message);
+    }
+  };
+
+  useEffect(() => {
     fetchUserData();
   }, []);
+
+  useEffect(() => {
+    let subscription;
+    if (paymentReference) {
+      subscription = supabase
+        .channel(`payment-confirm:${paymentReference}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'transactions',
+            filter: `reference=eq.${paymentReference}`,
+          },
+          async (payload) => {
+            console.log('Transaction update received:', payload);
+            if (payload.new.status === 'success') {
+              setShowWebView(false);
+              setIsLoading(false);
+              setPaymentReference('');
+              await fetchWalletBalance(userEmail);
+              Alert.alert('Success', 'Transaction completed successfully!');
+              router.push('/home');
+            } else if (payload.new.status === 'failed') {
+              setShowWebView(false);
+              setIsLoading(false);
+              setPaymentReference('');
+              Alert.alert('Error', 'Transaction failed. Please try again.');
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('Subscription status:', status);
+        });
+    }
+
+    return () => {
+      if (subscription) {
+        console.log('Removing subscription for reference:', paymentReference);
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [paymentReference, userEmail]);
 
   const handleDeposit = async (depositAmount: number, reference: string) => {
     try {
       setIsLoading(true);
 
-      // Fetch wallet
       const { data: wallet, error: walletError } = await supabase
-        .from("wallets")
-        .select("balance")
-        .eq("user_email", userEmail)
+        .from('wallets')
+        .select('balance')
+        .eq('user_email', userEmail)
         .single();
 
-      if (walletError && walletError.code !== "PGRST116") {
+      if (walletError && walletError.code !== 'PGRST116') {
         throw new Error(`Wallet query failed: ${walletError.message}`);
       }
 
@@ -76,37 +163,34 @@ const FundScreen = () => {
       const netAmount = depositAmount - profit;
       const newBalance = currentBalance + netAmount;
 
-      // Update wallet
       const { error: walletUpdateError } = await supabase
-        .from("wallets")
-        .upsert({ user_email: userEmail, balance: newBalance }, { onConflict: "user_email" });
+        .from('wallets')
+        .upsert({ user_email: userEmail, balance: newBalance }, { onConflict: 'user_email' });
 
       if (walletUpdateError) {
         throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
       }
 
-      // Fetch existing pending transaction
       const { data: txData, error: txFetchError } = await supabase
-        .from("transactions")
-        .select("id")
-        .eq("reference", reference)
-        .eq("status", "pending")
+        .from('transactions')
+        .select('id')
+        .eq('reference', reference)
+        .eq('status', 'pending')
         .single();
 
       if (txFetchError || !txData) {
-        throw new Error(`Pending transaction not found: ${txFetchError?.message || "No transaction"}`);
+        throw new Error(`Pending transaction not found: ${txFetchError?.message || 'No transaction'}`);
       }
 
       const transactionId = txData.id;
 
-      // Update transaction to success
       const { error: txUpdateError } = await supabase
-        .from("transactions")
+        .from('transactions')
         .update({
-          status: "success",
+          status: 'success',
           metadata: {
-            payment_date: new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }),
-            payment_method: "Paystack",
+            payment_date: new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }),
+            payment_method: 'Paystack',
             profit,
             net_amount: netAmount,
             user_name: userName,
@@ -121,15 +205,14 @@ const FundScreen = () => {
             },
           },
         })
-        .eq("id", transactionId);
+        .eq('id', transactionId);
 
       if (txUpdateError) {
         throw new Error(`Transaction update failed: ${txUpdateError.message}`);
       }
 
-      // Record deposit
       const { error: depositError } = await supabase
-        .from("deposits")
+        .from('deposits')
         .insert({
           transaction_id: transactionId,
           user_email: userEmail,
@@ -143,83 +226,338 @@ const FundScreen = () => {
         throw new Error(`Deposit insert failed: ${depositError.message}`);
       }
 
+      await sendTestReceipt(reference, depositAmount.toString(), userEmail);
+      await fetchWalletBalance(userEmail);
+
       setIsLoading(false);
       Alert.alert(
-        "Success",
+        'Success',
         `Wallet funded with ₦${netAmount.toLocaleString()}. Profit: ₦${profit.toLocaleString()}.`
       );
-      setAmount("");
-      router.push("/home");
+      setAmount('');
     } catch (error: any) {
-      console.error("Deposit error:", error.message);
+      console.error('Deposit error:', error.message);
       setIsLoading(false);
-      Alert.alert("Error", `Deposit failed: ${error.message || "Unknown error"}`);
+      Alert.alert('Error', `Deposit failed: ${error.message || 'Unknown error'}`);
 
-      // Revert wallet balance if updated
-      if (typeof currentBalance === "number") {
+      if (typeof currentBalance === 'number') {
         const { error: revertError } = await supabase
-          .from("wallets")
+          .from('wallets')
           .update({ balance: currentBalance })
-          .eq("user_email", userEmail);
+          .eq('user_email', userEmail);
         if (revertError) {
-          console.error("Revert wallet error:", revertError);
+          console.error('Revert wallet error:', revertError.message);
         }
       }
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      const handlePaymentCallback = async () => {
-        const params = router.getState()?.routes.find((route) => route.name === "paystack")?.params;
-        if (params && params.paymentStatus === "success" && params.reference && params.amount) {
-          const depositAmount = parseFloat(params.amount);
-          await handleDeposit(depositAmount, params.reference);
-        } else if (params && params.paymentStatus === "failed") {
-          Alert.alert("Error", "Payment failed. Please try again.");
+  const verifyTransaction = async (reference: string, expectedAmount: number) => {
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-paystack-transaction`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ reference, expectedAmount }),
         }
-      };
+      );
 
-      handlePaymentCallback();
-    }, [])
-  );
+      const data = await response.json();
+      console.log('Verification response:', data);
+      if (data.status) {
+        return true;
+      } else {
+        throw new Error(data.error || 'Transaction verification failed');
+      }
+    } catch (error: any) {
+      console.error('Verification error:', error.message);
+      throw error;
+    }
+  };
+
+  const sendTestReceipt = async (reference: string, amount: string, email: string) => {
+    try {
+      const parsedAmount = parseFloat(amount);
+      const feePercentage = 0.1;
+      const feeAmount = parsedAmount * feePercentage;
+      const netAmount = parsedAmount - feeAmount;
+
+      const receiptDetails = {
+        to: email,
+        subject: 'Payment Receipt - Edges Network',
+        body: `
+          Payment Receipt
+          ----------------
+          Reference: ${reference}
+          Amount Paid: ₦${parsedAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Fees:
+            - Transfer Fee (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - Wallet Management Fee (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - API & Network Protocols Fee (4%): ₦${(parsedAmount * 0.04).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+            - VAT (2%): ₦${(parsedAmount * 0.02).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Total Fees (10%): ₦${feeAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Amount Credited to Your Wallet: ₦${netAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+          Date: ${new Date().toLocaleString()}
+          Status: Successful
+          ----------------
+          View your wallet balance in the Edges Network app.
+          Thank you for your payment!
+        `,
+      };
+      console.log('Sending receipt:', receiptDetails);
+    } catch (error) {
+      console.error('Error sending receipt:', error);
+    }
+  };
+
+  const handleTopUp = async () => {
+    console.log('handleTopUp triggered', { amount, userEmail, userName, userId, isLoading });
+    const parsedAmount = parseFloat(amount);
+    if (!amount || isNaN(parsedAmount)) {
+      console.log('Invalid amount:', amount);
+      setError('Please enter a valid amount');
+      return;
+    }
+    if (parsedAmount < 500) {
+      console.log('Amount too low:', parsedAmount);
+      setError('Minimum funding amount is ₦500');
+      return;
+    }
+    if (!userEmail || !userName || !userId) {
+      console.log('User data missing:', { userEmail, userName, userId });
+      Alert.alert('Error', 'User data is missing. Please sign in again.');
+      return;
+    }
+    if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY) {
+      console.log('Paystack key missing');
+      Alert.alert('Error', 'Paystack configuration is missing.');
+      return;
+    }
+    if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+      console.log('Supabase config missing');
+      Alert.alert('Error', 'Supabase configuration is missing.');
+      return;
+    }
+
+    const newReference = `Edges_Network_${uuidv4()}`;
+    setPaymentReference(newReference);
+    console.log('Setting showWebView to true, reference:', newReference);
+
+    try {
+      const { error: txInsertError } = await supabase
+        .from('transactions')
+        .insert({
+          reference: newReference,
+          user_email: userEmail,
+          status: 'pending',
+          amount: parsedAmount,
+          type: 'deposit',
+          metadata: {
+            user_name: userName,
+            user_id: userId,
+            payment_method: 'Paystack',
+            payment_date: new Date().toISOString(),
+            custom_fields: [
+              {
+                display_name: 'Mobile Payment',
+                variable_name: 'mobile_payment',
+                value: 'Edges Network',
+              },
+            ],
+          },
+        });
+
+      if (txInsertError) {
+        console.log('Transaction insert error:', txInsertError.message);
+        throw new Error(`Failed to create transaction: ${txInsertError.message}`);
+      }
+
+      setIsLoading(true);
+      setShowWebView(true);
+    } catch (error: any) {
+      console.error('Transaction creation error:', error.message);
+      setShowWebView(false);
+      setIsLoading(false);
+      Alert.alert('Error', `Failed to initiate payment: ${error.message || 'Unknown error'}`);
+    }
+  };
 
   const handlePresetAmount = (value: number) => {
     const currentAmount = amount ? parseFloat(amount) : 0;
     const newAmount = currentAmount + value;
     setAmount(newAmount.toString());
-    setError("");
+    setError('');
   };
 
-  const handleTopUp = () => {
-    const parsedAmount = parseFloat(amount);
-    if (!amount || isNaN(parsedAmount)) {
-      setError("Please enter a valid amount");
-      return;
-    }
-    if (parsedAmount < 500) {
-      setError("Minimum funding amount is ₦500");
-      return;
-    }
-    if (!userEmail || !userName || !userId) {
-      Alert.alert("Error", "User data is missing. Please sign in again.");
-      return;
-    }
+  const generatePaystackHTML = (): string => {
+    const reference = paymentReference || `Edges_Network_${uuidv4()}`;
+    console.log(`Generating Paystack HTML with reference: ${reference}`);
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Paystack Payment</title>
+        <script src="https://js.paystack.co/v1/inline.js"></script>
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #1A2526;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+          }
+          .container {
+            margin-top: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: ${width}px;
+            max-width: 100%;
+          }
+          #paystackIframe {
+            width: ${width * 0.9}px;
+            max-width: 500px;
+            height: ${height * 0.6}px;
+            border: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div id="paystackIframe"></div>
+        </div>
+        <script>
+          const handler = PaystackPop.setup({
+            key: '${process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || ''}',
+            email: '${userEmail}',
+            amount: ${parseFloat(amount) * 100},
+            currency: 'NGN',
+            channels: ['card', 'bank', 'ussd', 'qr'],
+            ref: '${reference}',
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: "Mobile Payment",
+                  variable_name: "mobile_payment",
+                  value: "Edges Network"
+                }
+              ]
+            },
+            onClose: function() {
+              window.ReactNativeWebView.postMessage('payment-cancelled');
+            },
+            callback: function(response) {
+              window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
+            }
+          });
+          handler.openIframe();
+        </script>
+      </body>
+      </html>
+    `;
+  };
 
-    const reference = `DEP_${uuidv4()}`;
-    router.push({
-      pathname: "/paystack",
-      params: {
-        amount,
-        userEmail,
-        userName,
-        userId,
-        reference,
-      },
-    });
+  const handleWebViewMessage = async (event: any): Promise<void> => {
+    const data = event.nativeEvent.data;
+    try {
+      if (data.startsWith('payment-success:')) {
+        const reference = data.split(':')[1];
+        console.log(`Processing payment success for reference: ${reference}`);
+
+        const parsedAmount = parseFloat(amount);
+        const isVerified = await verifyTransaction(reference, parsedAmount);
+        if (!isVerified) {
+          await supabase
+            .from('transactions')
+            .update({ status: 'failed' })
+            .eq('reference', reference);
+          throw new Error('Transaction verification failed.');
+        }
+
+        await handleDeposit(parsedAmount, reference);
+      } else if (data === 'payment-cancelled') {
+        const { error: failedError } = await supabase
+          .from('transactions')
+          .update({ status: 'failed' })
+          .eq('user_email', userEmail)
+          .eq('status', 'pending')
+          .eq('amount', parseFloat(amount));
+
+        if (failedError) {
+          console.error('Failed transaction update error:', failedError);
+          throw new Error(`Failed to update transaction status: ${failedError.message}`);
+        }
+
+        Alert.alert('Cancelled', 'Payment was cancelled.');
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
+        router.back();
+      }
+    } catch (err: any) {
+      console.error('Error processing transaction:', err);
+      Alert.alert('Error', `Failed to process transaction: ${err.message || 'Unknown error'}`);
+      setShowWebView(false);
+      setIsLoading(false);
+    }
   };
 
   const presetAmounts = [500, 1000, 5000, 10000];
+
+  if (isUserLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.title}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (showWebView) {
+    return (
+      <SafeAreaView style={styles.webViewContainer}>
+        <WebView
+          source={{ html: generatePaystackHTML() }}
+          onMessage={handleWebViewMessage}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          style={{ flex: 1, width, height }}
+          startInLoadingState={true}
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#000" />
+            </View>
+          )}
+          onShouldStartLoadWithRequest={(request) => {
+            if (request.url.includes('paystack') || request.url.includes('edgesnetwork')) {
+              return true;
+            }
+            console.log('Blocked external navigation:', request.url);
+            return false;
+          }}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView error:', nativeEvent);
+            Alert.alert('Error', 'Failed to load payment page. Please try again.');
+            setShowWebView(false);
+            setIsLoading(false);
+            router.back();
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -238,24 +576,19 @@ const FundScreen = () => {
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 300 }}
+          transition={{ type: 'timing', duration: 300 }}
           style={styles.balanceContainer}
         >
           <Text style={styles.balanceLabel}>Wallet Balance (NGN)</Text>
           <Text style={styles.balanceText}>
-            ₦
-            {amount
-              ? parseFloat(amount).toLocaleString("en-NG", {
-                  minimumFractionDigits: 2,
-                })
-              : "0.00"}
+            ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
           </Text>
         </MotiView>
 
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 300, delay: 100 }}
+          transition={{ type: 'timing', duration: 300, delay: 100 }}
           style={styles.inputContainer}
         >
           <Text style={styles.label}>Amount to Fund (NGN)</Text>
@@ -267,16 +600,13 @@ const FundScreen = () => {
               keyboardType="numeric"
               value={amount}
               onChangeText={(text) => {
-                setAmount(text.replace(/[^0-9.]/g, ""));
-                setError("");
+                setAmount(text.replace(/[^0-9.]/g, ''));
+                setError('');
               }}
               editable={!isLoading}
             />
             {amount && !isLoading ? (
-              <Pressable
-                onPress={() => setAmount("")}
-                style={styles.clearButton}
-              >
+              <Pressable onPress={() => setAmount('')} style={styles.clearButton}>
                 <Ionicons name="close-circle" size={20} color="#666" />
               </Pressable>
             ) : null}
@@ -287,7 +617,7 @@ const FundScreen = () => {
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 300, delay: 200 }}
+          transition={{ type: 'timing', duration: 300, delay: 200 }}
           style={styles.presetContainer}
         >
           {presetAmounts.map((value) => (
@@ -301,9 +631,7 @@ const FundScreen = () => {
               ]}
               disabled={isLoading}
             >
-              <Text style={styles.presetText}>
-                ₦{value.toLocaleString()}
-              </Text>
+              <Text style={styles.presetText}>₦{value.toLocaleString()}</Text>
             </Pressable>
           ))}
         </MotiView>
@@ -311,7 +639,7 @@ const FundScreen = () => {
         <MotiView
           from={{ scale: 1 }}
           animate={{ scale: [1, 1.02, 1] }}
-          transition={{ loop: true, type: "timing", duration: 1500 }}
+          transition={{ loop: true, type: 'timing', duration: 1500 }}
           style={styles.buttonContainer}
         >
           <Pressable
@@ -320,7 +648,7 @@ const FundScreen = () => {
             disabled={isLoading}
           >
             <Text style={styles.fundButtonText}>
-              {isLoading ? "Processing..." : "Top Up Now"}
+              {isLoading ? 'Processing...' : 'Top Up Now'}
             </Text>
           </Pressable>
         </MotiView>
@@ -328,27 +656,21 @@ const FundScreen = () => {
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 300, delay: 300 }}
+          transition={{ type: 'timing', duration: 300, delay: 300 }}
           style={styles.stepsContainer}
         >
           <Text style={styles.stepsTitle}>Payment Steps</Text>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>1</Text>
-            <Text style={styles.stepText}>
-              Enter amount and click "Top Up Now"
-            </Text>
+            <Text style={styles.stepText}>Enter amount and click "Top Up Now"</Text>
           </View>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>2</Text>
-            <Text style={styles.stepText}>
-              Choose bank transfer or select "Try another method" for card or USSD
-            </Text>
+            <Text style={styles.stepText}>Complete payment via card, bank transfer, or USSD</Text>
           </View>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>3</Text>
-            <Text style={styles.stepText}>
-              Complete payment; wallet will be credited after fees
-            </Text>
+            <Text style={styles.stepText}>Wallet will be credited after fees</Text>
           </View>
         </MotiView>
       </View>
@@ -359,57 +681,71 @@ const FundScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1A2526",
+    backgroundColor: '#1A2526',
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: '#1A2526',
+    width,
+    height,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A2526',
+    width,
+    height,
   },
   inner: {
     flex: 1,
     paddingHorizontal: 16,
-    justifyContent: "space-between",
+    justifyContent: 'space-between',
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 40,
   },
   title: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
+    fontWeight: 'bold',
+    color: '#fff',
   },
   balanceContainer: {
     marginBottom: 16,
   },
   balanceLabel: {
     fontSize: 14,
-    color: "#888",
+    color: '#888',
     marginBottom: 4,
   },
   balanceText: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
+    fontWeight: 'bold',
+    color: '#fff',
   },
   inputContainer: {
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    color: "#fff",
-    fontWeight: "500",
+    color: '#fff',
+    fontWeight: '500',
     marginBottom: 8,
   },
   inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2A3A3B",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2A3A3B',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3A4A4B",
+    borderColor: '#3A4A4B',
   },
   input: {
     flex: 1,
-    color: "#fff",
+    color: '#fff',
     padding: 12,
     fontSize: 16,
   },
@@ -417,72 +753,72 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   errorText: {
-    color: "#ff4444",
+    color: '#ff4444',
     fontSize: 12,
     marginTop: 4,
   },
   presetContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   presetButton: {
-    backgroundColor: "#2A3A3B",
+    backgroundColor: '#2A3A3B',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
     marginBottom: 8,
-    width: "22%",
-    alignItems: "center",
+    width: '22%',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: "#3A4A4B",
+    borderColor: '#3A4A4B',
   },
   presetText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   buttonContainer: {
     marginBottom: 16,
   },
   fundButton: {
-    backgroundColor: "#00FF00",
+    backgroundColor: '#00FF00',
     paddingVertical: 14,
     borderRadius: 8,
-    alignItems: "center",
+    alignItems: 'center',
   },
   fundButtonText: {
-    color: "#000",
-    fontWeight: "bold",
+    color: '#000',
+    fontWeight: 'bold',
     fontSize: 16,
-    textTransform: "uppercase",
+    textTransform: 'uppercase',
   },
   stepsContainer: {
     marginBottom: 20,
   },
   stepsTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
+    fontWeight: 'bold',
+    color: '#fff',
     marginBottom: 12,
   },
   step: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
   stepNumber: {
     fontSize: 14,
-    fontWeight: "bold",
-    color: "#00FF00",
+    fontWeight: 'bold',
+    color: '#00FF00',
     marginRight: 8,
     width: 24,
-    textAlign: "center",
+    textAlign: 'center',
   },
   stepText: {
     fontSize: 14,
-    color: "#888",
+    color: '#888',
     flex: 1,
     lineHeight: 20,
   },

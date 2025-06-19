@@ -1,15 +1,151 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, Image, Animated, PanResponder, TextInput, Modal } from 'react-native';
+import { View, StyleSheet, Alert, Animated, PanResponder, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
 import TransactionStatusModal from '@/components/homescreen/TransactionStatusModal';
-import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from '@/constants/helper';
+import PurchaseDetails from '@/components/confirmation/PurchaseDetails';
+import ErrorModal from '@/components/confirmation/ErrorModal';
+
+// Define constants
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+
+// Define HOT_PLANS with Lizzysub IDs replacing Ujaydata plans
+const HOT_PLANS: DataBundle[] = [
+  { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
+  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
+  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
+  { id: 236, data: "3GB", price: 1550, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
+  { id: 213, data: "5GB", price: 2980, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
+  { id: 136, data: "10GB", price: 4480, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
+  { id: 216, data: "20GB", price: 5000, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
+  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
+  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
+  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
+  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
+  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
+  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
+  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
+  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
+  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
+  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
+  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
+  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
+  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
+  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
+  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
+];
+
+// Generate or retrieve Lizzysub token
+const getLizzysubToken = async (userEmail: string): Promise<string> => {
+  const username = process.env.EXPO_PUBLIC_LIZZYSUB_USERNAME;
+  const password = process.env.EXPO_PUBLIC_LIZZYSUB_PASSWORD;
+
+  if (!username || !password) {
+    console.error('Lizzysub credentials missing. Check EXPO_PUBLIC_LIZZYSUB_USERNAME and EXPO_PUBLIC_LIZZYSUB_PASSWORD environment variables.');
+    throw new Error('Lizzysub credentials are not configured.');
+  }
+
+  // Check if a valid token exists in Supabase
+  const { data: tokenData, error: tokenError } = await supabase
+    .from('user_tokens')
+    .select('lizzysub_token, created_at, expires_at, is_valid')
+    .eq('user_email', userEmail)
+    .eq('is_valid', true)
+    .single();
+
+  if (tokenError && tokenError.code !== 'PGRST116') {
+    console.error('Error fetching Lizzysub token:', tokenError);
+    throw new Error(`Failed to fetch Lizzysub token: ${tokenError.message}`);
+  }
+
+  const now = new Date();
+  if (tokenData && tokenData.is_valid && tokenData.lizzysub_token) {
+    const createdAt = new Date(tokenData.created_at);
+    const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null;
+
+    // Check if token is still valid (within 30 days)
+    if (
+      now.getTime() - createdAt.getTime() < THIRTY_DAYS_IN_MS &&
+      (!expiresAt || now < expiresAt)
+    ) {
+      console.log('Using cached Lizzysub token:', `Token ${tokenData.lizzysub_token.slice(0, 4)}...${tokenData.lizzysub_token.slice(-4)}`);
+      return tokenData.lizzysub_token;
+    }
+  }
+
+  // Generate a new token via Lizzysub API using Basic Authentication
+  try {
+    const credentials = `${username}:${password}`;
+    const base64Credentials = Buffer.from(credentials).toString('base64');
+
+    const response = await fetch('https://lizzysub.com/api/user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${base64Credentials}`,
+      },
+    });
+
+    const responseData = await response.json();
+    if (!response.ok || responseData.status !== 'success') {
+      throw new Error(`Failed to generate Lizzysub token: ${responseData.message || 'Unknown error'}`);
+    }
+
+    const newToken = responseData.AccessToken;
+    const expiresAt = new Date(now.getTime() + THIRTY_DAYS_IN_MS);
+
+    // Store the new token in Supabase
+    const { error: upsertError } = await supabase
+      .from('user_tokens')
+      .upsert({
+        user_email: userEmail,
+        lizzysub_token: newToken,
+        created_at: now.toISOString(),
+        expires_at: expiresAt.toISOString(),
+        is_valid: true,
+      });
+
+    if (upsertError) {
+      throw new Error(`Failed to store Lizzysub token: ${upsertError.message}`);
+    }
+
+    console.log('Generated and stored new Lizzysub token:', `Token ${newToken.slice(0, 4)}...${newToken.slice(-4)}`);
+    return newToken;
+  } catch (error: any) {
+    console.error('Error generating Lizzysub token:', error);
+    throw new Error(`Failed to generate Lizzysub token: ${error.message}`);
+  }
+};
+
+// Invalidate Lizzysub token on logout or session expiry
+const invalidateToken = async (userEmail: string): Promise<void> => {
+  const { error } = await supabase
+    .from('user_tokens')
+    .update({ is_valid: false })
+    .eq('user_email', userEmail);
+
+  if (error) {
+    console.error('Error invalidating Lizzysub token:', error);
+    throw new Error(`Failed to invalidate Lizzysub token: ${error.message}`);
+  }
+  console.log('Lizzysub token invalidated for user:', userEmail);
+};
 
 // Define interfaces
+interface DataBundle {
+  id: number;
+  data: string;
+  price: number;
+  validity: string;
+  category: string;
+  description: string;
+  planType: string;
+}
+
 interface Bundle {
   id: number;
-  variation_code: string;
+  variation_code?: string;
   description?: string;
   amount?: number | null;
   name?: string;
@@ -28,7 +164,7 @@ interface Provider {
   imageKey?: string;
 }
 
-const ConfirmationPage: React.FC = () => {
+const ConfirmationScreen: React.FC = () => {
   const {
     bundle,
     provider,
@@ -69,6 +205,34 @@ const ConfirmationPage: React.FC = () => {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseNetworkAnim = useRef(new Animated.Value(1)).current;
+
+  // Synchronize parsedNetworkId with selectedBundle.planType for Hot plans
+  useEffect(() => {
+    const isHotPlan = HOT_PLANS.some(plan => plan.id === selectedBundle.id);
+    if (isHotPlan) {
+      const plan = HOT_PLANS.find(plan => plan.id === selectedBundle.id);
+      if (plan) {
+        const networkIds: { [key: string]: number } = {
+          MTN: 1,
+          GLO: 3,
+          '9MOBILE': 4,
+          AIRTEL: 2,
+        };
+        const expectedNetworkId = networkIds[plan.planType];
+        if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
+          console.log('Synchronizing networkId:', {
+            currentNetworkId: parsedNetworkId,
+            expectedNetworkId,
+            planType: plan.planType,
+            bundleId: selectedBundle.id,
+          });
+          setParsedNetworkId(expectedNetworkId);
+          setNetworkProvider(plan.planType);
+          setSelectedProvider({ ...selectedProvider, name: plan.planType, id: expectedNetworkId });
+        }
+      }
+    }
+  }, [selectedBundle, parsedNetworkId, selectedProvider]);
 
   // Fetch user name
   useEffect(() => {
@@ -111,18 +275,23 @@ const ConfirmationPage: React.FC = () => {
       bundle: selectedBundle,
       provider: selectedProvider,
       phoneNumber,
-      transactionPin,
+      transactionPin: '****',
       userEmail,
       referenceId,
       balance: balanceValue,
       networkId: parsedNetworkId,
       planId: parsedPlanId,
     });
-  }, []);
+  }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId]);
 
   // Fetch wallet balance and set up real-time subscription
   useEffect(() => {
-    if (!userEmail) return;
+    if (!userEmail) {
+      console.error('User email missing');
+      Alert.alert('Error', 'User authentication missing');
+      router.back();
+      return;
+    }
 
     const fetchWalletBalance = async () => {
       try {
@@ -135,8 +304,8 @@ const ConfirmationPage: React.FC = () => {
         if (error && error.code !== 'PGRST116') {
           console.error('Error fetching wallet balance:', error);
         } else {
-          const walletBalance = wallet?.balance ?? balanceValue;
-          setBalanceValue(walletBalance);
+          const walletBalance = wallet?.balance;
+          setBalanceValue(walletBalance ?? balanceValue);
           console.log('Fetched wallet balance:', walletBalance);
         }
       } catch (err) {
@@ -220,20 +389,40 @@ const ConfirmationPage: React.FC = () => {
       const mtn = ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'];
       const glo = ['0805', '0807', '0705', '0815', '0811', '0905', '0915'];
       const airtel = ['0802', '0808', '0708', '0812', '0701', '0902', '0907', '0901', '0912'];
-      const etisalat = ['0809', '0817', '0818', '0909', '0908'];
+      const nineMobile = ['0809', '0817', '0818', '0909', '0908'];
+      let detectedProvider = selectedProvider.name;
+      let detectedNetworkId = parsedNetworkId;
+
       if (mtn.includes(prefix)) {
-        setNetworkProvider('MTN');
+        detectedProvider = 'MTN';
+        detectedNetworkId = 1;
       } else if (glo.includes(prefix)) {
-        setNetworkProvider('GLO');
+        detectedProvider = 'GLO';
+        detectedNetworkId = 3;
       } else if (airtel.includes(prefix)) {
-        setNetworkProvider('AIRTEL');
-      } else if (etisalat.includes(prefix)) {
-        setNetworkProvider('9MOBILE');
-      } else {
-        setNetworkProvider(selectedProvider.name);
+        detectedProvider = 'AIRTEL';
+        detectedNetworkId = 2;
+      } else if (nineMobile.includes(prefix)) {
+        detectedProvider = '9MOBILE';
+        detectedNetworkId = 4;
+      }
+
+      // Only update if the detected provider matches the selected plan's planType
+      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
+      if (plan && plan.planType === detectedProvider) {
+        setNetworkProvider(detectedProvider);
+        setParsedNetworkId(detectedNetworkId);
+        setSelectedProvider({ ...selectedProvider, name: detectedProvider, id: detectedNetworkId });
+      } else if (plan) {
+        console.log('Mobile number prefix does not match planType:', {
+          prefix,
+          detectedProvider,
+          planType: plan.planType,
+          bundleId: selectedBundle.id,
+        });
       }
     },
-    [selectedProvider]
+    [selectedProvider, parsedNetworkId, selectedBundle]
   );
 
   useEffect(() => {
@@ -290,11 +479,29 @@ const ConfirmationPage: React.FC = () => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  const formatTime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const validateHotPlan = (bundleId: number, networkId: number): boolean => {
+    const plan = HOT_PLANS.find(plan => plan.id === bundleId);
+    if (!plan) {
+      console.error('Invalid Data Plan ID:', bundleId);
+      return false;
+    }
+    const validNetworkIds: { [key: string]: number[] } = {
+      MTN: [1],
+      GLO: [3],
+      '9MOBILE': [4],
+      AIRTEL: [2],
+    };
+    const validIds = validNetworkIds[plan.planType] || [];
+    if (!validIds.includes(networkId)) {
+      console.error('Invalid Network ID for plan:', {
+        bundleId,
+        networkId,
+        planType: plan.planType,
+        expectedNetworkId: validIds[0],
+      });
+      return false;
+    }
+    return true;
   };
 
   const handlePurchase = async () => {
@@ -315,7 +522,7 @@ const ConfirmationPage: React.FC = () => {
       }
 
       currentBalance = wallet?.balance ?? balanceValue;
-      const basePrice = selectedBundle.price || selectedBundle.amount || 0;
+      const basePrice = (selectedBundle.price || selectedBundle.amount) ?? 0;
 
       console.log('Purchase details:', {
         currentBalance,
@@ -325,6 +532,9 @@ const ConfirmationPage: React.FC = () => {
         planId: parsedPlanId,
         referenceId,
         userEmail,
+        category: selectedBundle.category,
+        planType: selectedBundle.planType,
+        bundle: selectedBundle,
       });
 
       if (currentBalance < basePrice) {
@@ -349,52 +559,214 @@ const ConfirmationPage: React.FC = () => {
 
       setBalanceValue(newBalance);
 
-      // Call Ebenkdata API
-      const requestBody = {
-        network: parsedNetworkId,
-        mobile_number: editableMobileNumber,
-        plan: parsedPlanId,
-        Ported_number: true,
-      };
+      // Check if plan is a Hot plan
+      const isHotPlan = HOT_PLANS.some(plan => plan.id === selectedBundle.id);
+      console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
 
-      console.log('Ebenkdata API request:', requestBody);
+      let apiResponse: Response;
+      let responseText: string;
 
-      const ebenkdataResponse = await fetch('https://ebenkdata.com/api/data/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
-        },
-        body: JSON.stringify(requestBody),
-      });
+      if (isHotPlan) {
+        // Validate Hot Plan and Network ID
+        if (!validateHotPlan(selectedBundle.id, parsedNetworkId)) {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
 
-      const responseText = await ebenkdataResponse.text();
-      console.log('Ebenkdata API response:', {
-        status: ebenkdataResponse.status,
-        responseText: responseText.slice(0, 100),
-      });
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
 
-      if (!ebenkdataResponse.ok) {
-        // Refund the deducted amount if API call fails
-        const { error: refundError } = await supabase
-          .from('wallets')
-          .update({ balance: currentBalance })
-          .eq('user_email', userEmail);
-
-        if (refundError) {
-          console.error('Error refunding wallet balance:', refundError);
-          throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
-        }
-
-        setBalanceValue(currentBalance);
-
-        if (ebenkdataResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
+          setBalanceValue(currentBalance);
           setTransactionModalVisible(false);
           setErrorModalVisible(true);
+          const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
+          Alert.alert(
+            'Error',
+            `Invalid network selected for the plan. Please select a ${plan?.planType} network for the ${plan?.data} plan.`
+          );
           return;
         }
 
-        throw new Error(`Ebenkdata API request failed: ${ebenkdataResponse.status} ${responseText.slice(0, 100)}`);
+        // Use Lizzysub API for all Hot plans
+        const requestBody = {
+          network: parsedNetworkId,
+          phone: editableMobileNumber,
+          data_plan: selectedBundle.id,
+          bypass: false,
+          'request-id': `Data_${referenceId}`,
+        };
+
+        console.log('Lizzysub API request:', requestBody);
+
+        let token;
+        try {
+          token = await getLizzysubToken(userEmail);
+        } catch (error: any) {
+          if (error.message.includes('Invalid AccessToken')) {
+            await invalidateToken(userEmail);
+            token = await getLizzysubToken(userEmail);
+          } else {
+            throw error;
+          }
+        }
+
+        apiResponse = await fetch('https://lizzysub.com/api/data', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Token ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        responseText = await apiResponse.text();
+        console.log('Lizzysub API response:', {
+          status: apiResponse.status,
+          headers: Object.fromEntries(apiResponse.headers.entries()),
+          responseText: responseText.slice(0, 500),
+        });
+
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (parseError: any) {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
+
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
+
+          setBalanceValue(currentBalance);
+          throw new Error(`Failed to parse Lizzysub API response: ${parseError.message}`);
+        }
+
+        if (!apiResponse.ok || responseData.status !== 'success') {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
+
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
+
+          setBalanceValue(currentBalance);
+
+          if (apiResponse.status === 400 && responseText.includes('insufficient balance')) {
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
+            return;
+          }
+
+          if (apiResponse.status === 403 && responseText.includes('Invalid AccessToken')) {
+            await invalidateToken(userEmail);
+            throw new Error('Invalid Lizzysub token. A new token will be generated on the next attempt.');
+          }
+
+          if (responseText.includes('Invalid Data Plan ID or Network')) {
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            Alert.alert('Error', 'Invalid Data Plan ID or Network. Please select a valid plan and network.');
+            return;
+          }
+
+          const errorMessage = responseData.message || responseText.slice(0, 100);
+          throw new Error(`Lizzysub API request failed: ${errorMessage}. Please verify Lizzysub credentials and API access.`);
+        }
+      } else {
+        // Use Ebenkdata API for non-Hot plans
+        const ebenkUrl = process.env.EXPO_PUBLIC_EBENK_URL || 'https://ebenkdata.com';
+        const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
+        if (!ebenkToken) {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
+
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
+
+          setBalanceValue(currentBalance);
+          throw new Error('Ebenkdata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
+        }
+
+        const requestBody = {
+          network: parsedNetworkId,
+          mobile_number: editableMobileNumber,
+          plan: parsedPlanId,
+          Ported_number: true,
+        };
+
+        console.log('Ebenkdata API request:', requestBody);
+
+        apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Token ${ebenkToken}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        responseText = await apiResponse.text();
+        console.log('Ebenkdata API response:', {
+          status: apiResponse.status,
+          headers: Object.fromEntries(apiResponse.headers.entries()),
+          responseText: responseText.slice(0, 500),
+        });
+
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (parseError: any) {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
+
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
+
+          setBalanceValue(currentBalance);
+          throw new Error(`Failed to parse Ebenkdata API response: ${parseError.message}`);
+        }
+
+        if (!apiResponse.ok || responseData.status !== 'success') {
+          const { error: refundError } = await supabase
+            .from('wallets')
+            .update({ balance: currentBalance })
+            .eq('user_email', userEmail);
+
+          if (refundError) {
+            console.error('Error refunding wallet balance:', refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+          }
+
+          setBalanceValue(currentBalance);
+
+          if (apiResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
+            return;
+          }
+
+          const errorMessage = responseData.message || responseText.slice(0, 100);
+          throw new Error(`Ebenkdata API request failed: ${errorMessage}`);
+        }
       }
 
       const actualCost = basePrice;
@@ -432,7 +804,6 @@ const ConfirmationPage: React.FC = () => {
         .insert(transactionData);
 
       if (txError) {
-        // Refund the amount if transaction recording fails
         const { error: refundError } = await supabase
           .from('wallets')
           .update({ balance: currentBalance })
@@ -500,101 +871,46 @@ const ConfirmationPage: React.FC = () => {
     setIsEditingMobile(!isEditingMobile);
   };
 
-  const basePrice = selectedBundle.price || selectedBundle.amount || 0;
   const purchaseDescription = selectedBundle.data || `Plan ID ${parsedPlanId}`;
-  const providerImage = selectedProvider.imageKey && NETWORK_IMAGES[selectedProvider.imageKey as keyof typeof NETWORK_IMAGES]
-    ? NETWORK_IMAGES[selectedProvider.imageKey as keyof typeof NETWORK_IMAGES]
-    : DEFAULT_PROVIDER_IMAGE;
+
+  // Handle logout or session expiry
+  useEffect(() => {
+    const authListener = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        invalidateToken(userEmail).catch(err => console.error('Error invalidating token on logout:', err));
+      }
+    });
+
+    return () => {
+      authListener.data.subscription.unsubscribe();
+    };
+  }, [userEmail]);
 
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.card}>
-          <Pressable onPress={handleCancel} style={styles.closeButton}>
-            <Ionicons name="close" size={30} color="red" />
-          </Pressable>
-          <View style={styles.providerInfo}>
-            <Pressable onPress={handleCancel} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </Pressable>
-            <Image
-              source={providerImage}
-              style={styles.providerLogo}
-              resizeMode="contain"
-              onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
-            />
-            <Text style={styles.providerName}>{selectedProvider.name}</Text>
+        <PurchaseDetails
+          selectedBundle={selectedBundle}
+          selectedProvider={selectedProvider}
+          balanceValue={balanceValue}
+          isBalanceLoading={isBalanceLoading}
+          editableMobileNumber={editableMobileNumber}
+          isEditingMobile={isEditingMobile}
+          handleMobileNumberChange={handleMobileNumberChange}
+          toggleEditMobile={toggleEditMobile}
+          handleCancel={handleCancel}
+          referenceId={referenceId}
+          pulseAnim={pulseAnim}
+        />
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[styles.slideContainer, { transform: [{ translateX: slideAnim }] }]}
+        >
+          <View style={styles.slideTextContainer}>
+            <Text style={styles.slideText}>Slide to Purchase</Text>
+            <Ionicons name="arrow-forward" size={20} color="#3B82F6" />
           </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Data Plan</Text>
-            <Text style={styles.detailValue}>{purchaseDescription}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>₦{formatNumberWithCommas(basePrice)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Wallet Balance</Text>
-            <Text style={styles.detailValue}>
-              {isBalanceLoading ? 'Loading...' : `₦${formatNumberWithCommas(balanceValue)} `}
-            </Text>
-          </View>
-          {selectedBundle.validity && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Validity</Text>
-              <Text style={styles.detailValue}>{selectedBundle.validity}</Text>
-            </View>
-          )}
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Mobile Number</Text>
-            {isEditingMobile ? (
-              <View style={styles.phoneContainer}>
-                <TextInput
-                  style={styles.phoneInput}
-                  value={editableMobileNumber}
-                  onChangeText={handleMobileNumberChange}
-                  placeholder="Enter 11-digit mobile number"
-                  placeholderTextColor="#A1A1AA"
-                  keyboardType="numeric"
-                  maxLength={11}
-                  autoFocus
-                />
-              </View>
-            ) : (
-              <View style={styles.phoneContainer}>
-                <Pressable onPress={toggleEditMobile}>
-                  <Animated.Text style={[styles.editText, { opacity: pulseAnim }]}>
-                    Edit
-                  </Animated.Text>
-                </Pressable>
-                <Text style={styles.phoneNumberText}>{editableMobileNumber}</Text>
-              </View>
-            )}
-          </View>
-          {selectedBundle.planType && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Plan Type</Text>
-              <Text style={styles.detailValue}>{selectedBundle.planType}</Text>
-            </View>
-          )}
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Bundle ID</Text>
-            <Text style={styles.detailValue}>{selectedBundle.id}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Reference ID</Text>
-            <Text style={[styles.detailValue, styles.referenceId]}>{referenceId}</Text>
-          </View>
-          <Animated.View
-            {...panResponder.panHandlers}
-            style={[styles.slideContainer, { transform: [{ translateX: slideAnim }] }]}
-          >
-            <View style={styles.slideTextContainer}>
-              <Text style={styles.slideText}>Slide to Purchase</Text>
-              <Ionicons name="arrow-forward" size={20} color="#3B82F6" />
-            </View>
-          </Animated.View>
-        </View>
+        </Animated.View>
       </View>
       <TransactionStatusModal
         visible={transactionModalVisible}
@@ -604,31 +920,14 @@ const ConfirmationPage: React.FC = () => {
         phoneNumber={editableMobileNumber}
         networkProvider={networkProvider}
       />
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <ErrorModal
         visible={errorModalVisible}
-        onRequestClose={closeErrorModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.errorModal}>
-            <Text style={styles.errorModalTitle}>Hi, {userName} 😢</Text>
-            <Text style={styles.errorModalText}>
-              <Animated.Text style={[styles.networkText, { transform: [{ scale: pulseNetworkAnim }] }]}>
-                Edges Network
-              </Animated.Text>{' '}
-              for {purchaseDescription} is currently unavailable.
-            </Text>
-            <Text style={styles.errorModalText}>
-              Server is down. Please try again in:
-            </Text>
-            <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
-            <Pressable onPress={closeErrorModal} style={styles.closeErrorButton}>
-              <Text style={styles.closeErrorButtonText}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        onClose={closeErrorModal}
+        userName={userName}
+        purchaseDescription={purchaseDescription}
+        timeLeft={timeLeft}
+        pulseNetworkAnim={pulseNetworkAnim}
+      />
     </View>
   );
 };
@@ -646,99 +945,6 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     width: '100%',
   },
-  card: {
-    backgroundColor: '#2D2D2D',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 24,
-    position: 'relative',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 15,
-    right: 8,
-    padding: 4,
-    zIndex: 10,
-    accessible: true,
-    accessibilityLabel: 'Close confirmation page',
-    accessibilityRole: 'button',
-  },
-  providerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    marginRight: 12,
-  },
-  providerLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'white',
-    marginRight: 12,
-  },
-  providerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    flexWrap: 'nowrap',
-  },
-  detailLabel: {
-    fontSize: 16,
-    color: '#A1A1AA',
-    flexShrink: 0,
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-    textAlign: 'right',
-    maxWidth: '55%',
-    flexWrap: 'wrap',
-  },
-  referenceId: {
-    flexWrap: 'wrap',
-    numberOfLines: 2,
-    ellipsizeMode: 'tail',
-  },
-  phoneContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'nowrap',
-    maxWidth: '60%',
-    flexShrink: 1,
-  },
-  phoneInput: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-    padding: 8,
-    textAlign: 'right',
-    width: 140,
-  },
-  phoneNumberText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-    textAlign: 'right',
-    width: 110,
-  },
-  editText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#22C55E',
-    textDecorationLine: 'underline',
-    marginRight: 8,
-  },
   slideContainer: {
     marginTop: 16,
     paddingVertical: 10,
@@ -746,10 +952,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
     borderRadius: 8,
     overflow: 'visible',
-    zIndex: 10,
+    zIndex: 1,
     accessible: true,
-    accessibilityLabel: 'Slide to confirm purchase',
-    accessibilityRole: 'button',
+    accessibilityLabel: 'button',
   },
   slideTextContainer: {
     flexDirection: 'row',
@@ -761,58 +966,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3B82F6',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorModal: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    padding: 24,
-    width: '80%',
-    alignItems: 'center',
-    backdropFilter: 'blur(10px)', // Note: backdropFilter is not supported in React Native; using semi-transparent background for glassmorphism effect
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  errorModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  errorModalText: {
-    fontSize: 16,
-    color: 'white',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  networkText: {
-    fontWeight: 'bold',
-    color: '#3B82F6',
-  },
-  timerText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#FF5555',
-    marginVertical: 16,
-    fontFamily: 'monospace',
-  },
-  closeErrorButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  closeErrorButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-  },
 });
 
-export default ConfirmationPage;
+export default ConfirmationScreen;

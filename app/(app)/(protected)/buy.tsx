@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,9 +21,17 @@ interface Provider {
   image: number;
   code: string;
   imageKey?: string;
+  availablePlanTypes?: string[];
 }
 
 const SUPPORTED_PROVIDERS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
+const VALID_PLAN_TYPES = [
+  "SME",
+  "SME_GIFTING",
+  "CORPORATE_GIFTING",
+  "GIFTING",
+  "STANDARD",
+];
 
 const ServiceProviderScreen: React.FC = () => {
   const params = useLocalSearchParams<{ balance?: string }>();
@@ -112,6 +120,7 @@ const ServiceProviderScreen: React.FC = () => {
               image: providerImage,
               code: networkName.toLowerCase(),
               imageKey: networkName,
+              availablePlanTypes: VALID_PLAN_TYPES,
             };
             console.log(`Assigned image for ${networkName}:`, {
               image: providerImage === DEFAULT_PROVIDER_IMAGE ? "Default" : "Loaded",
@@ -161,18 +170,19 @@ const ServiceProviderScreen: React.FC = () => {
       id: provider.id,
       name: provider.name,
       code: provider.code,
-      imageKey: provider.imageKey || "DEFAULT",
+      imageKey: provider.imageKey,
       image: provider.image,
+      availablePlanTypes: provider.availablePlanTypes,
     };
 
     const balance = params.balance || "0";
-    console.log("Navigating to BuyDataScreen with provider and balance:", {
+    console.log("Navigating to BuyDataScreen with:", {
       ...serializableProvider,
       balance,
     });
 
     router.push({
-      pathname: "/(app)/serviceprovider", // Confirm this is the correct route
+      pathname: "/(app)/serviceprovider",
       params: {
         provider: JSON.stringify(serializableProvider),
         networkId: provider.id.toString(),
@@ -181,10 +191,11 @@ const ServiceProviderScreen: React.FC = () => {
     });
   };
 
-  const handleRetry = () => {
+  const handleRetry = useCallback(() => {
     console.log("Retrying provider fetch");
     fetchProviders();
-  };
+    Alert.alert("Retrying", "Fetching providers...");
+  }, []);
 
   const handleImageError = (providerName: string) => {
     console.warn(`Image failed to load for ${providerName}`);
@@ -285,7 +296,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 180,
     padding: 2,
-    marginBottom: 10,
+    marginBottom: 16,
     alignItems: "center",
     justifyContent: "center",
   },
