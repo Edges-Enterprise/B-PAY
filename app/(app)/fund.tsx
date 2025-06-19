@@ -32,6 +32,7 @@ const FundScreen = () => {
   const [paymentReference, setPaymentReference] = useState('');
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [showVerifyButton, setShowVerifyButton] = useState(false);
 
   useEffect(() => {
     console.log('Environment variables:', {
@@ -40,18 +41,29 @@ const FundScreen = () => {
       SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Set (eyJ...)' : 'Missing',
     });
     if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || !process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY.startsWith('pk_')) {
-      Alert.alert('Error', 'Invalid Paystack configuration.');
+      Alert.alert('Error', 'Invalid Paystack configuration. Please contact support.');
       setIsUserLoading(false);
+      return;
     }
     if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-      Alert.alert('Error', 'Supabase configuration missing.');
+      Alert.alert('Error', 'Supabase configuration missing. Please contact support.');
       setIsUserLoading(false);
+      return;
     }
   }, []);
 
   useEffect(() => {
     console.log('showWebView:', showWebView);
-  }, [showWebView]);
+    if (showWebView && paymentReference) {
+      // Fallback verification after 60 seconds if no WebView message
+      const fallbackTimeout = setTimeout(async () => {
+        console.log('Fallback verification triggered:', paymentReference);
+        setShowVerifyButton(true);
+        Alert.alert('Warning', 'Payment response not received. Please verify manually.');
+      }, 60000);
+      return () => clearTimeout(fallbackTimeout);
+    }
+  }, [showWebView, paymentReference]);
 
   const fetchUserData = async () => {
     try {
@@ -131,6 +143,7 @@ const FundScreen = () => {
               setShowWebView(false);
               setIsLoading(false);
               setPaymentReference('');
+              setShowVerifyButton(false);
               await fetchWalletBalance(userEmail);
               await sendTestReceipt(paymentReference, amount, userEmail);
               Alert.alert('Success', 'Transaction completed!');
@@ -139,6 +152,7 @@ const FundScreen = () => {
               setShowWebView(false);
               setIsLoading(false);
               setPaymentReference('');
+              setShowVerifyButton(false);
               Alert.alert('Error', `Transaction failed: ${payload.new.metadata?.error || 'Unknown error'}`);
             }
           }
@@ -151,6 +165,7 @@ const FundScreen = () => {
             setIsLoading(false);
             setShowWebView(false);
             setPaymentReference('');
+            setShowVerifyButton(false);
           }
         });
     }
@@ -167,7 +182,9 @@ const FundScreen = () => {
     try {
       console.log('Verifying transaction:', { reference, expectedAmount, retries });
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30s
+      const payload = { reference, expectedAmount };
+      console.log('Sending to edge function:', payload);
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-paystack-transaction`,
         {
@@ -176,7 +193,7 @@ const FundScreen = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ reference, expectedAmount }),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         }
       );
@@ -306,7 +323,34 @@ const FundScreen = () => {
       console.error('handleTopUp error:', { message: error.message });
       setShowWebView(false);
       setIsLoading(false);
+      setPaymentReference('');
       Alert.alert('Error', `Payment initiation failed: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleManualVerify = async () => {
+    if (!paymentReference || !amount) {
+      Alert.alert('Error', 'No pending transaction to verify.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const parsedAmount = parseFloat(amount);
+      const isVerified = await verifyTransaction(paymentReference, parsedAmount);
+      if (isVerified) {
+        await fetchWalletBalance(userEmail);
+        await sendTestReceipt(paymentReference, amount, userEmail);
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
+        setShowVerifyButton(false);
+        Alert.alert('Success', 'Transaction verified!');
+        router.push('/wallet');
+      }
+    } catch (error) {
+      console.error('Manual verify error:', { message: error.message });
+      Alert.alert('Error', `Verification failed: ${error.message || 'Unknown error'}`);
+      setIsLoading(false);
     }
   };
 
@@ -363,6 +407,7 @@ const FundScreen = () => {
           <div id="paystackIframe"></div>
         </div>
         <script>
+          console.log('Paystack script loaded', { email: '${userEmail}', amount: ${parseFloat(amount) * 100}, ref: '${reference}' });
           const handler = PaystackPop.setup({
             key: '${process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || ''}',
             email: '${userEmail}',
@@ -376,9 +421,12 @@ const FundScreen = () => {
               ]
             },
             onClose: function() {
+              console.log('Paystack window closed');
               window.ReactNativeWebView.postMessage('payment-cancelled');
             },
             callback: function(response) {
+              console.log('Paystack callback:', response);
+              alert('Payment Success: ' + JSON.stringify(response)); // For debugging
               window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
             }
           });
@@ -391,13 +439,16 @@ const FundScreen = () => {
 
   const handleWebViewMessage = async (event: any): Promise<void> => {
     const data = event.nativeEvent.data;
-    console.log('WebView message:', data);
+    console.log('WebView message received:', { data, rawEvent: JSON.stringify(event.nativeEvent) });
     try {
       if (data.startsWith('payment-success:')) {
         const reference = data.split(':')[1];
         console.log('Processing payment success:', reference);
 
         const parsedAmount = parseFloat(amount);
+        if (isNaN(parsedAmount)) {
+          throw new Error('Invalid amount for verification');
+        }
         const isVerified = await verifyTransaction(reference, parsedAmount);
         if (!isVerified) {
           console.error('Verification failed:', reference);
@@ -413,6 +464,7 @@ const FundScreen = () => {
         setShowWebView(false);
         setIsLoading(false);
         setPaymentReference('');
+        setShowVerifyButton(false);
         Alert.alert('Success', 'Transaction completed!');
         router.push('/wallet');
       } else if (data === 'payment-cancelled') {
@@ -431,13 +483,16 @@ const FundScreen = () => {
         setShowWebView(false);
         setIsLoading(false);
         setPaymentReference('');
+        setShowVerifyButton(false);
+      } else {
+        console.warn('Unknown WebView message:', data);
       }
     } catch (error) {
       console.error('handleWebViewMessage error:', { message: error.message, data });
       Alert.alert('Error', `Transaction failed: ${error.message || 'Unknown error'}`);
       setShowWebView(false);
       setIsLoading(false);
-      setPaymentReference('');
+      setShowVerifyButton(true); // Allow manual verification on error
     }
   };
 
@@ -467,6 +522,7 @@ const FundScreen = () => {
             </View>
           )}
           onShouldStartLoadWithRequest={(request) => {
+            console.log('WebView navigation:', request.url);
             if (request.url.includes('paystack') || request.url.includes('edgesnetwork')) {
               return true;
             }
@@ -480,8 +536,19 @@ const FundScreen = () => {
             setShowWebView(false);
             setIsLoading(false);
             setPaymentReference('');
+            setShowVerifyButton(true);
           }}
+          debug={true} // Enable WebView debugging
         />
+        {showVerifyButton && (
+          <Pressable
+            onPress={handleManualVerify}
+            style={[styles.verifyButton, isLoading && styles.disabledButton]}
+            disabled={isLoading}
+          >
+            <Text style={styles.verifyButtonText}>Verify Payment</Text>
+          </Pressable>
+        )}
       </SafeAreaView>
     );
   }
@@ -745,6 +812,18 @@ const styles = StyleSheet.create({
   },
   refreshButtonText: {
     color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  verifyButton: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    margin: 16,
+  },
+  verifyButtonText: {
+    color: '#000',
     fontWeight: 'bold',
     fontSize: 16,
   },
