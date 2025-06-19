@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const PAYSTACK_SECRET_KEY = Deno.env.get("PAYSTACK_SECRET_KEY");
+const PAYSTACK_SECRET_KEY = Deno.env.get("EXPO_PUBLIC_PAYSTACK_SECRET_KEY");
 const SUPABASE_URL = Deno.env.get("EXPO_PUBLIC_SUPABASE_URL");
-const SUPABASE_ANON_KEY = Deno.env.get("EXPO_PUBLIC_SUPABASE_ANON_KEY");
+const SUPABASE_SERVICE_KEY = Deno.env.get("EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY");
 
 serve(async (req: Request) => {
   try {
@@ -18,8 +18,8 @@ serve(async (req: Request) => {
         }
       );
     }
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.error("Missing Supabase configuration", { SUPABASE_URL, SUPABASE_ANON_KEY });
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      console.error("Missing Supabase configuration", { SUPABASE_URL, SUPABASE_SERVICE_KEY });
       return new Response(
         JSON.stringify({ error: "Missing Supabase configuration" }),
         {
@@ -43,7 +43,7 @@ serve(async (req: Request) => {
     }
 
     // Initialize Supabase client with service role for full access
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
@@ -63,12 +63,12 @@ serve(async (req: Request) => {
       paystackStatus: data.data?.status,
       paidAmount: data.data?.amount ? data.data.amount / 100 : null,
       expectedAmount,
-      fullResponse: data,
+      fullResponse: JSON.stringify(data),
     });
 
     if (data.status && data.data.status === "success") {
       const paidAmount = data.data.amount / 100; // Convert from kobo to NGN
-      if (paidAmount === expectedAmount) {
+      if (Math.abs(paidAmount - expectedAmount) <= 0.01) { // Allow small float discrepancies
         // Retry transaction update up to 3 times
         let attempts = 0;
         const maxAttempts = 3;
@@ -83,10 +83,12 @@ serve(async (req: Request) => {
                 ...data.data.metadata,
                 paystack_response: data.data,
                 verification_date: new Date().toISOString(),
+                paid_amount: paidAmount,
+                net_amount: paidAmount * 0.9, // Deduct 10% profit
+                profit: paidAmount * 0.1,
               },
             })
             .eq("reference", reference)
-            .eq("status", "pending")
             .select()
             .single();
 
@@ -108,7 +110,7 @@ serve(async (req: Request) => {
             reference,
           });
           if (attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1s before retry
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
 
@@ -124,7 +126,6 @@ serve(async (req: Request) => {
           }
         );
       } else {
-        // Update transaction status to failed due to amount mismatch
         const { error: txUpdateError } = await supabase
           .from("transactions")
           .update({
@@ -135,8 +136,7 @@ serve(async (req: Request) => {
               verification_date: new Date().toISOString(),
             },
           })
-          .eq("reference", reference)
-          .eq("status", "pending");
+          .eq("reference", reference);
 
         if (txUpdateError) {
           console.error("Failed to update transaction status to failed:", {
@@ -158,7 +158,6 @@ serve(async (req: Request) => {
         );
       }
     } else {
-      // Update transaction status to failed
       const { error: txUpdateError } = await supabase
         .from("transactions")
         .update({
@@ -169,8 +168,7 @@ serve(async (req: Request) => {
             verification_date: new Date().toISOString(),
           },
         })
-        .eq("reference", reference)
-        .eq("status", "pending");
+        .eq("reference", reference);
 
       if (txUpdateError) {
         console.error("Failed to update transaction status to failed:", {
@@ -192,7 +190,7 @@ serve(async (req: Request) => {
     console.error("Error verifying Paystack transaction:", {
       error: error.message,
       stack: error.stack,
-      reference: req.json().reference,
+      reference: (await req.json().catch(() => ({ reference: "unknown" }))).reference,
     });
     return new Response(
       JSON.stringify({ error: "Server error: Failed to verify transaction" }),

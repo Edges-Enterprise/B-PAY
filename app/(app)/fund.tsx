@@ -34,12 +34,14 @@ const FundScreen = () => {
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
-    console.log('EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY:', process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY);
-    console.log('EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
-    console.log('EXPO_PUBLIC_SUPABASE_ANON_KEY:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+    console.log('Environment variables:', {
+      PAYSTACK_PUBLIC_KEY: process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY,
+      SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    });
     if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || !process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY.startsWith('pk_')) {
-      Alert.alert('Error', 'Invalid or missing Paystack public key. Please contact support.');
-      router.replace('/sign-in');
+      Alert.alert('Error', 'Invalid Paystack configuration. Please contact support.');
+      setIsUserLoading(false);
     }
   }, []);
 
@@ -49,10 +51,12 @@ const FundScreen = () => {
 
   const fetchUserData = async () => {
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+      // Refresh session to ensure auth persists
+      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+      if (sessionError || !session) {
+        throw new Error('Failed to refresh session');
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         throw new Error('User not authenticated');
       }
@@ -65,15 +69,11 @@ const FundScreen = () => {
       setUserEmail(user.email);
       setUserName(user.user_metadata.username);
       setUserId(user.id);
-      console.log('User data fetched:', {
-        userEmail: user.email,
-        userName: user.user_metadata.username,
-        userId: user.id,
-      });
+      console.log('User data fetched:', { userEmail: user.email, userName: user.user_metadata.username, userId: user.id });
       await fetchWalletBalance(user.email);
     } catch (error: any) {
       console.error('Error fetching user data:', error.message);
-      Alert.alert('Error', 'Failed to load user data. Please sign in again.');
+      Alert.alert('Error', 'Session expired. Please sign in again.');
       router.replace('/sign-in');
     } finally {
       setIsUserLoading(false);
@@ -115,14 +115,18 @@ const FundScreen = () => {
             filter: `reference=eq.${paymentReference}`,
           },
           async (payload) => {
-            console.log('Transaction update received:', payload);
+            console.log('Real-time update received:', {
+              reference: paymentReference,
+              newStatus: payload.new.status,
+              payload,
+            });
             if (payload.new.status === 'success') {
               setShowWebView(false);
               setIsLoading(false);
               setPaymentReference('');
               await fetchWalletBalance(userEmail);
               Alert.alert('Success', 'Transaction completed successfully!');
-              router.push('/home');
+              router.push('/wallet'); // Route to wallet screen
             } else if (payload.new.status === 'failed') {
               setShowWebView(false);
               setIsLoading(false);
@@ -132,7 +136,16 @@ const FundScreen = () => {
           }
         )
         .subscribe((status) => {
-          console.log('Subscription status:', status);
+          console.log('Subscription status for reference', paymentReference, ':', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to transaction updates for reference:', paymentReference);
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            console.error('Subscription failed or closed for reference:', paymentReference, status);
+            Alert.alert('Error', 'Failed to monitor transaction updates. Please refresh or try again.');
+            setIsLoading(false);
+            setShowWebView(false);
+            setPaymentReference('');
+          }
         });
     }
 
@@ -155,6 +168,7 @@ const FundScreen = () => {
         .single();
 
       if (walletError && walletError.code !== 'PGRST116') {
+        console.error('Wallet query error:', { error: walletError.message, userEmail });
         throw new Error(`Wallet query failed: ${walletError.message}`);
       }
 
@@ -163,11 +177,21 @@ const FundScreen = () => {
       const netAmount = depositAmount - profit;
       const newBalance = currentBalance + netAmount;
 
+      console.log('Updating wallet balance:', {
+        userEmail,
+        currentBalance,
+        depositAmount,
+        profit,
+        netAmount,
+        newBalance,
+      });
+
       const { error: walletUpdateError } = await supabase
         .from('wallets')
         .upsert({ user_email: userEmail, balance: newBalance }, { onConflict: 'user_email' });
 
       if (walletUpdateError) {
+        console.error('Wallet update error:', { error: walletUpdateError.message, userEmail, newBalance });
         throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
       }
 
@@ -175,11 +199,11 @@ const FundScreen = () => {
         .from('transactions')
         .select('id')
         .eq('reference', reference)
-        .eq('status', 'pending')
         .single();
 
       if (txFetchError || !txData) {
-        throw new Error(`Pending transaction not found: ${txFetchError?.message || 'No transaction'}`);
+        console.error('Transaction fetch error:', { error: txFetchError?.message, reference });
+        throw new Error(`Transaction not found: ${txFetchError?.message || 'No transaction'}`);
       }
 
       const transactionId = txData.id;
@@ -208,6 +232,7 @@ const FundScreen = () => {
         .eq('id', transactionId);
 
       if (txUpdateError) {
+        console.error('Transaction update error:', { error: txUpdateError.message, transactionId });
         throw new Error(`Transaction update failed: ${txUpdateError.message}`);
       }
 
@@ -223,11 +248,14 @@ const FundScreen = () => {
         });
 
       if (depositError) {
+        console.error('Deposit insert error:', { error: depositError.message, transactionId });
         throw new Error(`Deposit insert failed: ${depositError.message}`);
       }
 
       await sendTestReceipt(reference, depositAmount.toString(), userEmail);
       await fetchWalletBalance(userEmail);
+
+      console.log('Deposit completed successfully:', { reference, netAmount, newBalance });
 
       setIsLoading(false);
       Alert.alert(
@@ -236,17 +264,16 @@ const FundScreen = () => {
       );
       setAmount('');
     } catch (error: any) {
-      console.error('Deposit error:', error.message);
+      console.error('Deposit error:', { error: error.message, reference });
       setIsLoading(false);
       Alert.alert('Error', `Deposit failed: ${error.message || 'Unknown error'}`);
-
       if (typeof currentBalance === 'number') {
         const { error: revertError } = await supabase
           .from('wallets')
           .update({ balance: currentBalance })
           .eq('user_email', userEmail);
         if (revertError) {
-          console.error('Revert wallet error:', revertError.message);
+          console.error('Revert wallet error:', { error: revertError.message, userEmail });
         }
       }
     }
@@ -267,14 +294,14 @@ const FundScreen = () => {
       );
 
       const data = await response.json();
-      console.log('Verification response:', data);
+      console.log('Verification response:', { reference, data });
       if (data.status) {
         return true;
       } else {
         throw new Error(data.error || 'Transaction verification failed');
       }
     } catch (error: any) {
-      console.error('Verification error:', error.message);
+      console.error('Verification error:', { error: error.message, reference });
       throw error;
     }
   };
@@ -372,7 +399,7 @@ const FundScreen = () => {
         });
 
       if (txInsertError) {
-        console.log('Transaction insert error:', txInsertError.message);
+        console.error('Transaction insert error:', txInsertError.message);
         throw new Error(`Failed to create transaction: ${txInsertError.message}`);
       }
 
@@ -481,19 +508,20 @@ const FundScreen = () => {
         if (!isVerified) {
           await supabase
             .from('transactions')
-            .update({ status: 'failed' })
+            .update({ status: 'failed', metadata: { error: 'Verification failed' } })
             .eq('reference', reference);
           throw new Error('Transaction verification failed.');
         }
 
         await handleDeposit(parsedAmount, reference);
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
       } else if (data === 'payment-cancelled') {
         const { error: failedError } = await supabase
           .from('transactions')
-          .update({ status: 'failed' })
-          .eq('user_email', userEmail)
-          .eq('status', 'pending')
-          .eq('amount', parseFloat(amount));
+          .update({ status: 'failed', metadata: { error: 'Payment cancelled' } })
+          .eq('reference', paymentReference);
 
         if (failedError) {
           console.error('Failed transaction update error:', failedError);
@@ -504,13 +532,13 @@ const FundScreen = () => {
         setShowWebView(false);
         setIsLoading(false);
         setPaymentReference('');
-        router.back();
       }
     } catch (err: any) {
-      console.error('Error processing transaction:', err);
+      console.error('Error processing transaction:', { error: err.message, data });
       Alert.alert('Error', `Failed to process transaction: ${err.message || 'Unknown error'}`);
       setShowWebView(false);
       setIsLoading(false);
+      setPaymentReference('');
     }
   };
 
@@ -552,7 +580,7 @@ const FundScreen = () => {
             Alert.alert('Error', 'Failed to load payment page. Please try again.');
             setShowWebView(false);
             setIsLoading(false);
-            router.back();
+            setPaymentReference('');
           }}
         />
       </SafeAreaView>
@@ -634,6 +662,21 @@ const FundScreen = () => {
               <Text style={styles.presetText}>₦{value.toLocaleString()}</Text>
             </Pressable>
           ))}
+        </MotiView>
+
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 300, delay: 250 }}
+          style={styles.buttonContainer}
+        >
+          <Pressable
+            onPress={() => fetchWalletBalance(userEmail)}
+            style={[styles.refreshButton, isLoading && styles.disabledButton]}
+            disabled={isLoading}
+          >
+            <Text style={styles.refreshButtonText}>Refresh Balance</Text>
+          </Pressable>
         </MotiView>
 
         <MotiView
@@ -793,6 +836,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     textTransform: 'uppercase',
+  },
+  refreshButton: {
+    backgroundColor: '#2A3A3B',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   stepsContainer: {
     marginBottom: 20,
