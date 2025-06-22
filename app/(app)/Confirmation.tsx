@@ -647,7 +647,7 @@ const ConfirmationScreen: React.FC = () => {
           throw new Error(`Failed to parse Lizzysub API response: ${parseError.message}`);
         }
 
-        if (!apiResponse.ok || responseData.status !== 'success') {
+        if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
           const { error: refundError } = await supabase
             .from('wallets')
             .update({ balance: currentBalance })
@@ -744,7 +744,7 @@ const ConfirmationScreen: React.FC = () => {
           throw new Error(`Failed to parse Ebenkdata API response: ${parseError.message}`);
         }
 
-        if (!apiResponse.ok || responseData.status !== 'success') {
+        if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
           const { error: refundError } = await supabase
             .from('wallets')
             .update({ balance: currentBalance })

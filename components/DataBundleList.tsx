@@ -33,7 +33,20 @@ interface DataBundleListProps {
   isLoading: boolean;
   errorMessage: string | null;
   retryLoad: () => void;
+  providerName?: string;
 }
+
+const VALID_PLAN_TYPES = [
+  "SME",
+  "SME_GIFTING",
+  "CORPORATE_GIFTING",
+  "GIFTING",
+  "STANDARD",
+  "MTN",
+  "AIRTEL",
+  "GLO",
+  "9MOBILE",
+];
 
 const DataBundleList: React.FC<DataBundleListProps> = ({
   dataBundles,
@@ -45,124 +58,114 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
   isLoading,
   errorMessage,
   retryLoad,
+  providerName = "",
 }) => {
   const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  const parseSearchInput = (input: string) => {
-    const normalized = input.toLowerCase().trim();
-    const dataMatch = normalized.match(/(\d*\.?\d*)\s*(gb|mb)/i);
-    const validityMatch = normalized.match(/(\d+)\s*(day|days|month|months|week|weeks)/i);
-    const planMatch = normalized.match(/(mtn|airtel|glo|9mobile)/i);
-
-    return {
-      dataAmount: dataMatch ? parseFloat(dataMatch[1]) : null,
-      dataUnit: dataMatch ? dataMatch[2].toUpperCase() : null,
-      validityDays: validityMatch ? parseInt(validityMatch[1], 10) : null,
-      validityUnit: validityMatch ? validityMatch[2].toLowerCase() : null,
-      planType: planMatch ? planMatch[1].toLowerCase() : null,
-    };
-  };
-
-  const searchBundles = (query: string) => {
-    if (!query) return null;
-    const { dataAmount, dataUnit, validityDays, validityUnit, planType } = parseSearchInput(query);
-    return dataBundles
-      .filter((bundle) => {
-        let isMatch = true;
-        if (dataAmount && dataUnit) {
-          const bundleData = parseFloat(bundle.data.match(/[\d.]+/)?.[0] || "0");
-          const bundleUnit = bundle.data.match(/[MG]B/)?.[0] || "";
-          const bundleMB = bundleUnit === "GB" ? bundleData * 1000 : bundleData;
-          const searchMB = dataUnit === "GB" ? dataAmount * 1000 : dataAmount;
-          isMatch = isMatch && Math.abs(bundleMB - searchMB) <= searchMB * 0.2;
-        }
-        if (isMatch && validityDays && validityUnit) {
-          const bundleDaysMatch = bundle.validity.match(/\d+/);
-          const bundleDays = bundleDaysMatch ? parseInt(bundleDaysMatch[0], 10) : 0;
-          const validityLower = bundle.validity.toLowerCase();
-          if (validityUnit.includes("day")) {
-            if (validityDays <= 3) {
-              isMatch = isMatch && bundle.category === "Daily Plans";
-            } else if (validityDays <= 14) {
-              isMatch = isMatch && bundle.category === "Weekly Plans";
-            } else {
-              isMatch = isMatch && bundle.category === "Monthly Plans";
-            }
-            isMatch = isMatch && Math.abs(bundleDays - validityDays) <= 0.2 * validityDays;
-          } else if (validityUnit.includes("week")) {
-            const searchDays = validityDays * 7;
-            isMatch = isMatch && bundle.category === "Weekly Plans";
-            isMatch = isMatch && Math.abs(bundleDays - searchDays) <= 0.2 * searchDays;
-          } else if (validityUnit.includes("month")) {
-            const searchDays = validityDays * 30;
-            isMatch = isMatch && bundle.category === "Monthly Plans";
-            isMatch = isMatch && (
-              bundleDays === searchDays ||
-              validityLower.includes(`${validityDays} month`) ||
-              validityLower.includes(`${searchDays} days`)
-            );
-          }
-        }
-        if (planType) {
-          isMatch = isMatch && bundle.planType.toLowerCase() === planType.toLowerCase();
-        } else {
-          isMatch = isMatch && bundle.planType.toLowerCase() === activePlanType.toLowerCase();
-        }
-        return isMatch;
-      })
-      .sort((a, b) => a.price - b.price);
-  };
-
   const hotDeals: DataBundle[] = [
     { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
-  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
-  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
-  { id: 236, data: "3GB", price: 1550, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" }, // Replaces Ujaydata ID 265
-  { id: 213, data: "5GB", price: 2980, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" }, // Replaces Ujaydata ID 272
-  { id: 136, data: "10GB", price: 4480, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" }, // Replaces Ujaydata ID 293
-  { id: 216, data: "20GB", price: 5000, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" }, // Replaces Ujaydata ID 339
-  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
-  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
-  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
-  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
-  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
-  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
-  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
-  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
-  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
-  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
-  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
-  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
-  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
-  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
-  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
-];
+    { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
+    { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
+    { id: 236, data: "3GB", price: 1500, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
+    { id: 213, data: "5GB", price: 2910, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
+    { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
+    { id: 136, data: "10GB", price: 4410, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
+    { id: 216, data: "20GB", price: 4950, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
+    { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
+    { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
+    { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
+    { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
+    { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
+    { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
+    { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
+    { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
+    { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
+    { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
+    { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
+    { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
+    { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
+    { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
+  ];
 
   const getCategoryBundles = useMemo(() => {
     if (!dataBundles || !Array.isArray(dataBundles)) {
+      console.warn("Invalid dataBundles:", dataBundles);
       return [];
     }
+
+    // Fallback providerName from dataBundles if empty
+    const fallbackProviderName = providerName || dataBundles[0]?.planType?.toUpperCase() || "";
+
+    console.log("Input dataBundles:", {
+      count: dataBundles.length,
+      sample: dataBundles.slice(0, 5).map(b => ({
+        id: b.id,
+        data: b.data,
+        planType: b.planType,
+        category: b.category,
+        price: b.price,
+      })),
+      providerName: fallbackProviderName,
+      activeCategory,
+      activePlanType,
+      searchTerm,
+    });
+
+    let filteredBundles: DataBundle[] = [];
+
     if (searchTerm) {
-      const results = searchBundles(searchTerm);
-      return results || [];
-    }
-    if (activeCategory === "Hot") {
-      // Return hot deals filtered by activePlanType
-      return hotDeals
-        .filter((bundle) => bundle.planType.toLowerCase() === activePlanType.toLowerCase())
+      const searchLower = searchTerm.toLowerCase();
+      filteredBundles = dataBundles.filter(bundle => 
+        bundle.data.toLowerCase().includes(searchLower) ||
+        bundle.validity.toLowerCase().includes(searchLower) ||
+        bundle.planType.toLowerCase().includes(searchLower) ||
+        bundle.description?.toLowerCase().includes(searchLower) ||
+        bundle.variation_code?.toLowerCase().includes(searchLower)
+      );
+    } else if (activeCategory === "Hot") {
+      if (!fallbackProviderName) {
+        console.warn("providerName is undefined for Hot category, returning empty bundles");
+        return [];
+      }
+      filteredBundles = hotDeals
+        .filter((bundle) => bundle.planType.toUpperCase() === fallbackProviderName)
+        .sort((a, b) => a.price - b.price);
+    } else {
+      filteredBundles = dataBundles
+        .filter((bundle) => {
+          // Match category exactly or match planType for corporate/SME plans
+          const categoryMatch = 
+            bundle.category === activeCategory ||
+            (activeCategory === "CORPORATE_GIFTING" && bundle.planType === "CORPORATE_GIFTING") ||
+            (activeCategory === "SME" && bundle.planType === "SME") ||
+            (activeCategory === "SME_GIFTING" && bundle.planType === "SME_GIFTING") ||
+            (activeCategory === "GIFTING" && bundle.planType === "GIFTING") ||
+            (activeCategory === "STANDARD" && bundle.planType === "STANDARD");
+
+          const planTypeMatch = 
+            activePlanType === "" || 
+            bundle.planType.toUpperCase() === activePlanType.toUpperCase();
+
+          return categoryMatch && planTypeMatch;
+        })
         .sort((a, b) => a.price - b.price);
     }
-    let filtered = dataBundles;
-    filtered = filtered.filter(
-      (bundle) => bundle.planType.toLowerCase() === activePlanType.toLowerCase()
-    );
 
-    return filtered
-      .filter((bundle) => bundle.category === activeCategory)
-      .sort((a, b) => a.price - b.price);
-  }, [dataBundles, activeCategory, activePlanType, searchTerm]);
+    console.log(`Filtered bundles for ${activeCategory}/${activePlanType || '-'} (${fallbackProviderName || 'undefined'}):`, {
+      count: filteredBundles.length,
+      sample: filteredBundles.slice(0, 5).map(b => ({
+        id: b.id,
+        data: b.data,
+        planType: b.planType,
+        category: b.category,
+        price: b.price,
+      })),
+    });
+
+    return filteredBundles;
+  }, [dataBundles, activeCategory, activePlanType, searchTerm, providerName]);
 
   const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
     const slideAnimation = useRef(new Animated.Value(0)).current;
@@ -191,7 +194,13 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     ).current;
 
     const handlePurchase = () => {
-      console.log("Selected bundle:", bundle);
+      console.log("Selected bundle:", {
+        id: bundle.id,
+        data: bundle.data,
+        planType: bundle.planType,
+        category: bundle.category,
+        providerName,
+      });
       setSelectedBundle(bundle);
       setIsPurchaseModalOpen(true);
     };
@@ -208,8 +217,9 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
             </View>
             <Text style={styles.bundlePrice}>₦{formatNumberWithCommas(bundle.price)}</Text>
           </View>
-          {activeCategory !== "Hot" && (
-            <Text style={styles.planTypeText}>{bundle.planType}</Text>
+          <Text style={styles.planTypeText}>{bundle.planType}</Text>
+          {bundle.description && (
+            <Text style={styles.descriptionText}>{bundle.description}</Text>
           )}
           {bundle.validity === "Not Specified" && (
             <Text style={styles.warningPreviewText}>Note: Plan duration unclear. Check with provider.</Text>
@@ -263,12 +273,14 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
         </View>
       ) : getCategoryBundles.length === 0 ? (
         <Text style={styles.noPlansText}>
-          {searchTerm ? "No matching plans found" : "No plans in this category"}
+          {searchTerm 
+            ? "No matching plans found for your search" 
+            : `No plans available in ${activeCategory} for ${providerName || "unknown provider"}${activePlanType ? ` (${activePlanType})` : ''}`}
         </Text>
       ) : (
         <View style={styles.bundleListContainer}>
           <Text style={styles.categoryHint}>
-            {searchTerm ? "Search Results:" : "Choose a plan:"}
+            {searchTerm ? "Search Results:" : `Plans in ${activeCategory} (${providerName || "unknown provider"}):`}
           </Text>
           <View style={styles.bundleWrapper}>
             {getCategoryBundles.map((bundle) => (
@@ -337,6 +349,11 @@ const styles = StyleSheet.create({
     color: "#999",
     marginBottom: 8,
     textAlign: "left",
+  },
+  descriptionText: {
+    fontSize: 12,
+    color: "#aaa",
+    marginBottom: 8,
   },
   warningPreviewText: {
     fontSize: 14,

@@ -53,7 +53,8 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
 }) => {
   useEffect(() => {
     console.log("Plan Type Options:", planTypeOptions);
-  }, [planTypeOptions]);
+    console.log("Active Plan Type:", activePlanType);
+  }, [planTypeOptions, activePlanType]);
 
   const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -61,6 +62,25 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
 
   const navigateBack = () => {
     router.back();
+  };
+
+  // Determine the header title based on activePlanType
+  const getHeaderTitle = () => {
+    if (!selectedProvider) return "Data Plans";
+    switch (activePlanType) {
+      case "GIFTING":
+      case "CORPORATE GIFTING":
+        return `${selectedProvider.name} Corporate Gifting Plans`;
+      case "SME":
+        return `${selectedProvider.name} SME Plans`;
+      default:
+        return `${selectedProvider.name} Data Plans`;
+    }
+  };
+
+  // Use API-provided capitalization for subheaders
+  const getPlanTypeDisplayName = (planType: string) => {
+    return planType; // Display exact API capitalization (e.g., "GIFTING", "CORPORATE GIFTING", "SME")
   };
 
   return (
@@ -77,7 +97,7 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
               resizeMode="contain"
               onError={(e) => console.warn(`Image load error for ${selectedProvider.name}:`, e.nativeEvent.error)}
             />
-            <Text style={styles.providerName}>{selectedProvider.name} Data Plans</Text>
+            <Text style={styles.providerName}>{getHeaderTitle()}</Text>
           </>
         )}
       </View>
@@ -134,7 +154,7 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
               <Text
                 style={[styles.planTypeLabel, activePlanType === planType ? styles.activePlanTypeLabel : {}]}
               >
-                {planType}
+                {getPlanTypeDisplayName(planType)}
               </Text>
             </Pressable>
           ))}
