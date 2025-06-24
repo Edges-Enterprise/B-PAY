@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { MotiView } from "moti";
+import { supabase } from "../config/supabase"; // Adjust path to your Supabase client
 
 interface DataBundle {
   id: number;
@@ -60,34 +61,55 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
   retryLoad,
   providerName = "",
 }) => {
+  const [hotDeals, setHotDeals] = useState<DataBundle[]>([]);
+  const [hotDealsLoading, setHotDealsLoading] = useState<boolean>(true);
+  const [hotDealsError, setHotDealsError] = useState<string | null>(null);
+
+  // Fetch hot deals from Supabase
+  useEffect(() => {
+    const fetchHotDeals = async () => {
+      setHotDealsLoading(true);
+      setHotDealsError(null);
+      try {
+        const { data, error } = await supabase
+          .from("hot_deals")
+          .select("id, data, price, validity, category, description, plan_type")
+          .eq("category", "Hot");
+        
+        if (error) {
+          throw new Error(`Failed to fetch hot deals: ${error.message}`);
+        }
+
+        const formattedData: DataBundle[] = data.map((item: any) => ({
+          id: item.id,
+          data: item.data,
+          price: item.price,
+          validity: item.validity,
+          category: item.category,
+          description: item.description,
+          planType: item.plan_type,
+        }));
+
+        console.log("Fetched hot deals from Supabase:", {
+          count: formattedData.length,
+          sample: formattedData.slice(0, 5),
+        });
+
+        setHotDeals(formattedData);
+      } catch (err: any) {
+        console.error("Error fetching hot deals:", err.message);
+        setHotDealsError("Failed to load hot deals. Please try again.");
+      } finally {
+        setHotDealsLoading(false);
+      }
+    };
+
+    fetchHotDeals();
+  }, []); // Run once on mount; can add providerName as dependency if filtering by provider is needed
+
   const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
-
-  const hotDeals: DataBundle[] = [
-    { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
-    { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
-    { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
-    { id: 236, data: "3GB", price: 1500, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
-    { id: 213, data: "5GB", price: 2910, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
-    { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
-    { id: 136, data: "10GB", price: 4410, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
-    { id: 216, data: "20GB", price: 4950, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
-    { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
-    { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
-    { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
-    { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
-    { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
-    { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
-    { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
-    { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
-    { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
-    { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
-    { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
-    { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
-    { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
-    { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
-  ];
 
   const getCategoryBundles = useMemo(() => {
     if (!dataBundles || !Array.isArray(dataBundles)) {
@@ -165,7 +187,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     });
 
     return filteredBundles;
-  }, [dataBundles, activeCategory, activePlanType, searchTerm, providerName]);
+  }, [dataBundles, activeCategory, activePlanType, searchTerm, providerName, hotDeals]);
 
   const BundleCard: React.FC<{ bundle: DataBundle }> = ({ bundle }) => {
     const slideAnimation = useRef(new Animated.Value(0)).current;
@@ -196,7 +218,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     const handlePurchase = () => {
       console.log("Selected bundle:", {
         id: bundle.id,
-        data: bundle.data,
+        data: b.data,
         planType: bundle.planType,
         category: bundle.category,
         providerName,
@@ -259,7 +281,19 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
       bounces={true}
       alwaysBounceVertical={true}
     >
-      {isLoading ? (
+      {hotDealsLoading && activeCategory === "Hot" ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00ff88" />
+          <Text style={styles.activityIndicatorText}>Loading Hot Deals...</Text>
+        </View>
+      ) : hotDealsError && activeCategory === "Hot" ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{hotDealsError}</Text>
+          <Pressable onPress={() => fetchHotDeals()} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00ff88" />
           <Text style={styles.activityIndicatorText}>Loading Plans...</Text>

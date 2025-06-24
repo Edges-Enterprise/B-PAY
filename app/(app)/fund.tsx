@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { supabase } from '@/config/supabase';
 import { WebView } from 'react-native-webview';
 import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values';
+import { debounce } from 'lodash';
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,18 +36,32 @@ const FundScreen = () => {
   const [showVerifyButton, setShowVerifyButton] = useState(false);
 
   useEffect(() => {
+    // Debug environment variables
+    const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    console.log('Loaded Paystack Public Key:', paystackKey);
     console.log('Environment variables:', {
-      PAYSTACK_PUBLIC_KEY: process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY ? 'Set (pk_...)' : 'Missing',
+      PAYSTACK_PUBLIC_KEY: paystackKey ? `Set (${paystackKey.substring(0, 7)}...)` : 'Missing',
       SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL || 'Missing',
       SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Set (eyJ...)' : 'Missing',
     });
-    if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || !process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY.startsWith('pk_')) {
-      Alert.alert('Error', 'Invalid Paystack configuration. Please contact support.');
+
+    // Validate Paystack public key format
+    if (!paystackKey) {
+      Alert.alert('Configuration Error', 'Paystack public key is missing. Please contact support.');
       setIsUserLoading(false);
       return;
     }
+    
+    if (!paystackKey.startsWith('pk_')) {
+      console.error('Invalid Paystack public key format:', paystackKey);
+      Alert.alert('Configuration Error', 'Invalid Paystack public key format. Please contact support.');
+      setIsUserLoading(false);
+      return;
+    }
+
+    // Validate Supabase configuration
     if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-      Alert.alert('Error', 'Supabase configuration missing. Please contact support.');
+      Alert.alert('Configuration Error', 'Supabase configuration missing. Please contact support.');
       setIsUserLoading(false);
       return;
     }
@@ -90,7 +105,7 @@ const FundScreen = () => {
       await fetchWalletBalance(user.email);
     } catch (error) {
       console.error('fetchUserData error:', { message: error.message, stack: error.stack });
-      Alert.alert('Error', 'Session expired. Please sign in again.');
+      Alert.alert('Authentication Error', 'Session expired. Please sign in again.');
       router.replace('/sign-in');
     } finally {
       setIsUserLoading(false);
@@ -112,6 +127,7 @@ const FundScreen = () => {
       console.log('Wallet balance:', wallet?.balance || 0);
     } catch (error) {
       console.error('fetchWalletBalance error:', { message: error.message });
+      // Don't show error alert for wallet balance fetch - just log it
     }
   };
 
@@ -146,14 +162,14 @@ const FundScreen = () => {
               setShowVerifyButton(false);
               await fetchWalletBalance(userEmail);
               await sendTestReceipt(paymentReference, amount, userEmail);
-              Alert.alert('Success', 'Transaction completed!');
+              Alert.alert('Success', 'Transaction completed successfully!');
               router.push('/wallet');
             } else if (payload.new.status === 'failed') {
               setShowWebView(false);
               setIsLoading(false);
               setPaymentReference('');
               setShowVerifyButton(false);
-              Alert.alert('Error', `Transaction failed: ${payload.new.metadata?.error || 'Unknown error'}`);
+              Alert.alert('Transaction Failed', `Transaction failed: ${payload.new.metadata?.error || 'Unknown error'}`);
             }
           }
         )
@@ -161,7 +177,7 @@ const FundScreen = () => {
           console.log('Subscription status:', { reference: paymentReference, status });
           if (status !== 'SUBSCRIBED') {
             console.error('Subscription failed:', { reference: paymentReference, status });
-            Alert.alert('Error', 'Failed to monitor transaction.');
+            Alert.alert('Connection Error', 'Failed to monitor transaction status.');
             setIsLoading(false);
             setShowWebView(false);
             setPaymentReference('');
@@ -182,9 +198,10 @@ const FundScreen = () => {
     try {
       console.log('Verifying transaction:', { reference, expectedAmount, retries });
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30s
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       const payload = { reference, expectedAmount };
       console.log('Sending to edge function:', payload);
+      
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-paystack-transaction`,
         {
@@ -216,9 +233,9 @@ const FundScreen = () => {
       }
     } catch (error) {
       console.error('verifyTransaction error:', { message: error.message, reference, retries });
-      if (error.message.includes('AbortError')) {
+      if (error.name === 'AbortError') {
         console.error('Network timeout:', { reference, retries });
-        Alert.alert('Error', 'Network timeout. Please try again.');
+        throw new Error('Network timeout. Please check your connection and try again.');
       }
       if (retries > 0) {
         console.warn(`Retry ${4 - retries}:`, reference);
@@ -257,80 +274,96 @@ const FundScreen = () => {
           View your wallet balance in the app.
         `,
       };
-      console.log('Receipt details:', receiptDetails);
+      console.log('Receipt details prepared:', receiptDetails);
     } catch (error) {
       console.error('sendTestReceipt error:', { message: error.message });
     }
   };
 
-  const handleTopUp = async () => {
-    console.log('handleTopUp:', { amount, userEmail, userName, userId });
-    const parsedAmount = parseFloat(amount);
-    if (!amount || isNaN(parsedAmount)) {
-      setError('Enter a valid amount');
-      return;
-    }
-    if (parsedAmount < 500) {
-      setError('Minimum amount is ₦500');
-      return;
-    }
-    if (!userEmail || !userName || !userId) {
-      Alert.alert('Error', 'User data missing. Sign in again.');
-      router.replace('/sign-in');
-      return;
-    }
-    if (!process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY) {
-      Alert.alert('Error', 'Paystack configuration missing.');
-      return;
-    }
-    if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-      Alert.alert('Error', 'Supabase configuration missing.');
-      return;
-    }
-
-    const newReference = `Edges_Network_${uuidv4()}`;
-    setPaymentReference(newReference);
-    console.log('New payment reference:', newReference);
-
-    try {
-      console.log('Inserting transaction');
-      const { error: txInsertError } = await supabase
-        .from('transactions')
-        .insert({
-          reference: newReference,
-          user_email: userEmail,
-          status: 'pending',
-          amount: parsedAmount,
-          type: 'deposit',
-          metadata: {
-            user_name: userName,
-            user_id: userId,
-            payment_method: 'Paystack',
-            payment_date: new Date().toISOString(),
-            custom_fields: [
-              { display_name: 'Mobile Payment', variable_name: 'mobile_payment', value: 'Edges Network' },
-            ],
-          },
-        });
-
-      if (txInsertError) {
-        throw new Error(`Transaction insert failed: ${txInsertError.message}`);
+  const handleTopUp = debounce(
+    async () => {
+      console.log('handleTopUp:', { amount, userEmail, userName, userId });
+      const parsedAmount = parseFloat(amount);
+      
+      // Validation
+      if (!amount || isNaN(parsedAmount)) {
+        setError('Please enter a valid amount');
+        return;
+      }
+      if (parsedAmount < 500) {
+        setError('Minimum amount is ₦500');
+        return;
+      }
+      if (parsedAmount > 1000000) {
+        setError('Maximum amount is ₦1,000,000');
+        return;
+      }
+      if (!userEmail || !userName || !userId) {
+        Alert.alert('Authentication Error', 'User data missing. Please sign in again.');
+        router.replace('/sign-in');
+        return;
       }
 
-      setIsLoading(true);
-      setShowWebView(true);
-    } catch (error) {
-      console.error('handleTopUp error:', { message: error.message });
-      setShowWebView(false);
-      setIsLoading(false);
-      setPaymentReference('');
-      Alert.alert('Error', `Payment initiation failed: ${error.message || 'Unknown error'}`);
-    }
-  };
+      // Check environment variables again before proceeding
+      const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
+      if (!paystackKey || !paystackKey.startsWith('pk_')) {
+        Alert.alert('Configuration Error', 'Invalid payment configuration. Please contact support.');
+        return;
+      }
+      if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+        Alert.alert('Configuration Error', 'Database configuration missing. Please contact support.');
+        return;
+      }
+
+      const newReference = `Edges_Network_${uuidv4()}`;
+      setPaymentReference(newReference);
+      console.log('New payment reference:', newReference);
+
+      try {
+        setError(''); // Clear any previous errors
+        console.log('Inserting transaction record');
+        
+        const { error: txInsertError } = await supabase
+          .from('transactions')
+          .insert({
+            reference: newReference,
+            user_email: userEmail,
+            status: 'pending',
+            amount: parsedAmount,
+            type: 'deposit',
+            metadata: {
+              user_name: userName,
+              user_id: userId,
+              payment_method: 'Paystack',
+              payment_date: new Date().toISOString(),
+              custom_fields: [
+                { display_name: 'Mobile Payment', variable_name: 'mobile_payment', value: 'Edges Network' },
+              ],
+            },
+          });
+
+        if (txInsertError) {
+          throw new Error(`Failed to create transaction record: ${txInsertError.message}`);
+        }
+
+        setIsLoading(true);
+        setShowWebView(true);
+        console.log('Payment initialization successful');
+      } catch (error) {
+        console.error('handleTopUp error:', { message: error.message, stack: error.stack });
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
+        Alert.alert('Payment Error', `Failed to initialize payment: ${error.message || 'Unknown error'}`);
+      }
+    },
+    1000,
+    { leading: true, trailing: false }
+  );
 
   const handleManualVerify = async () => {
     if (!paymentReference || !amount) {
-      Alert.alert('Error', 'No pending transaction to verify.');
+      Alert.alert('Verification Error', 'No pending transaction to verify.');
       return;
     }
     setIsLoading(true);
@@ -344,12 +377,12 @@ const FundScreen = () => {
         setIsLoading(false);
         setPaymentReference('');
         setShowVerifyButton(false);
-        Alert.alert('Success', 'Transaction verified!');
+        Alert.alert('Success', 'Transaction verified successfully!');
         router.push('/wallet');
       }
     } catch (error) {
       console.error('Manual verify error:', { message: error.message });
-      Alert.alert('Error', `Verification failed: ${error.message || 'Unknown error'}`);
+      Alert.alert('Verification Failed', `Unable to verify transaction: ${error.message || 'Unknown error'}`);
       setIsLoading(false);
     }
   };
@@ -361,9 +394,11 @@ const FundScreen = () => {
     setError('');
   };
 
-  const generatePaystackHTML = (): string => {
+  const generatePaystackHTML = useCallback((): string => {
     const reference = paymentReference || `Edges_Network_${uuidv4()}`;
-    console.log('Paystack HTML reference:', reference);
+    const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
+    console.log('Generating Paystack HTML with reference:', reference);
+    
     return `
       <!DOCTYPE html>
       <html>
@@ -384,6 +419,7 @@ const FundScreen = () => {
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            color: white;
           }
           .container {
             margin-top: 40px;
@@ -393,6 +429,11 @@ const FundScreen = () => {
             justify-content: center;
             width: ${width}px;
             max-width: 100%;
+            padding: 20px;
+          }
+          .loading {
+            font-size: 18px;
+            margin-bottom: 20px;
           }
           #paystackIframe {
             width: ${width * 0.9}px;
@@ -404,42 +445,65 @@ const FundScreen = () => {
       </head>
       <body>
         <div class="container">
+          <div class="loading">Initializing payment...</div>
           <div id="paystackIframe"></div>
         </div>
         <script>
-          console.log('Paystack script loaded', { email: '${userEmail}', amount: ${parseFloat(amount) * 100}, ref: '${reference}' });
-          const handler = PaystackPop.setup({
-            key: '${process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || ''}',
-            email: '${userEmail}',
-            amount: ${parseFloat(amount) * 100},
-            currency: 'NGN',
-            channels: ['card', 'bank', 'ussd', 'qr'],
+          console.log('Paystack script loaded', { 
+            email: '${userEmail}', 
+            amount: ${parseFloat(amount) * 100}, 
             ref: '${reference}',
-            metadata: {
-              custom_fields: [
-                { display_name: "Mobile Payment", variable_name: "mobile_payment", value: "Edges Network" }
-              ]
-            },
-            onClose: function() {
-              console.log('Paystack window closed');
-              window.ReactNativeWebView.postMessage('payment-cancelled');
-            },
-            callback: function(response) {
-              console.log('Paystack callback:', response);
-              alert('Payment Success: ' + JSON.stringify(response)); // For debugging
-              window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
-            }
+            key: '${paystackKey ? paystackKey.substring(0, 10) + '...' : 'MISSING'}'
           });
-          handler.openIframe();
+          
+          try {
+            const handler = PaystackPop.setup({
+              key: '${paystackKey || ''}',
+              email: '${userEmail}',
+              amount: ${parseFloat(amount) * 100},
+              currency: 'NGN',
+              channels: ['card', 'bank','bank_transfer', 'ussd', 'qr'],
+              ref: '${reference}',
+              metadata: {
+                custom_fields: [
+                  { display_name: "Mobile Payment", variable_name: "mobile_payment", value: "Edges Network" }
+                ]
+              },
+              onClose: function() {
+                console.log('Paystack window closed by user');
+                window.ReactNativeWebView.postMessage('payment-cancelled');
+              },
+              callback: function(response) {
+                console.log('Paystack callback received:', response);
+                if (response.status === 'success') {
+                  console.log('Payment successful:', response.reference);
+                  window.ReactNativeWebView.postMessage('payment-success:' + response.reference);
+                } else {
+                  console.log('Payment failed:', response);
+                  window.ReactNativeWebView.postMessage('payment-failed:' + response.message);
+                }
+              }
+            });
+            
+            // Initialize payment
+            handler.openIframe();
+            document.querySelector('.loading').textContent = 'Complete your payment...';
+            
+          } catch (error) {
+            console.error('Paystack initialization error:', error);
+            document.querySelector('.loading').textContent = 'Error initializing payment: ' + error.message;
+            window.ReactNativeWebView.postMessage('payment-error:' + error.message);
+          }
         </script>
       </body>
       </html>
     `;
-  };
+  }, [amount, userEmail, paymentReference]);
 
   const handleWebViewMessage = async (event: any): Promise<void> => {
     const data = event.nativeEvent.data;
-    console.log('WebView message received:', { data, rawEvent: JSON.stringify(event.nativeEvent) });
+    console.log('WebView message received:', data);
+    
     try {
       if (data.startsWith('payment-success:')) {
         const reference = data.split(':')[1];
@@ -449,6 +513,7 @@ const FundScreen = () => {
         if (isNaN(parsedAmount)) {
           throw new Error('Invalid amount for verification');
         }
+        
         const isVerified = await verifyTransaction(reference, parsedAmount);
         if (!isVerified) {
           console.error('Verification failed:', reference);
@@ -465,31 +530,62 @@ const FundScreen = () => {
         setIsLoading(false);
         setPaymentReference('');
         setShowVerifyButton(false);
-        Alert.alert('Success', 'Transaction completed!');
+        Alert.alert('Success', 'Payment completed successfully!');
         router.push('/wallet');
+        
       } else if (data === 'payment-cancelled') {
-        console.log('Payment cancelled:', paymentReference);
-        const { error: failedError } = await supabase
-          .from('transactions')
-          .update({ status: 'failed', metadata: { error: 'Payment cancelled' } })
-          .eq('reference', paymentReference);
+        console.log('Payment cancelled by user:', paymentReference);
+        
+        if (paymentReference) {
+          const { error: failedError } = await supabase
+            .from('transactions')
+            .update({ status: 'failed', metadata: { error: 'Payment cancelled by user' } })
+            .eq('reference', paymentReference);
 
-        if (failedError) {
-          console.error('Failed to update transaction:', { message: failedError.message });
-          throw new Error(`Failed to update transaction: ${failedError.message}`);
+          if (failedError) {
+            console.error('Failed to update transaction:', failedError);
+          }
         }
 
-        Alert.alert('Cancelled', 'Payment cancelled.');
+        Alert.alert('Payment Cancelled', 'Payment was cancelled.');
         setShowWebView(false);
         setIsLoading(false);
         setPaymentReference('');
         setShowVerifyButton(false);
+        
+      } else if (data.startsWith('payment-failed:')) {
+        const errorMessage = data.split(':')[1] || 'Unknown error';
+        console.log('Payment failed:', errorMessage);
+        
+        if (paymentReference) {
+          await supabase
+            .from('transactions')
+            .update({ status: 'failed', metadata: { error: errorMessage } })
+            .eq('reference', paymentReference);
+        }
+        
+        Alert.alert('Payment Failed', `Payment failed: ${errorMessage}`);
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
+        setShowVerifyButton(false);
+        
+      } else if (data.startsWith('payment-error:')) {
+        const errorMessage = data.split(':')[1] || 'Unknown error';
+        console.error('Payment initialization error:', errorMessage);
+        
+        Alert.alert('Payment Error', `Failed to initialize payment: ${errorMessage}`);
+        setShowWebView(false);
+        setIsLoading(false);
+        setPaymentReference('');
+        setShowVerifyButton(false);
+        
       } else {
         console.warn('Unknown WebView message:', data);
       }
     } catch (error) {
-      console.error('handleWebViewMessage error:', { message: error.message, data });
-      Alert.alert('Error', `Transaction failed: ${error.message || 'Unknown error'}`);
+      console.error('handleWebViewMessage error:', error);
+      Alert.alert('Transaction Error', `Transaction failed: ${error.message || 'Unknown error'}`);
       setShowWebView(false);
       setIsLoading(false);
       setShowVerifyButton(true); // Allow manual verification on error
@@ -501,7 +597,10 @@ const FundScreen = () => {
   if (isUserLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Loading...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00FF00" />
+          <Text style={styles.loadingText}>Loading user data...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -518,27 +617,37 @@ const FundScreen = () => {
           startInLoadingState={true}
           renderLoading={() => (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#000" />
+              <ActivityIndicator size="large" color="#00FF00" />
+              <Text style={styles.loadingText}>Loading payment...</Text>
             </View>
           )}
           onShouldStartLoadWithRequest={(request) => {
-            console.log('WebView navigation:', request.url);
-            if (request.url.includes('paystack') || request.url.includes('edgesnetwork')) {
-              return true;
+            console.log('WebView navigation attempt:', request.url);
+            // Allow Paystack and related domains
+            const allowedDomains = ['paystack', 'edgesnetwork', 'about:blank', 'data:'];
+            const isAllowed = allowedDomains.some(domain => request.url.includes(domain));
+            if (!isAllowed) {
+              console.log('Blocked navigation to:', request.url);
             }
-            console.log('Blocked navigation:', request.url);
-            return false;
+            return isAllowed;
           }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
-            console.error('WebView error:', nativeEvent);
-            Alert.alert('Error', 'Failed to load payment page.');
+            console.error('WebView error details:', {
+              code: nativeEvent.code,
+              description: nativeEvent.description,
+              url: nativeEvent.url,
+            });
+            Alert.alert('Payment Error', 'Failed to load payment page. Please try again.');
             setShowWebView(false);
             setIsLoading(false);
             setPaymentReference('');
             setShowVerifyButton(true);
           }}
-          debug={true} // Enable WebView debugging
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView HTTP error:', nativeEvent);
+          }}
         />
         {showVerifyButton && (
           <Pressable
@@ -546,7 +655,9 @@ const FundScreen = () => {
             style={[styles.verifyButton, isLoading && styles.disabledButton]}
             disabled={isLoading}
           >
-            <Text style={styles.verifyButtonText}>Verify Payment</Text>
+            <Text style={styles.verifyButtonText}>
+              {isLoading ? 'Verifying...' : 'Verify Payment'}
+            </Text>
           </Pressable>
         )}
       </SafeAreaView>
@@ -573,7 +684,7 @@ const FundScreen = () => {
           transition={{ type: 'timing', duration: 300 }}
           style={styles.balanceContainer}
         >
-          <Text style={styles.balanceLabel}>Wallet Balance (NGN)</Text>
+          <Text style={styles.balanceLabel}>Current Wallet Balance</Text>
           <Text style={styles.balanceText}>
             ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
           </Text>
@@ -589,12 +700,19 @@ const FundScreen = () => {
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.input}
-              placeholder="Min 500"
+              placeholder="Enter amount (Min: ₦500)"
               placeholderTextColor="#666"
               keyboardType="numeric"
               value={amount}
               onChangeText={(text) => {
-                setAmount(text.replace(/[^0-9.]/g, ''));
+                // Allow only numbers and decimal point
+                const cleanText = text.replace(/[^0-9.]/g, '');
+                // Prevent multiple decimal points
+                const parts = cleanText.split('.');
+                if (parts.length > 2) {
+                  return;
+                }
+                setAmount(cleanText);
                 setError('');
               }}
               editable={!isLoading}
@@ -614,20 +732,23 @@ const FundScreen = () => {
           transition={{ type: 'timing', duration: 300, delay: 100 }}
           style={styles.presetContainer}
         >
-          {presetAmounts.map((value) => (
-            <Pressable
-              key={value}
-              onPress={() => handlePresetAmount(value)}
-              style={({ pressed }) => [
-                styles.presetButton,
-                { transform: [{ scale: pressed ? 0.95 : 1 }] },
-                isLoading && styles.disabledButton,
-              ]}
-              disabled={isLoading}
-            >
-              <Text style={styles.presetText}>₦{value.toLocaleString()}</Text>
-            </Pressable>
-          ))}
+          <Text style={styles.presetTitle}>Quick Add Amounts</Text>
+          <View style={styles.presetButtonsContainer}>
+            {presetAmounts.map((value) => (
+              <Pressable
+                key={value}
+                onPress={() => handlePresetAmount(value)}
+                style={({ pressed }) => [
+                  styles.presetButton,
+                  { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                  isLoading && styles.disabledButton,
+                ]}
+                disabled={isLoading}
+              >
+                <Text style={styles.presetText}>+₦{value.toLocaleString()}</Text>
+              </Pressable>
+            ))}
+          </View>
         </MotiView>
 
         <MotiView
@@ -767,10 +888,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   presetContainer: {
+    marginBottom: 16,
+  },
+  presetTitle: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  presetButtonsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 16,
   },
   presetButton: {
     backgroundColor: '#2A3A3B',

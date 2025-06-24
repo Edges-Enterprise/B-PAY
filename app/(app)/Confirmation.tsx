@@ -10,32 +10,6 @@ import ErrorModal from '@/components/confirmation/ErrorModal';
 // Define constants
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
-// Define HOT_PLANS with Lizzysub IDs replacing Ujaydata plans
-const HOT_PLANS: DataBundle[] = [
-  { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
-  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
-  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
-  { id: 236, data: "3GB", price: 1550, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
-  { id: 213, data: "5GB", price: 2980, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
-  { id: 136, data: "10GB", price: 4480, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
-  { id: 216, data: "20GB", price: 5000, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
-  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
-  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
-  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
-  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
-  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
-  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
-  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
-  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
-  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
-  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
-  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
-  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
-  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
-  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
-  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
-];
-
 // Generate or retrieve Lizzysub token
 const getLizzysubToken = async (userEmail: string): Promise<string> => {
   const username = process.env.EXPO_PUBLIC_LIZZYSUB_USERNAME;
@@ -139,7 +113,7 @@ interface DataBundle {
   price: number;
   validity: string;
   category: string;
-  description: string;
+  description?: string;
   planType: string;
 }
 
@@ -208,28 +182,24 @@ const ConfirmationScreen: React.FC = () => {
 
   // Synchronize parsedNetworkId with selectedBundle.planType for Hot plans
   useEffect(() => {
-    const isHotPlan = HOT_PLANS.some(plan => plan.id === selectedBundle.id);
-    if (isHotPlan) {
-      const plan = HOT_PLANS.find(plan => plan.id === selectedBundle.id);
-      if (plan) {
-        const networkIds: { [key: string]: number } = {
-          MTN: 1,
-          GLO: 3,
-          '9MOBILE': 4,
-          AIRTEL: 2,
-        };
-        const expectedNetworkId = networkIds[plan.planType];
-        if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
-          console.log('Synchronizing networkId:', {
-            currentNetworkId: parsedNetworkId,
-            expectedNetworkId,
-            planType: plan.planType,
-            bundleId: selectedBundle.id,
-          });
-          setParsedNetworkId(expectedNetworkId);
-          setNetworkProvider(plan.planType);
-          setSelectedProvider({ ...selectedProvider, name: plan.planType, id: expectedNetworkId });
-        }
+    if (selectedBundle.category === 'Hot' && selectedBundle.planType) {
+      const networkIds: { [key: string]: number } = {
+        MTN: 1,
+        GLO: 3,
+        '9MOBILE': 4,
+        AIRTEL: 2,
+      };
+      const expectedNetworkId = networkIds[selectedBundle.planType];
+      if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
+        console.log('Synchronizing networkId:', {
+          currentNetworkId: parsedNetworkId,
+          expectedNetworkId,
+          planType: selectedBundle.planType,
+          bundleId: selectedBundle.id,
+        });
+        setParsedNetworkId(expectedNetworkId);
+        setNetworkProvider(selectedBundle.planType);
+        setSelectedProvider({ ...selectedProvider, name: selectedBundle.planType, id: expectedNetworkId });
       }
     }
   }, [selectedBundle, parsedNetworkId, selectedProvider]);
@@ -407,17 +377,16 @@ const ConfirmationScreen: React.FC = () => {
         detectedNetworkId = 4;
       }
 
-      // Only update if the detected provider matches the selected plan's planType
-      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
-      if (plan && plan.planType === detectedProvider) {
+      // Only update if the detected provider matches the selected plan's planType for Hot plans
+      if (selectedBundle.category === 'Hot' && selectedBundle.planType && selectedBundle.planType === detectedProvider) {
         setNetworkProvider(detectedProvider);
         setParsedNetworkId(detectedNetworkId);
         setSelectedProvider({ ...selectedProvider, name: detectedProvider, id: detectedNetworkId });
-      } else if (plan) {
+      } else if (selectedBundle.category === 'Hot' && selectedBundle.planType) {
         console.log('Mobile number prefix does not match planType:', {
           prefix,
           detectedProvider,
-          planType: plan.planType,
+          planType: selectedBundle.planType,
           bundleId: selectedBundle.id,
         });
       }
@@ -479,24 +448,18 @@ const ConfirmationScreen: React.FC = () => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  const validateHotPlan = (bundleId: number, networkId: number): boolean => {
-    const plan = HOT_PLANS.find(plan => plan.id === bundleId);
-    if (!plan) {
-      console.error('Invalid Data Plan ID:', bundleId);
-      return false;
-    }
+  const validateHotPlan = (networkId: number, planType: string): boolean => {
     const validNetworkIds: { [key: string]: number[] } = {
       MTN: [1],
       GLO: [3],
       '9MOBILE': [4],
       AIRTEL: [2],
     };
-    const validIds = validNetworkIds[plan.planType] || [];
+    const validIds = validNetworkIds[planType] || [];
     if (!validIds.includes(networkId)) {
       console.error('Invalid Network ID for plan:', {
-        bundleId,
         networkId,
-        planType: plan.planType,
+        planType,
         expectedNetworkId: validIds[0],
       });
       return false;
@@ -560,7 +523,7 @@ const ConfirmationScreen: React.FC = () => {
       setBalanceValue(newBalance);
 
       // Check if plan is a Hot plan
-      const isHotPlan = HOT_PLANS.some(plan => plan.id === selectedBundle.id);
+      const isHotPlan = selectedBundle.category === 'Hot';
       console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
 
       let apiResponse: Response;
@@ -568,7 +531,7 @@ const ConfirmationScreen: React.FC = () => {
 
       if (isHotPlan) {
         // Validate Hot Plan and Network ID
-        if (!validateHotPlan(selectedBundle.id, parsedNetworkId)) {
+        if (!selectedBundle.planType || !validateHotPlan(parsedNetworkId, selectedBundle.planType)) {
           const { error: refundError } = await supabase
             .from('wallets')
             .update({ balance: currentBalance })
@@ -582,10 +545,9 @@ const ConfirmationScreen: React.FC = () => {
           setBalanceValue(currentBalance);
           setTransactionModalVisible(false);
           setErrorModalVisible(true);
-          const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
           Alert.alert(
             'Error',
-            `Invalid network selected for the plan. Please select a ${plan?.planType} network for the ${plan?.data} plan.`
+            `Invalid network selected for the plan. Please select a ${selectedBundle.planType} network for the ${selectedBundle.data} plan.`
           );
           return;
         }
@@ -787,7 +749,7 @@ const ConfirmationScreen: React.FC = () => {
             api_network_fee: 20,
             wallet_management_fee: 10,
           },
-          payment_date: new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }),
+          payment_date: new Date().toLocaleString([], { timeZone: 'Africa/Lagos' }),
           custom_fields: [
             {
               value: 'Edges Network',
@@ -871,7 +833,7 @@ const ConfirmationScreen: React.FC = () => {
     setIsEditingMobile(!isEditingMobile);
   };
 
-  const purchaseDescription = selectedBundle.data || `Plan ID ${parsedPlanId}`;
+  const purchaseDescription = () => selectedBundle.data || `Plan ID ${parsedPlanId}`;
 
   // Handle logout or session expiry
   useEffect(() => {
@@ -895,7 +857,6 @@ const ConfirmationScreen: React.FC = () => {
           balanceValue={balanceValue}
           isBalanceLoading={isBalanceLoading}
           editableMobileNumber={editableMobileNumber}
-          isEditingMobile={isEditingMobile}
           handleMobileNumberChange={handleMobileNumberChange}
           toggleEditMobile={toggleEditMobile}
           handleCancel={handleCancel}
@@ -924,7 +885,7 @@ const ConfirmationScreen: React.FC = () => {
         visible={errorModalVisible}
         onClose={closeErrorModal}
         userName={userName}
-        purchaseDescription={purchaseDescription}
+        purchaseDescription={purchaseDescription()}
         timeLeft={timeLeft}
         pulseNetworkAnim={pulseNetworkAnim}
       />

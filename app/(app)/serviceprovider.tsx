@@ -40,31 +40,6 @@ const VALID_PLAN_TYPES = [
   "9MOBILE",
 ];
 
-const HOT_PLANS: DataBundle[] = [
-  { id: 228, data: "1GB", price: 580, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1GB for 30 days", planType: "MTN" },
-  { id: 246, data: "1.2GB", price: 500, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 1.2GB All Socials for 30 days", planType: "MTN" },
-  { id: 235, data: "2GB", price: 1140, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 2GB for 30 days", planType: "MTN" },
-  { id: 236, data: "3GB", price: 1500, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 3GB for 7 days", planType: "MTN" },
-  { id: 213, data: "5GB", price: 2910, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 5GB for 30 days", planType: "MTN" },
-  { id: 104, data: "6.75GB", price: 2940, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 6.75GB for 30 days", planType: "MTN" },
-  { id: 136, data: "10GB", price: 4410, validity: "30 Days", category: "Hot", description: "MTN Hot Deal - 10GB for 30 days", planType: "MTN" },
-  { id: 216, data: "20GB", price: 4950, validity: "7 Days", category: "Hot", description: "MTN Hot Deal - 20GB for 7 days", planType: "MTN" },
-  { id: 146, data: "2GB", price: 1470, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 2GB for 30 days", planType: "AIRTEL" },
-  { id: 148, data: "4GB", price: 2450, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 4GB for 30 days", planType: "AIRTEL" },
-  { id: 169, data: "10GB", price: 3014, validity: "30 Days", category: "Hot", description: "Airtel Hot Deal - 10GB for 30 days", planType: "AIRTEL" },
-  { id: 39, data: "1GB", price: 420, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 1GB for 30 days", planType: "GLO" },
-  { id: 40, data: "2GB", price: 850, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 2GB for 30 days", planType: "GLO" },
-  { id: 41, data: "3GB", price: 1200, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 3GB for 30 days", planType: "GLO" },
-  { id: 42, data: "5GB", price: 2000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 5GB for 30 days", planType: "GLO" },
-  { id: 43, data: "10GB", price: 4000, validity: "30 Days", category: "Hot", description: "Glo Hot Deal - 10GB for 30 days", planType: "GLO" },
-  { id: 70, data: "500MB", price: 145, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 500MB for 30 days", planType: "9MOBILE" },
-  { id: 71, data: "1GB", price: 280, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 1GB for 30 days", planType: "9MOBILE" },
-  { id: 72, data: "2GB", price: 560, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 2GB for 30 days", planType: "9MOBILE" },
-  { id: 73, data: "3GB", price: 840, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 3GB for 30 days", planType: "9MOBILE" },
-  { id: 75, data: "5GB", price: 1400, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 5GB for 30 days", planType: "9MOBILE" },
-  { id: 76, data: "10GB", price: 2800, validity: "30 Days", category: "Hot", description: "9mobile Hot Deal - 10GB for 30 days", planType: "9MOBILE" },
-];
-
 const formatNumberWithCommas = (number: number): string => {
   return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
@@ -98,25 +73,22 @@ const BuyDataScreen: React.FC = () => {
 
   useEffect(() => {
     if (selectedBundle && activeCategory === "Hot") {
-      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
-      if (plan) {
-        const networkIds: { [key: string]: number } = {
-          MTN: 1,
-          GLO: 3,
-          '9MOBILE': 4,
-          AIRTEL: 2,
-        };
-        const expectedNetworkId = networkIds[plan.planType];
-        if (expectedNetworkId && networkId !== expectedNetworkId) {
-          console.log('Synchronizing networkId for Hot plan:', {
-            bundleId: selectedBundle.id,
-            currentNetworkId: networkId,
-            expectedNetworkId,
-            planType: plan.planType,
-            providerName: selectedProvider?.name,
-          });
-          setNetworkId(expectedNetworkId);
-        }
+      const networkIds: { [key: string]: number } = {
+        MTN: 1,
+        GLO: 3,
+        '9MOBILE': 4,
+        AIRTEL: 2,
+      };
+      const expectedNetworkId = networkIds[selectedBundle.planType];
+      if (expectedNetworkId && networkId !== expectedNetworkId) {
+        console.log('Synchronizing networkId for Hot plan:', {
+          bundleId: selectedBundle.id,
+          currentNetworkId: networkId,
+          expectedNetworkId,
+          planType: selectedBundle.planType,
+          providerName: selectedProvider?.name,
+        });
+        setNetworkId(expectedNetworkId);
       }
     }
   }, [selectedBundle, activeCategory, networkId, selectedProvider]);
@@ -245,16 +217,11 @@ const BuyDataScreen: React.FC = () => {
 
   const allBundles = useMemo(() => {
     if (!selectedProvider) return [];
-    const hotPlans = HOT_PLANS.filter(
-      (plan) => plan.planType.toUpperCase() === selectedProvider.name.toUpperCase()
-    );
     const apiPlans = providerPlans[selectedProvider.name] || [];
-    const combined = [...hotPlans, ...apiPlans];
     console.log(`All Bundles for ${selectedProvider.name}:`, {
-      hotCount: hotPlans.length,
       apiCount: apiPlans.length,
-      totalCount: combined.length,
-      sample: combined.slice(0, 5).map((p: DataBundle) => ({
+      totalCount: apiPlans.length,
+      sample: apiPlans.slice(0, 5).map((p: DataBundle) => ({
         id: p.id,
         planType: p.planType,
         category: p.category,
@@ -263,35 +230,33 @@ const BuyDataScreen: React.FC = () => {
         price: p.price,
       })),
     });
-    return combined;
+    return apiPlans;
   }, [selectedProvider, providerPlans]);
 
-const dataBundles = useMemo(() => {
-  if (!selectedProvider) return [];
-  
-  let plans: DataBundle[];
-  if (activeCategory === "Hot") {
-    plans = HOT_PLANS.filter(
-      (plan) => plan.planType.toUpperCase() === selectedProvider.name.toUpperCase()
-    );
-  } else {
-    plans = (providerPlans[selectedProvider.name] || [])
-      .filter((plan: DataBundle) => {
-        const categoryMatch = plan.category === activeCategory;
-        const searchMatch = searchTerm
-          ? plan.data.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (plan.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) || false)
-          : true;
-        return categoryMatch && searchMatch;
-      });
+  const dataBundles = useMemo(() => {
+    if (!selectedProvider) return [];
+    
+    let plans: DataBundle[];
+    if (activeCategory === "Hot") {
+      plans = []; // DataBundleList fetches Hot plans from Supabase
+    } else {
+      plans = (providerPlans[selectedProvider.name] || [])
+        .filter((plan: DataBundle) => {
+          const categoryMatch = plan.category === activeCategory;
+          const searchMatch = searchTerm
+            ? plan.data.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (plan.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) || false)
+            : true;
+          return categoryMatch && searchMatch;
+        });
 
-    if (plans.length === 0) {
-      fetchData();
+      if (plans.length === 0) {
+        fetchData();
+      }
     }
-  }
-  
-  return plans;
-}, [selectedProvider, providerPlans, activeCategory, searchTerm, fetchData]);
+    
+    return plans;
+  }, [selectedProvider, providerPlans, activeCategory, searchTerm, fetchData]);
 
   const bundleCategories = useMemo(() => {
     if (!selectedProvider) return [];
@@ -300,21 +265,18 @@ const dataBundles = useMemo(() => {
     const categoriesWithPlans = Array.from(
       new Set(
         allBundles
-          .filter((bundle: DataBundle) => {
-            // For Hot category, only include if there are Hot plans for this provider
-            if (bundle.category === "Hot") {
-              return HOT_PLANS.some(p => 
-                p.planType.toUpperCase() === selectedProvider.name.toUpperCase()
-              );
-            }
-            return true;
-          })
           .map((bundle: DataBundle) => bundle.category)
       )
     ).filter(category => {
       // Filter out categories that have no plans
       return allBundles.some(bundle => bundle.category === category);
     });
+
+    // Include "Hot" if provider has Hot plans in Supabase
+    const hasHotPlans = ["MTN", "AIRTEL", "GLO", "9MOBILE"].includes(selectedProvider.name.toUpperCase());
+    if (hasHotPlans && !categoriesWithPlans.includes("Hot")) {
+      categoriesWithPlans.push("Hot");
+    }
 
     // Sort categories in a specific order
     const orderedCategories = [
@@ -469,15 +431,12 @@ const dataBundles = useMemo(() => {
       );
     }
 
-    if (activeCategory === "Hot") {
-      const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
-      if (plan && detectedNetwork && detectedNetwork.toUpperCase() !== plan.planType.toUpperCase()) {
-        return Alert.alert(
-          "Error",
-          `Phone number does not match the required network (${plan.planType}). Please use a ${plan.planType} number.`
-        );
-      }
-    } else if (detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
+    if (activeCategory === "Hot" && detectedNetwork && detectedNetwork.toUpperCase() !== selectedBundle.planType.toUpperCase()) {
+      return Alert.alert(
+        "Error",
+        `Phone number does not match the required network (${selectedBundle.planType}). Please use a ${selectedBundle.planType} number.`
+      );
+    } else if (activeCategory !== "Hot" && detectedNetwork && detectedNetwork.toUpperCase() !== selectedProvider.name.toUpperCase()) {
       return Alert.alert(
         "Error",
         `Phone number does not match provider (${selectedProvider.name})`
@@ -515,16 +474,13 @@ const dataBundles = useMemo(() => {
 
       let finalNetworkId = networkId;
       if (activeCategory === "Hot") {
-        const plan = HOT_PLANS.find(p => p.id === selectedBundle.id);
-        if (plan) {
-          const networkIds: { [key: string]: number } = {
-            MTN: 1,
-            GLO: 3,
-            '9MOBILE': 4,
-            AIRTEL: 2,
-          };
-          finalNetworkId = networkIds[plan.planType];
-        }
+        const networkIds: { [key: string]: number } = {
+          MTN: 1,
+          GLO: 3,
+          '9MOBILE': 4,
+          AIRTEL: 2,
+        };
+        finalNetworkId = networkIds[selectedBundle.planType];
       }
 
       setIsPurchaseModalOpen(false);

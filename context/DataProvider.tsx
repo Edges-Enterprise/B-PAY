@@ -39,16 +39,16 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 const SUPPORTED_PROVIDERS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
 
 const MTN_PRICE_ADJUSTMENTS: { [key: string]: { data: string; validity: string; targetPrice: number } } = {
-  "75.0MB_1day": { data: "75.0MB", validity: "1day", targetPrice: 80 },
-  "110.0MB_1day": { data: "110.0MB", validity: "1day", targetPrice: 99 },
-  "1.0GB_1day_Strong": { data: "1.0GB", validity: "1day (Strong)", targetPrice: 498 },
-  "1.5GB_2days": { data: "1.5GB", validity: "2days", targetPrice: 595 },
-  "2.5GB_2days": { data: "2.5GB", validity: "2days", targetPrice: 898 },
-  "3.2GB_2days": { data: "3.2GB", validity: "2days", targetPrice: 995 },
-  "2.0GB_30days": { data: "2.0GB", validity: "30days", targetPrice: 1490 },
-  "2.0GB_30_days": { data: "2.0GB", validity: "30 days", targetPrice: 1490 },
-  "1.5GB_7days": { data: "1.5GB", validity: "7days", targetPrice: 990 },
-  "1.0GB_7days": { data: "1.0GB", validity: "7days", targetPrice: 790 },
+  "75.0MB_1day": { data: "75.0MB", validity: "1 Day", targetPrice: 80 },
+  "110.0MB_1day": { data: "110.0MB", validity: "1 Day", targetPrice: 99 },
+  "1.0GB_1day_Strong": { data: "1.0GB", validity: "1 Day (Strong)", targetPrice: 498 },
+  "1.5GB_2days": { data: "1.5GB", validity: "2 Days", targetPrice: 595 },
+  "2.5GB_2days": { data: "2.5GB", validity: "2 Days", targetPrice: 898 },
+  "3.2GB_2days": { data: "3.2GB", validity: "2 Days", targetPrice: 995 },
+  "2.0GB_30days": { data: "2.0GB", validity: "30 Days", targetPrice: 1490 },
+  "2.0GB_30_days": { data: "2.0GB", validity: "30 Days", targetPrice: 1490 },
+  "1.5GB_7days": { data: "1.5GB", validity: "7 Days", targetPrice: 990 },
+  "1.0GB_7days": { data: "1.0GB", validity: "7 Days", targetPrice: 790 },
 };
 
 const normalizeData = (data: string): string => {
