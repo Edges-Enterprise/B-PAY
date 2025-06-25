@@ -10,12 +10,10 @@ import {
 	Animated,
 	Alert,
 	KeyboardAvoidingView,
-	Platform,
 	Switch,
 } from "react-native";
 import { router } from "expo-router";
 import { ScrollView } from "react-native-gesture-handler";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/context/supabase-provider";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -27,7 +25,6 @@ export default function SignUpScreen() {
 	const [showPassword, setShowPassword] = useState(false);
 	const [rememberMe, setRememberMe] = useState(false);
 	const [loading, setLoading] = useState(false);
-
 
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 

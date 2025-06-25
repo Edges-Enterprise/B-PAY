@@ -35,24 +35,6 @@ export default function SignInScreen() {
 		}
 	}, [user]);
 
-	// useEffect(() => {
-	// 	const loadSavedCredentials = async () => {
-	// 		try {
-	// 			const saved = await AsyncStorage.getItem("userCredentials");
-	// 			if (saved) {
-	// 				const { email, password } = JSON.parse(saved);
-	// 				setEmail(email);
-	// 				setPassword(password);
-	// 				setRememberMe(true);
-	// 			}
-	// 		} catch (error) {
-	// 			console.error("Failed to load saved credentials:", error);
-	// 		}
-	// 	};
-
-	// 	loadSavedCredentials();
-	// }, []);
-
 	// Update the loadSavedCredentials useEffect
 	useEffect(() => {
 		const loadRememberMePreference = async () => {
@@ -245,7 +227,6 @@ const styles = StyleSheet.create({
 		backgroundColor: "#333",
 		borderRadius: 8,
 		marginBottom: 20,
-		
 	},
 	input: {
 		height: 50,
