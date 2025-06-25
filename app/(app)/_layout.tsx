@@ -95,7 +95,7 @@ function AppStack() {
 					options={{ headerTitle: "Transaction Receipt" }}
 				/>
 				<Stack.Screen name="fund" options={{ headerShown: false }} />
-				<Stack.Screen name="notifications" options={{ headerShown: false }} />
+				<Stack.Screen name="notifications" options={{ headerTitle: "Notifications 🔔"}} />
 
 				<Stack.Screen
 					name="electricity"
