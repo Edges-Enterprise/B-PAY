@@ -325,12 +325,12 @@ export default function NotificationsPage() {
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
-      </View>
+      </View> */}
     <FlatList
   data={notifications}
   renderItem={renderNotification}
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     paddingHorizontal: 16,
-    paddingTop: (StatusBar.currentHeight || 0) + 16,
+    // paddingTop: (StatusBar.currentHeight || 0) + 16,
   },
   header: {
     flexDirection: 'row',
