@@ -17,7 +17,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { colors } from "@/constants/colors";
 import { fonts } from "@/constants/fonts";
-import { useTheme } from "@/context/theme-context";
 
 const { width, height } = Dimensions.get("window");
 
