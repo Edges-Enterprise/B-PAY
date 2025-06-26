@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { MotiView } from "moti";
-import { supabase } from "../config/supabase"; // Adjust path to your Supabase client
+import { supabase } from "../config/supabase";
 
 interface DataBundle {
   id: number;
@@ -90,9 +90,34 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
           planType: item.plan_type,
         }));
 
+        // Log warnings for inconsistent validity vs. description
+        formattedData.forEach(bundle => {
+          if (bundle.description && bundle.validity !== "Not Specified") {
+            const descMatch = bundle.description.match(/(\d+\s*(Days|Day))/i);
+            const descValidity = descMatch ? descMatch[0] : null;
+            if (descValidity && descValidity !== bundle.validity) {
+              console.warn(`Inconsistent validity for plan ID ${bundle.id}: validity=${bundle.validity}, description=${bundle.description}`);
+            }
+          }
+        });
+
         console.log("Fetched hot deals from Supabase:", {
           count: formattedData.length,
-          sample: formattedData.slice(0, 5),
+          providers: [...new Set(formattedData.map(b => b.planType))],
+          byProvider: {
+            MTN: formattedData.filter(b => b.planType === "MTN").length,
+            AIRTEL: formattedData.filter(b => b.planType === "AIRTEL").length,
+            GLO: formattedData.filter(b => b.planType === "GLO").length,
+            "9MOBILE": formattedData.filter(b => b.planType === "9MOBILE").length,
+          },
+          plans: formattedData.map(b => ({
+            id: b.id,
+            data: b.data,
+            price: b.price,
+            validity: b.validity,
+            planType: b.planType,
+            description: b.description,
+          })),
         });
 
         setHotDeals(formattedData);
@@ -105,7 +130,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     };
 
     fetchHotDeals();
-  }, []); // Run once on mount; can add providerName as dependency if filtering by provider is needed
+  }, []);
 
   const formatNumberWithCommas = (number: number): string => {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -117,8 +142,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
       return [];
     }
 
-    // Fallback providerName from dataBundles if empty
-    const fallbackProviderName = providerName || dataBundles[0]?.planType?.toUpperCase() || "";
+    const fallbackProviderName = providerName?.toUpperCase() || dataBundles[0]?.planType?.toUpperCase() || "";
 
     console.log("Input dataBundles:", {
       count: dataBundles.length,
@@ -152,12 +176,11 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
         return [];
       }
       filteredBundles = hotDeals
-        .filter((bundle) => bundle.planType.toUpperCase() === fallbackProviderName)
+        .filter((bundle) => bundle.category === "Hot" && bundle.planType.toUpperCase() === fallbackProviderName)
         .sort((a, b) => a.price - b.price);
     } else {
       filteredBundles = dataBundles
         .filter((bundle) => {
-          // Match category exactly or match planType for corporate/SME plans
           const categoryMatch = 
             bundle.category === activeCategory ||
             (activeCategory === "CORPORATE_GIFTING" && bundle.planType === "CORPORATE_GIFTING") ||
@@ -177,12 +200,14 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
 
     console.log(`Filtered bundles for ${activeCategory}/${activePlanType || '-'} (${fallbackProviderName || 'undefined'}):`, {
       count: filteredBundles.length,
-      sample: filteredBundles.slice(0, 5).map(b => ({
+      plans: filteredBundles.map(b => ({
         id: b.id,
         data: b.data,
         planType: b.planType,
         category: b.category,
         price: b.price,
+        validity: b.validity,
+        description: b.description,
       })),
     });
 
@@ -218,9 +243,12 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     const handlePurchase = () => {
       console.log("Selected bundle:", {
         id: bundle.id,
-        data: b.data,
+        data: bundle.data,
         planType: bundle.planType,
         category: bundle.category,
+        price: bundle.price,
+        validity: bundle.validity,
+        description: bundle.description,
         providerName,
       });
       setSelectedBundle(bundle);
@@ -245,6 +273,9 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
           )}
           {bundle.validity === "Not Specified" && (
             <Text style={styles.warningPreviewText}>Note: Plan duration unclear. Check with provider.</Text>
+          )}
+          {bundle.description && bundle.description.includes("30 days") && bundle.validity === "7 Days" && (
+            <Text style={styles.warningPreviewText}>Warning: Validity (7 Days) may differ from description (30 days).</Text>
           )}
           <View style={styles.bundleActions}>
             <MotiView
@@ -314,7 +345,7 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
       ) : (
         <View style={styles.bundleListContainer}>
           <Text style={styles.categoryHint}>
-            {searchTerm ? "Search Results:" : `Plans in ${activeCategory} (${providerName || "unknown provider"}):`}
+            {searchTerm ? "Search Results:" : `Hot Plans for ${providerName || "unknown provider"}:`}
           </Text>
           <View style={styles.bundleWrapper}>
             {getCategoryBundles.map((bundle) => (

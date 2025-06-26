@@ -149,6 +149,7 @@ const ConfirmationScreen: React.FC = () => {
     balance,
     networkId,
     planId,
+    purchaseType, // New param to distinguish between data and airtime
   } = useLocalSearchParams<{
     bundle: string;
     provider: string;
@@ -159,6 +160,7 @@ const ConfirmationScreen: React.FC = () => {
     balance: string;
     networkId: string;
     planId: string;
+    purchaseType: 'data' | 'airtime';
   }>();
 
   const [selectedBundle, setSelectedBundle] = useState<Bundle>(JSON.parse(bundle));
@@ -182,7 +184,7 @@ const ConfirmationScreen: React.FC = () => {
 
   // Synchronize parsedNetworkId with selectedBundle.planType for Hot plans
   useEffect(() => {
-    if (selectedBundle.category === 'Hot' && selectedBundle.planType) {
+    if (purchaseType === 'data' && selectedBundle.category === 'Hot' && selectedBundle.planType) {
       const networkIds: { [key: string]: number } = {
         MTN: 1,
         GLO: 3,
@@ -202,7 +204,7 @@ const ConfirmationScreen: React.FC = () => {
         setSelectedProvider({ ...selectedProvider, name: selectedBundle.planType, id: expectedNetworkId });
       }
     }
-  }, [selectedBundle, parsedNetworkId, selectedProvider]);
+  }, [selectedBundle, parsedNetworkId, selectedProvider, purchaseType]);
 
   // Fetch user name
   useEffect(() => {
@@ -251,8 +253,9 @@ const ConfirmationScreen: React.FC = () => {
       balance: balanceValue,
       networkId: parsedNetworkId,
       planId: parsedPlanId,
+      purchaseType,
     });
-  }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId]);
+  }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId, purchaseType]);
 
   // Fetch wallet balance and set up real-time subscription
   useEffect(() => {
@@ -378,20 +381,24 @@ const ConfirmationScreen: React.FC = () => {
       }
 
       // Only update if the detected provider matches the selected plan's planType for Hot plans
-      if (selectedBundle.category === 'Hot' && selectedBundle.planType && selectedBundle.planType === detectedProvider) {
+      if (purchaseType === 'data' && selectedBundle.category === 'Hot' && selectedBundle.planType && selectedBundle.planType === detectedProvider) {
         setNetworkProvider(detectedProvider);
         setParsedNetworkId(detectedNetworkId);
         setSelectedProvider({ ...selectedProvider, name: detectedProvider, id: detectedNetworkId });
-      } else if (selectedBundle.category === 'Hot' && selectedBundle.planType) {
+      } else if (purchaseType === 'data' && selectedBundle.category === 'Hot' && selectedBundle.planType) {
         console.log('Mobile number prefix does not match planType:', {
           prefix,
           detectedProvider,
           planType: selectedBundle.planType,
           bundleId: selectedBundle.id,
         });
+      } else {
+        setNetworkProvider(detectedProvider);
+        setParsedNetworkId(detectedNetworkId);
+        setSelectedProvider({ ...selectedProvider, name: detectedProvider, id: detectedNetworkId });
       }
     },
-    [selectedProvider, parsedNetworkId, selectedBundle]
+    [selectedProvider, parsedNetworkId, selectedBundle, purchaseType]
   );
 
   useEffect(() => {
@@ -498,6 +505,7 @@ const ConfirmationScreen: React.FC = () => {
         category: selectedBundle.category,
         planType: selectedBundle.planType,
         bundle: selectedBundle,
+        purchaseType,
       });
 
       if (currentBalance < basePrice) {
@@ -522,130 +530,217 @@ const ConfirmationScreen: React.FC = () => {
 
       setBalanceValue(newBalance);
 
-      // Check if plan is a Hot plan
-      const isHotPlan = selectedBundle.category === 'Hot';
-      console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
-
       let apiResponse: Response;
       let responseText: string;
 
-      if (isHotPlan) {
-        // Validate Hot Plan and Network ID
-        if (!selectedBundle.planType || !validateHotPlan(parsedNetworkId, selectedBundle.planType)) {
-          const { error: refundError } = await supabase
-            .from('wallets')
-            .update({ balance: currentBalance })
-            .eq('user_email', userEmail);
+      if (purchaseType === 'data') {
+        // Check if plan is a Hot plan
+        const isHotPlan = selectedBundle.category === 'Hot';
+        console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
 
-          if (refundError) {
-            console.error('Error refunding wallet balance:', refundError);
-            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+        if (isHotPlan) {
+          // Validate Hot Plan and Network ID
+          if (!selectedBundle.planType || !validateHotPlan(parsedNetworkId, selectedBundle.planType)) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            Alert.alert(
+              'Error',
+              `Invalid network selected for the plan. Please select a ${selectedBundle.planType} network for the ${selectedBundle.data} plan.`
+            );
+            return;
           }
 
-          setBalanceValue(currentBalance);
-          setTransactionModalVisible(false);
-          setErrorModalVisible(true);
-          Alert.alert(
-            'Error',
-            `Invalid network selected for the plan. Please select a ${selectedBundle.planType} network for the ${selectedBundle.data} plan.`
-          );
-          return;
-        }
+          // Use Lizzysub API for Hot plans
+          const requestBody = {
+            network: parsedNetworkId,
+            phone: editableMobileNumber,
+            data_plan: selectedBundle.id,
+            bypass: false,
+            'request-id': `Data_${referenceId}`,
+          };
 
-        // Use Lizzysub API for all Hot plans
-        const requestBody = {
-          network: parsedNetworkId,
-          phone: editableMobileNumber,
-          data_plan: selectedBundle.id,
-          bypass: false,
-          'request-id': `Data_${referenceId}`,
-        };
+          console.log('Lizzysub API request:', requestBody);
 
-        console.log('Lizzysub API request:', requestBody);
-
-        let token;
-        try {
-          token = await getLizzysubToken(userEmail);
-        } catch (error: any) {
-          if (error.message.includes('Invalid AccessToken')) {
-            await invalidateToken(userEmail);
+          let token;
+          try {
             token = await getLizzysubToken(userEmail);
-          } else {
-            throw error;
+          } catch (error: any) {
+            if (error.message.includes('Invalid AccessToken')) {
+              await invalidateToken(userEmail);
+              token = await getLizzysubToken(userEmail);
+            } else {
+              throw error;
+            }
+          }
+
+          apiResponse = await fetch('https://lizzysub.com/api/data', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Token ${token}`,
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          responseText = await apiResponse.text();
+          console.log('Lizzysub API response:', {
+            status: apiResponse.status,
+            headers: Object.fromEntries(apiResponse.headers.entries()),
+            responseText: responseText.slice(0, 500),
+          });
+
+          let responseData;
+          try {
+            responseData = JSON.parse(responseText);
+          } catch (parseError: any) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+            throw new Error(`Failed to parse Lizzysub API response: ${parseError.message}`);
+          }
+
+          if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+
+            if (apiResponse.status === 400 && responseText.includes('insufficient balance')) {
+              setTransactionModalVisible(false);
+              setErrorModalVisible(true);
+              Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
+              return;
+            }
+
+            if (apiResponse.status === 403 && responseText.includes('Invalid AccessToken')) {
+              await invalidateToken(userEmail);
+              throw new Error('Invalid Lizzysub token. A new token will be generated on the next attempt.');
+            }
+
+            if (responseText.includes('Invalid Data Plan ID or Network')) {
+              setTransactionModalVisible(false);
+              setErrorModalVisible(true);
+              Alert.alert('Error', 'Invalid Data Plan ID or Network. Please select a valid plan and network.');
+              return;
+            }
+
+            const errorMessage = responseData.message || responseText.slice(0, 100);
+            throw new Error(`Lizzysub API request failed: ${errorMessage}. Please verify Lizzysub credentials and API access.`);
+          }
+        } else {
+          // Use Ebenkdata API for non-Hot data plans
+          const ebenkUrl = process.env.EXPO_PUBLIC_EBENK_URL || 'https://ebenkdata.com';
+          const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
+          if (!ebenkToken) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+            throw new Error('Ebenkdata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
+          }
+
+          const requestBody = {
+            network: parsedNetworkId,
+            mobile_number: editableMobileNumber,
+            plan: parsedPlanId,
+            Ported_number: true,
+          };
+
+          console.log('Ebenkdata API request:', requestBody);
+
+          apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Token ${ebenkToken}`,
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          responseText = await apiResponse.text();
+          console.log('Ebenkdata API response:', {
+            status: apiResponse.status,
+            headers: Object.fromEntries(apiResponse.headers.entries()),
+            responseText: responseText.slice(0, 500),
+          });
+
+          let responseData;
+          try {
+            responseData = JSON.parse(responseText);
+          } catch (parseError: any) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+            throw new Error(`Failed to parse Ebenkdata API response: ${parseError.message}`);
+          }
+
+          if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+            const { error: refundError } = await supabase
+              .from('wallets')
+              .update({ balance: currentBalance })
+              .eq('user_email', userEmail);
+
+            if (refundError) {
+              console.error('Error refunding wallet balance:', refundError);
+              throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+            }
+
+            setBalanceValue(currentBalance);
+
+            if (apiResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
+              setTransactionModalVisible(false);
+              setErrorModalVisible(true);
+              Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
+              return;
+            }
+
+            const errorMessage = responseData.message || responseText.slice(0, 100);
+            throw new Error(`Ebenkdata API request failed: ${errorMessage}`);
           }
         }
-
-        apiResponse = await fetch('https://lizzysub.com/api/data', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Token ${token}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        responseText = await apiResponse.text();
-        console.log('Lizzysub API response:', {
-          status: apiResponse.status,
-          headers: Object.fromEntries(apiResponse.headers.entries()),
-          responseText: responseText.slice(0, 500),
-        });
-
-        let responseData;
-        try {
-          responseData = JSON.parse(responseText);
-        } catch (parseError: any) {
-          const { error: refundError } = await supabase
-            .from('wallets')
-            .update({ balance: currentBalance })
-            .eq('user_email', userEmail);
-
-          if (refundError) {
-            console.error('Error refunding wallet balance:', refundError);
-            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
-          }
-
-          setBalanceValue(currentBalance);
-          throw new Error(`Failed to parse Lizzysub API response: ${parseError.message}`);
-        }
-
-        if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
-          const { error: refundError } = await supabase
-            .from('wallets')
-            .update({ balance: currentBalance })
-            .eq('user_email', userEmail);
-
-          if (refundError) {
-            console.error('Error refunding wallet balance:', refundError);
-            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
-          }
-
-          setBalanceValue(currentBalance);
-
-          if (apiResponse.status === 400 && responseText.includes('insufficient balance')) {
-            setTransactionModalVisible(false);
-            setErrorModalVisible(true);
-            Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
-            return;
-          }
-
-          if (apiResponse.status === 403 && responseText.includes('Invalid AccessToken')) {
-            await invalidateToken(userEmail);
-            throw new Error('Invalid Lizzysub token. A new token will be generated on the next attempt.');
-          }
-
-          if (responseText.includes('Invalid Data Plan ID or Network')) {
-            setTransactionModalVisible(false);
-            setErrorModalVisible(true);
-            Alert.alert('Error', 'Invalid Data Plan ID or Network. Please select a valid plan and network.');
-            return;
-          }
-
-          const errorMessage = responseData.message || responseText.slice(0, 100);
-          throw new Error(`Lizzysub API request failed: ${errorMessage}. Please verify Lizzysub credentials and API access.`);
-        }
-      } else {
-        // Use Ebenkdata API for non-Hot plans
+      } else if (purchaseType === 'airtime') {
+        // Use Ebenkdata API for airtime purchases
         const ebenkUrl = process.env.EXPO_PUBLIC_EBENK_URL || 'https://ebenkdata.com';
         const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
         if (!ebenkToken) {
@@ -666,13 +761,13 @@ const ConfirmationScreen: React.FC = () => {
         const requestBody = {
           network: parsedNetworkId,
           mobile_number: editableMobileNumber,
-          plan: parsedPlanId,
+          amount: basePrice,
           Ported_number: true,
         };
 
-        console.log('Ebenkdata API request:', requestBody);
+        console.log('Ebenkdata Airtime API request:', requestBody);
 
-        apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
+        apiResponse = await fetch(`${ebenkUrl}/api/airtime/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -682,7 +777,7 @@ const ConfirmationScreen: React.FC = () => {
         });
 
         responseText = await apiResponse.text();
-        console.log('Ebenkdata API response:', {
+        console.log('Ebenkdata Airtime API response:', {
           status: apiResponse.status,
           headers: Object.fromEntries(apiResponse.headers.entries()),
           responseText: responseText.slice(0, 500),
@@ -703,7 +798,7 @@ const ConfirmationScreen: React.FC = () => {
           }
 
           setBalanceValue(currentBalance);
-          throw new Error(`Failed to parse Ebenkdata API response: ${parseError.message}`);
+          throw new Error(`Failed to parse Ebenkdata Airtime API response: ${parseError.message}`);
         }
 
         if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
@@ -719,7 +814,7 @@ const ConfirmationScreen: React.FC = () => {
 
           setBalanceValue(currentBalance);
 
-          if (apiResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
+          if (apiResponse.status === 400 && responseText.includes("You can't purchase this airtime due to insufficient balance")) {
             setTransactionModalVisible(false);
             setErrorModalVisible(true);
             Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
@@ -727,20 +822,36 @@ const ConfirmationScreen: React.FC = () => {
           }
 
           const errorMessage = responseData.message || responseText.slice(0, 100);
-          throw new Error(`Ebenkdata API request failed: ${errorMessage}`);
+          throw new Error(`Ebenkdata Airtime API request failed: ${errorMessage}`);
         }
       }
 
       const actualCost = basePrice;
 
-      // Record transaction only if API call is successful
+      // Record transaction with specific metadata based on purchase type
       const transactionData = {
         user_email: userEmail,
         amount: -basePrice,
         reference: referenceId,
         status: 'success',
         env: 'live',
-        metadata: {
+        metadata: purchaseType === 'data' ? {
+          reference: referenceId,
+          plan: selectedBundle.data || `Plan ID ${parsedPlanId}`,
+          provider: selectedProvider.name,
+          amount: actualCost,
+          phone_number: editableMobileNumber,
+          validity: selectedBundle.validity || 'N/A',
+          payment_date: new Date().toLocaleString([], { timeZone: 'Africa/Lagos' }),
+          payment_method: 'Wallet',
+        } : purchaseType === 'airtime' ? {
+          reference: referenceId,
+          provider: selectedProvider.name,
+          amount: actualCost,
+          phone_number: editableMobileNumber,
+          payment_date: new Date().toLocaleString([], { timeZone: 'Africa/Lagos' }),
+          payment_method: 'Wallet',
+        } : {
           fees: {
             vat: 10,
             total_fee: 50,
@@ -784,7 +895,9 @@ const ConfirmationScreen: React.FC = () => {
 
       Alert.alert(
         'Success',
-        `Successfully purchased ${selectedBundle.data || `Plan ID ${parsedPlanId}`} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${editableMobileNumber}.`,
+        purchaseType === 'data'
+          ? `Successfully purchased ${selectedBundle.data || `Plan ID ${parsedPlanId}`} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${editableMobileNumber}.`
+          : `Successfully purchased ₦${formatNumberWithCommas(actualCost)} airtime on ${selectedProvider.name}. Sent to ${editableMobileNumber}.`,
       );
 
       router.push({
@@ -792,16 +905,16 @@ const ConfirmationScreen: React.FC = () => {
         params: {
           id: referenceId,
           provider: selectedProvider.name,
-          data: selectedBundle.data || `Plan ID ${parsedPlanId}`,
+          data: purchaseType === 'data' ? (selectedBundle.data || `Plan ID ${parsedPlanId}`) : `Airtime ₦${actualCost}`,
           price: actualCost.toString(),
           date: new Date().toISOString(),
           status: 'Success',
           phoneNumber: editableMobileNumber,
           reference: referenceId,
           metadata: JSON.stringify({
-            validity: selectedBundle.validity || 'N/A',
+            validity: purchaseType === 'data' ? (selectedBundle.validity || 'N/A') : undefined,
             payment_method: 'Wallet',
-            type: selectedBundle.planType || 'data',
+            type: purchaseType,
             actual_cost: actualCost,
           }),
         },
@@ -833,7 +946,7 @@ const ConfirmationScreen: React.FC = () => {
     setIsEditingMobile(!isEditingMobile);
   };
 
-  const purchaseDescription = () => selectedBundle.data || `Plan ID ${parsedPlanId}`;
+  const purchaseDescription = () => purchaseType === 'data' ? (selectedBundle.data || `Plan ID ${parsedPlanId}`) : `Airtime ₦${(selectedBundle.price || selectedBundle.amount) ?? 0}`;
 
   // Handle logout or session expiry
   useEffect(() => {

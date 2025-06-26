@@ -1,5 +1,5 @@
-import React, { useState, useContext } from "react";
-import { View, Text, Pressable, StyleSheet, StatusBar, ActivityIndicator, Alert } from "react-native";
+import React, { useState, useContext, useEffect } from "react";
+import { View, Text, Pressable, StyleSheet, StatusBar, ActivityIndicator, Alert, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useAuth } from "@/context/supabase-provider";
@@ -118,6 +118,52 @@ export default function HomeScreen() {
     isLoading: isNewNotificationCountLoading,
   } = useNewNotificationCount();
 
+  // Animation states
+  const blinkOpacity = new Animated.Value(1);
+  const popScale = new Animated.Value(1);
+
+  useEffect(() => {
+    // Blinking animation
+    const blink = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkOpacity, {
+          toValue: 0.4,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkOpacity, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    // Popping animation
+    const pop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(popScale, {
+          toValue: 1.1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(popScale, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    blink.start();
+    pop.start();
+
+    return () => {
+      blink.stop();
+      pop.stop();
+    };
+  }, []);
+
   useNotificationSubscription();
 
   const popularPlans = purchaseHistory.map((p) => {
@@ -162,7 +208,7 @@ export default function HomeScreen() {
   };
 
   const handleCreatePin = async () => {
-    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin > 6) {
       Alert.alert("Error", "PIN must be between 4 and 6 digits.");
       return;
     }
@@ -302,6 +348,23 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.headerSubtitle}>Your dashboard is here 🔥</Text>
 
+        {/* Flash Sale Banner */}
+        <Animated.View
+          style={[
+            styles.flashSaleBanner,
+            {
+              opacity: blinkOpacity,
+              transform: [{ scale: popScale }],
+            },
+          ]}
+        >
+          <Pressable onPress={() => router.push("/commingsoon")}>
+            <Text style={styles.flashSaleText}>
+              ⚡ FLASH SALE! Up to 50% OFF Data Plans! ⚡
+            </Text>
+          </Pressable>
+        </Animated.View>
+
         <View style={styles.quickActionsSection}>
           <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
           <View style={styles.quickActions}>
@@ -410,7 +473,25 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: "#888",
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  flashSaleBanner: {
+    backgroundColor: "#FF4500",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: "center",
+    shadowColor: "#FF4500",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  flashSaleText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
   },
   sectionTitle: {
     fontSize: 18,

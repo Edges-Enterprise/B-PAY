@@ -39,6 +39,7 @@ interface HistoryItem {
 			net_amount: number;
 		};
 		provider?: string;
+		plan?: string;
 		purchase?: string;
 		validity?: string;
 		actual_cost?: number;
@@ -140,16 +141,15 @@ export default function HistoryScreen() {
 					`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`,
 				);
 
-				// Helper function to parse provider from purchase string
-				const parseProviderFromPurchase = (
-					purchase: string,
+				const parseProviderFromString = (
+					input: string,
 				): { provider: string; data: string } | null => {
-					const purchaseLower = purchase.toLowerCase();
+					const inputLower = input.toLowerCase();
 					const matchedProvider = knownProviders.find((p) =>
-						purchaseLower.includes(p),
+						inputLower.includes(p),
 					);
 					if (matchedProvider) {
-						const cleanedData = purchase
+						const cleanedData = input
 							.replace(new RegExp(`\\b${matchedProvider}\\b`, "i"), "")
 							.replace(/\s+/g, " ")
 							.trim();
@@ -167,10 +167,13 @@ export default function HistoryScreen() {
 
 				if (transactionType === "data") {
 					provider = tx.metadata?.provider || "Unknown Provider";
-					data = tx.metadata?.purchase || "Data Purchase";
+					data = tx.metadata?.plan || tx.metadata?.purchase || "Data Purchase";
 					phoneNumber = tx.metadata?.phone_number || "N/A";
-					if (provider === "Unknown Provider" && tx.metadata?.purchase) {
-						const parsed = parseProviderFromPurchase(tx.metadata.purchase);
+					if (provider === "Unknown Provider") {
+						const parsed =
+							(tx.metadata?.plan && parseProviderFromString(tx.metadata.plan)) ||
+							(tx.metadata?.purchase &&
+								parseProviderFromString(tx.metadata.purchase));
 						if (parsed) {
 							provider = parsed.provider;
 							data = parsed.data;
@@ -182,12 +185,16 @@ export default function HistoryScreen() {
 					phoneNumber = tx.metadata?.phone_number || "N/A";
 				} else {
 					data =
+						tx.metadata?.plan ||
 						tx.metadata?.purchase ||
 						transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
 					provider = tx.metadata?.provider || "Unknown Provider";
 					phoneNumber = tx.metadata?.phone_number || "N/A";
-					if (provider === "Unknown Provider" && tx.metadata?.purchase) {
-						const parsed = parseProviderFromPurchase(tx.metadata.purchase);
+					if (provider === "Unknown Provider") {
+						const parsed =
+							(tx.metadata?.plan && parseProviderFromString(tx.metadata.plan)) ||
+							(tx.metadata?.purchase &&
+								parseProviderFromString(tx.metadata.purchase));
 						if (parsed) {
 							provider = parsed.provider;
 							data = parsed.data;
@@ -195,7 +202,6 @@ export default function HistoryScreen() {
 					}
 				}
 
-				// Normalize status with proper capitalization
 				const normalizedStatus = (tx.status || "unknown").toLowerCase();
 				const status = ["success", "failed", "pending"].includes(
 					normalizedStatus,
@@ -271,7 +277,14 @@ export default function HistoryScreen() {
 			type,
 			data,
 		} = selectedTransaction;
-		const fees = metadata.fees || {};
+		const fees = metadata.fees || {
+			transfer_fee: 0,
+			wallet_management_fee: 0,
+			api_network_fee: 0,
+			vat: 0,
+			total_fee: 0,
+			net_amount: 0,
+		};
 
 		return (
 			<Modal
@@ -299,26 +312,23 @@ export default function HistoryScreen() {
 							{type.toLowerCase() === "deposit" ? (
 								<>
 									<Text style={styles.receiptField}>
-										Amount Received: {formatAmount(metadata.gross_amount)}
+										Amount Received: {formatAmount(metadata.gross_amount || price)}
 									</Text>
 									<Text style={styles.receiptField}>Fees:</Text>
 									<Text style={styles.receiptSubField}>
-										- Transfer Fee: Transfer Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.02 || 0)}
+										- Transfer Fee: {formatAmount(fees.transfer_fee)}
 									</Text>
 									<Text style={styles.receiptSubField}>
-										- Wallet Management Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.04 || 0)}
+										- Wallet Management Fee: {formatAmount(fees.wallet_management_fee)}
 									</Text>
 									<Text style={styles.receiptSubField}>
-										- API & Network Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.02 || 0)}
+										- API & Network Fee: {formatAmount(fees.api_network_fee)}
 									</Text>
 									<Text style={styles.receiptSubField}>
-										- VAT: {formatAmount(metadata.gross_amount * 0.02 || 0)}
+										- VAT: {formatAmount(fees.vat)}
 									</Text>
 									<Text style={styles.receiptField}>
-										Total Fees: {formatAmount(metadata?.fees || 0)}
+										Total Fees: {formatAmount(fees.total_fee)}
 									</Text>
 									<Text style={styles.receiptField}>
 										Amount Credited: {formatAmount(price)}

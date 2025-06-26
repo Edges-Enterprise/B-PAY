@@ -1,65 +1,70 @@
 {
-	"expo": {
-		"name": "Edges Network",
-		"slug": "edges-network",
-		"scheme": "edges-network",
-		"version": "1.0.0",
-		"orientation": "portrait",
-		"icon": "./assets/images/icon.png",
-		"userInterfaceStyle": "automatic",
-		"assetBundlePatterns": ["**/*"],
-		"newArchEnabled": true,
-		"ios": {
-			"bundleIdentifier": "com.edgesnetwork.app",
-			"supportsTablet": true,
-			"config": {
-				"usesNonExemptEncryption": false
-			},
-			"splash": {
-				"image": "./assets/images/splash.png",
-				"resizeMode": "cover",
-				"backgroundColor": "#ffffff",
-				"dark": {
-					"backgroundColor": "#000000",
-					"resizeMode": "cover",
-					"image": "./assets/images/splash-dark.png"
-				}
-			}
-		},
-		"android": {
-			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/adaptive-icon.png"
-			},
-			"splash": {
-				"image": "./assets/images/splash.png",
-				"resizeMode": "cover",
-				"backgroundColor": "#ffffff",
-				"dark": {
-					"backgroundColor": "#000000",
-					"resizeMode": "cover",
-					"image": "./assets/images/splash-dark.png"
-				}
-			},
-			"notification": {
-				"icon": "./assets/images/notification-icon.png",
-				"color": "#8B4513"
-			},
-			"jsEngine": "hermes",
-			"enableProguardInReleaseBuilds": true,
-			"package": "com.edgesnetwork.app",
-			"googleServicesFile": "./google-services.json"
-		},
-		"experiments": {
-			"typedRoutes": true
-		},
-		"plugins": ["expo-router", "expo-secure-store"],
-		"extra": {
-			"router": {
-				"origin": false
-			},
-			"eas": {
-				"projectId": "70252a3a-174d-4c85-96a7-cabb4b2ba613"
-			}
-		}
-	}
+  "expo": {
+    "name": "Edges Network",
+    "slug": "edges-network",
+    "scheme": "edges-network",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.edgesnetwork.app",
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#000000",
+          "resizeMode": "cover",
+          "image": "./assets/images/splash-dark.png"
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png"
+      },
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#000000",
+          "resizeMode": "cover",
+          "image": "./assets/images/splash-dark.png"
+        }
+      },
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#8B4513"
+      },
+      "jsEngine": "hermes",
+      "enableProguardInReleaseBuilds": true,
+      "package": "com.edgesnetwork.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "f9b82654-b0c2-4ddd-a6e2-c46dd6875750"
+      }
+    }
+  }
 }

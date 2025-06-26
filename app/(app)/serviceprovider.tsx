@@ -407,6 +407,7 @@ const BuyDataScreen: React.FC = () => {
       userEmail,
       walletBalance,
       detectedNetwork,
+      purchaseType: 'data', // Log to confirm purchaseType
     });
 
     if (!selectedBundle) return Alert.alert("Error", "No plan selected");
@@ -505,7 +506,20 @@ const BuyDataScreen: React.FC = () => {
           balance: walletBalance.toString(),
           networkId: finalNetworkId.toString(),
           planId: selectedBundle.id.toString(),
+          purchaseType: 'data', // Explicitly set purchaseType for data purchases
         },
+      });
+      console.log('Navigating to ConfirmationScreen with params:', {
+        bundle: selectedBundle,
+        provider: selectedProvider,
+        phoneNumber: phoneNumberInput,
+        transactionPin: '****',
+        userEmail,
+        referenceId: reference,
+        balance: walletBalance,
+        networkId: finalNetworkId,
+        planId: selectedBundle.id,
+        purchaseType: 'data',
       });
     } catch (error) {
       console.error("handleProceed error:", error);

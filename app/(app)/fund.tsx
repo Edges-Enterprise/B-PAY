@@ -36,7 +36,6 @@ const FundScreen = () => {
   const [showVerifyButton, setShowVerifyButton] = useState(false);
 
   useEffect(() => {
-    // Debug environment variables
     const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
     console.log('Loaded Paystack Public Key:', paystackKey);
     console.log('Environment variables:', {
@@ -45,7 +44,6 @@ const FundScreen = () => {
       SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Set (eyJ...)' : 'Missing',
     });
 
-    // Validate Paystack public key format
     if (!paystackKey) {
       Alert.alert('Configuration Error', 'Paystack public key is missing. Please contact support.');
       setIsUserLoading(false);
@@ -59,7 +57,6 @@ const FundScreen = () => {
       return;
     }
 
-    // Validate Supabase configuration
     if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
       Alert.alert('Configuration Error', 'Supabase configuration missing. Please contact support.');
       setIsUserLoading(false);
@@ -70,7 +67,6 @@ const FundScreen = () => {
   useEffect(() => {
     console.log('showWebView:', showWebView);
     if (showWebView && paymentReference) {
-      // Fallback verification after 60 seconds if no WebView message
       const fallbackTimeout = setTimeout(async () => {
         console.log('Fallback verification triggered:', paymentReference);
         setShowVerifyButton(true);
@@ -127,7 +123,6 @@ const FundScreen = () => {
       console.log('Wallet balance:', wallet?.balance || 0);
     } catch (error) {
       console.error('fetchWalletBalance error:', { message: error.message });
-      // Don't show error alert for wallet balance fetch - just log it
     }
   };
 
@@ -280,9 +275,8 @@ const FundScreen = () => {
     }
   };
 
-  const handleTopUp = debounce(
-    async () => {
-      console.log('handleTopUp:', { amount, userEmail, userName, userId });
+  const handleTopUp = debounce(async () => {
+      console.log('handleTopUp:', { amount, user: userEmail, userName, userId });
       const parsedAmount = parseFloat(amount);
       
       // Validation
@@ -320,7 +314,7 @@ const FundScreen = () => {
       console.log('New payment reference:', newReference);
 
       try {
-        setError(''); // Clear any previous errors
+        setError('');
         console.log('Inserting transaction record');
         
         const { error: txInsertError } = await supabase
@@ -404,7 +398,7 @@ const FundScreen = () => {
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>Paystack Payment</title>
         <script src="https://js.paystack.co/v1/inline.js"></script>
         <style>
@@ -416,30 +410,28 @@ const FundScreen = () => {
             background: #1A2526;
             font-family: Arial, sans-serif;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
             color: white;
+            overflow: hidden;
           }
           .container {
-            margin-top: 40px;
+            width: 100%;
+            height: 100%;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            width: ${width}px;
-            max-width: 100%;
-            padding: 20px;
+            align-items: center;
           }
           .loading {
             font-size: 18px;
             margin-bottom: 20px;
           }
           #paystackIframe {
-            width: ${width * 0.9}px;
-            max-width: 500px;
-            height: ${height * 0.6}px;
+            width: 100%;
+            height: 100%;
             border: none;
+            border-radius: 0;
           }
         </style>
       </head>
@@ -462,7 +454,7 @@ const FundScreen = () => {
               email: '${userEmail}',
               amount: ${parseFloat(amount) * 100},
               currency: 'NGN',
-              channels: ['card', 'bank','bank_transfer', 'ussd', 'qr'],
+              channels: ['card', 'bank', 'bank_transfer', 'ussd', 'qr'],
               ref: '${reference}',
               metadata: {
                 custom_fields: [
@@ -485,7 +477,6 @@ const FundScreen = () => {
               }
             });
             
-            // Initialize payment
             handler.openIframe();
             document.querySelector('.loading').textContent = 'Complete your payment...';
             
@@ -588,7 +579,7 @@ const FundScreen = () => {
       Alert.alert('Transaction Error', `Transaction failed: ${error.message || 'Unknown error'}`);
       setShowWebView(false);
       setIsLoading(false);
-      setShowVerifyButton(true); // Allow manual verification on error
+      setShowVerifyButton(true);
     }
   };
 
@@ -597,7 +588,7 @@ const FundScreen = () => {
   if (isUserLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centeredContainer}>
           <ActivityIndicator size="large" color="#00FF00" />
           <Text style={styles.loadingText}>Loading user data...</Text>
         </View>
@@ -607,7 +598,8 @@ const FundScreen = () => {
 
   if (showWebView) {
     return (
-      <SafeAreaView style={styles.webViewContainer}>
+      <View style={styles.webViewContainer}>
+        <StatusBar style="light" translucent={true} backgroundColor="transparent" />
         <WebView
           source={{ html: generatePaystackHTML() }}
           onMessage={handleWebViewMessage}
@@ -623,7 +615,6 @@ const FundScreen = () => {
           )}
           onShouldStartLoadWithRequest={(request) => {
             console.log('WebView navigation attempt:', request.url);
-            // Allow Paystack and related domains
             const allowedDomains = ['paystack', 'edgesnetwork', 'about:blank', 'data:'];
             const isAllowed = allowedDomains.some(domain => request.url.includes(domain));
             if (!isAllowed) {
@@ -660,13 +651,13 @@ const FundScreen = () => {
             </Text>
           </Pressable>
         )}
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar style="light" translucent={false} backgroundColor="#1A2526" />
       <View style={styles.inner}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()}>
@@ -705,9 +696,7 @@ const FundScreen = () => {
               keyboardType="numeric"
               value={amount}
               onChangeText={(text) => {
-                // Allow only numbers and decimal point
                 const cleanText = text.replace(/[^0-9.]/g, '');
-                // Prevent multiple decimal points
                 const parts = cleanText.split('.');
                 if (parts.length > 2) {
                   return;
@@ -752,21 +741,6 @@ const FundScreen = () => {
         </MotiView>
 
         <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 300, delay: 200 }}
-          style={styles.buttonContainer}
-        >
-          <Pressable
-            onPress={() => fetchWalletBalance(userEmail)}
-            style={[styles.refreshButton, isLoading && styles.disabledButton]}
-            disabled={isLoading}
-          >
-            <Text style={styles.refreshButtonText}>Refresh Balance</Text>
-          </Pressable>
-        </MotiView>
-
-        <MotiView
           from={{ scale: 1 }}
           animate={{ scale: [1, 1.02, 1] }}
           transition={{ loop: true, type: 'timing', duration: 1500 }}
@@ -786,7 +760,7 @@ const FundScreen = () => {
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 300, delay: 300 }}
+          transition={{ type: 'timing', duration: 300, delay: 200 }}
           style={styles.stepsContainer}
         >
           <Text style={styles.stepsTitle}>Payment Steps</Text>
@@ -813,6 +787,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A2526',
   },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A2526',
+  },
   webViewContainer: {
     flex: 1,
     backgroundColor: '#1A2526',
@@ -829,120 +809,120 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 40,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#fff',
+    letterSpacing: 0.5,
   },
   balanceContainer: {
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 32,
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#888',
-    marginBottom: 4,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   balanceText: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 32,
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#fff',
-    fontWeight: '500',
-    marginBottom: 8,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2A3A3B',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#3A4A4B',
+    paddingHorizontal: 12,
   },
   input: {
     flex: 1,
     color: '#fff',
-    padding: 12,
-    fontSize: 16,
+    paddingVertical: 14,
+    fontSize: 18,
+    fontWeight: '500',
   },
   clearButton: {
     padding: 8,
   },
   errorText: {
     color: '#ff4444',
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
   presetContainer: {
-    marginBottom: 16,
+    marginBottom: 32,
   },
   presetTitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#fff',
-    fontWeight: '500',
-    marginBottom: 8,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   presetButtonsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   presetButton: {
     backgroundColor: '#2A3A3B',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 8,
-    width: '22%',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    width: (width - 64) / 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#3A4A4B',
   },
   presetText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
   },
   buttonContainer: {
-    marginBottom: 16,
+    marginBottom: 32,
+    alignItems: 'center',
   },
   fundButton: {
     backgroundColor: '#00FF00',
-    paddingVertical: 14,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
     alignItems: 'center',
   },
   fundButtonText: {
     color: '#000',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '700',
+    fontSize: 18,
     textTransform: 'uppercase',
-  },
-  refreshButton: {
-    backgroundColor: '#2A3A3B',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    letterSpacing: 1,
   },
   verifyButton: {
     backgroundColor: '#FFD700',
@@ -957,35 +937,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   stepsContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
+    alignItems: 'center',
   },
   stepsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 12,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   step: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
+    width: '100%',
+    maxWidth: 400,
   },
   stepNumber: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#00ff00',
-    marginRight: 8,
-    width: 24,
+    marginRight: 12,
+    width: 28,
     textAlign: 'center',
   },
   stepText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#888888',
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 24,
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 18,
+    marginTop: 12,
+    textAlign: 'center',
   },
 });
 
