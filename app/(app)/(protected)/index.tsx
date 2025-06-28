@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: true
+    
     fontWeight: "700",
   },
   greetingContainer: {
