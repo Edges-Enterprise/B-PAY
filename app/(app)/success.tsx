@@ -128,7 +128,7 @@ export default function SuccessScreen() {
 
         // Fetch balance
         const { data: wallet, error: walletError } = await supabase
-          .from('wallets')
+          .from('wallet')
           .select('balance')
           .eq('user_email', user.email)
           .single();

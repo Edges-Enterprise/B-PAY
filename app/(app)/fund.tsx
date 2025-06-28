@@ -78,7 +78,7 @@ const FundScreen = () => {
     try {
       console.log('Fetching wallet balance:', email);
       const { data: wallet, error: walletError } = await supabase
-        .from('wallets')
+        .from('wallet')
         .select('balance')
         .eq('user_email', email)
         .single();

@@ -84,7 +84,7 @@ export default function WalletScreen() {
       setTransactionPin(user.user_metadata?.transaction_pin || "");
 
       const { data: wallet, error: walletError } = await supabase
-        .from("wallets")
+        .from("wallet")
         .select("balance")
         .eq("user_email", user.email)
         .single();
@@ -94,13 +94,13 @@ export default function WalletScreen() {
       }
 
       const subscription = supabase
-        .channel(`wallets:user_email=${user.email}`)
+        .channel(`wallet:user_email=${user.email}`)
         .on(
           "postgres_changes",
           {
             event: "UPDATE",
             schema: "public",
-            table: "wallets",
+            table: "wallet",
             filter: `user_email=eq.${user.email}`,
           },
           (payload) => {

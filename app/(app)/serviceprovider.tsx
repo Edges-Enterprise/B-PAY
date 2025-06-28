@@ -113,7 +113,7 @@ const BuyDataScreen: React.FC = () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
-        .from("wallets")
+        .from("wallet")
         .select("balance")
         .eq("user_email", userEmail)
         .single();
@@ -147,7 +147,7 @@ const BuyDataScreen: React.FC = () => {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'wallets',
+          table: 'wallet',
           filter: `user_email=eq.${userEmail}`,
         },
         (payload) => {

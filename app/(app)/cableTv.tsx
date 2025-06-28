@@ -227,7 +227,7 @@ const CableTV: React.FC = () => {
         setUserEmail(user.email);
 
         const { data: wallet, error: walletError } = await supabase
-          .from('wallets')
+          .from('wallet')
           .select('balance')
           .eq('user_email', user.email)
           .single();
@@ -629,7 +629,7 @@ const CableTV: React.FC = () => {
 
       const newBalance = balance - (discountedPrice || selectedPlan.price);
       const { error: walletUpdateError } = await supabase
-        .from('wallets')
+        .from('wallet')
         .update({ balance: newBalance })
         .eq('user_email', userEmail);
 

@@ -269,7 +269,7 @@ const ConfirmationScreen: React.FC = () => {
     const fetchWalletBalance = async () => {
       try {
         const { data: wallet, error } = await supabase
-          .from('wallets')
+          .from('wallet')
           .select('balance')
           .eq('user_email', userEmail)
           .single();
@@ -297,7 +297,7 @@ const ConfirmationScreen: React.FC = () => {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'wallets',
+          table: 'wallet',
           filter: `user_email=eq.${userEmail}`,
         },
         (payload) => {
@@ -482,7 +482,7 @@ const ConfirmationScreen: React.FC = () => {
 
       // Verify balance
       const { data: wallet, error: walletError } = await supabase
-        .from('wallets')
+        .from('wallet')
         .select('balance')
         .eq('user_email', userEmail)
         .single();
@@ -520,7 +520,7 @@ const ConfirmationScreen: React.FC = () => {
       // Deduct base price from wallet
       const newBalance = currentBalance - basePrice;
       const { error: walletUpdateError } = await supabase
-        .from('wallets')
+        .from('wallet')
         .update({ balance: newBalance })
         .eq('user_email', userEmail);
 
@@ -542,7 +542,7 @@ const ConfirmationScreen: React.FC = () => {
           // Validate Hot Plan and Network ID
           if (!selectedBundle.planType || !validateHotPlan(parsedNetworkId, selectedBundle.planType)) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -605,7 +605,7 @@ const ConfirmationScreen: React.FC = () => {
             responseData = JSON.parse(responseText);
           } catch (parseError: any) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -620,7 +620,7 @@ const ConfirmationScreen: React.FC = () => {
 
           if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -659,7 +659,7 @@ const ConfirmationScreen: React.FC = () => {
           const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
           if (!ebenkToken) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -702,7 +702,7 @@ const ConfirmationScreen: React.FC = () => {
             responseData = JSON.parse(responseText);
           } catch (parseError: any) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -717,7 +717,7 @@ const ConfirmationScreen: React.FC = () => {
 
           if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
             const { error: refundError } = await supabase
-              .from('wallets')
+              .from('wallet')
               .update({ balance: currentBalance })
               .eq('user_email', userEmail);
 
@@ -745,7 +745,7 @@ const ConfirmationScreen: React.FC = () => {
         const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
         if (!ebenkToken) {
           const { error: refundError } = await supabase
-            .from('wallets')
+            .from('wallet')
             .update({ balance: currentBalance })
             .eq('user_email', userEmail);
 
@@ -788,7 +788,7 @@ const ConfirmationScreen: React.FC = () => {
           responseData = JSON.parse(responseText);
         } catch (parseError: any) {
           const { error: refundError } = await supabase
-            .from('wallets')
+            .from('wallet')
             .update({ balance: currentBalance })
             .eq('user_email', userEmail);
 
@@ -803,7 +803,7 @@ const ConfirmationScreen: React.FC = () => {
 
         if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
           const { error: refundError } = await supabase
-            .from('wallets')
+            .from('wallet')
             .update({ balance: currentBalance })
             .eq('user_email', userEmail);
 
@@ -878,7 +878,7 @@ const ConfirmationScreen: React.FC = () => {
 
       if (txError) {
         const { error: refundError } = await supabase
-          .from('wallets')
+          .from('wallet')
           .update({ balance: currentBalance })
           .eq('user_email', userEmail);
 

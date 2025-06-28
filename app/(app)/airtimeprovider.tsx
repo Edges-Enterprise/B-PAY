@@ -226,7 +226,7 @@ const AirtimeProvider: React.FC = () => {
         setUserEmail(user.email);
 
         const { data: wallet, error: walletError } = await supabase
-          .from("wallets")
+          .from("wallet")
           .select("balance")
           .eq("user_email", user.email)
           .single();
@@ -247,7 +247,7 @@ const AirtimeProvider: React.FC = () => {
             {
               event: "UPDATE",
               schema: "public",
-              table: "wallets",
+              table: "wallet",
               filter: `user_email=eq.${user.email}`,
             },
             (payload) => {
@@ -436,7 +436,7 @@ const AirtimeProvider: React.FC = () => {
 
       // Verify wallet balance
       const { data: wallet, error: walletError } = await supabase
-        .from("wallets")
+        .from("wallet")
         .select("balance")
         .eq("user_email", userEmail)
         .single();
@@ -501,7 +501,7 @@ const AirtimeProvider: React.FC = () => {
       // Deduct balance
       const newBalance = currentBalance - actualCost;
       const { error: walletUpdateError } = await supabase
-        .from("wallets")
+        .from("wallet")
         .update({ balance: newBalance })
         .eq("user_email", userEmail);
 
@@ -588,7 +588,7 @@ const AirtimeProvider: React.FC = () => {
       setTransactionStatus("failed");
       if (currentBalance !== undefined) {
         await supabase
-          .from("wallets")
+          .from("wallet")
           .update({ balance: currentBalance })
           .eq("user_email", userEmail);
       }

@@ -197,7 +197,7 @@ const ElectricityBill: React.FC = () => {
         setUserEmail(user.email);
 
         const { data: wallet, error: walletError } = await supabase
-          .from('wallets')
+          .from('wallet')
           .select('balance')
           .eq('user_email', user.email)
           .single();
@@ -469,7 +469,7 @@ const ElectricityBill: React.FC = () => {
 
       const newBalance = balance - (discountedPrice || totalAmount);
       const { error: walletUpdateError } = await supabase
-        .from('wallets')
+        .from('wallet')
         .update({ balance: newBalance })
         .eq('user_email', userEmail);
 

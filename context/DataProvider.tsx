@@ -180,7 +180,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       while (attempts < maxAttempts) {
         try {
           const { data, error } = await supabase
-            .from("wallets")
+            .from("wallet")
             .select("balance")
             .eq("user_email", userEmail)
             .single();
@@ -212,7 +212,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           {
             event: "UPDATE",
             schema: "public",
-            table: "wallets",
+            table: "wallet",
             filter: `user_email=eq.${userEmail}`,
           },
           (payload) => {

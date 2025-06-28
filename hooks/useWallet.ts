@@ -9,7 +9,7 @@ export const useWallet = (userEmail: string | undefined) => {
 			if (!userEmail) throw new Error("User email required");
 
 			const { data: wallet, error } = await supabase
-				.from("wallets")
+				.from("wallet")
 				.select("balance")
 				.eq("user_email", userEmail)
 				.single();
