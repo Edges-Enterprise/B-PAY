@@ -19,10 +19,12 @@ import { WebView } from 'react-native-webview';
 import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values';
 import { debounce } from 'lodash';
+import { useSupabase } from '@/context/supabase-provider';
 
 const { width, height } = Dimensions.get('window');
 
 const FundScreen = () => {
+  const { user, session, initialized, isLoadingSession } = useSupabase();
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [userEmail, setUserEmail] = useState('');
@@ -31,7 +33,6 @@ const FundScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [paymentReference, setPaymentReference] = useState('');
-  const [isUserLoading, setIsUserLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showVerifyButton, setShowVerifyButton] = useState(false);
 
@@ -46,20 +47,17 @@ const FundScreen = () => {
 
     if (!paystackKey) {
       Alert.alert('Configuration Error', 'Paystack public key is missing. Please contact support.');
-      setIsUserLoading(false);
       return;
     }
     
     if (!paystackKey.startsWith('pk_')) {
       console.error('Invalid Paystack public key format:', paystackKey);
       Alert.alert('Configuration Error', 'Invalid Paystack public key format. Please contact support.');
-      setIsUserLoading(false);
       return;
     }
 
     if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
       Alert.alert('Configuration Error', 'Supabase configuration missing. Please contact support.');
-      setIsUserLoading(false);
       return;
     }
   }, []);
@@ -75,38 +73,6 @@ const FundScreen = () => {
       return () => clearTimeout(fallbackTimeout);
     }
   }, [showWebView, paymentReference]);
-
-  const fetchUserData = async () => {
-    try {
-      console.log('Refreshing session');
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session) {
-        throw new Error(`Session refresh failed: ${sessionError?.message || 'No session'}`);
-      }
-      console.log('Fetching user');
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        throw new Error(`User fetch failed: ${authError?.message || 'No user'}`);
-      }
-      if (!user.email) {
-        throw new Error('User email missing');
-      }
-      if (!user.user_metadata?.username) {
-        throw new Error('User username missing');
-      }
-      setUserEmail(user.email);
-      setUserName(user.user_metadata.username);
-      setUserId(user.id);
-      console.log('User data:', { email: user.email, username: user.user_metadata.username, id: user.id });
-      await fetchWalletBalance(user.email);
-    } catch (error) {
-      console.error('fetchUserData error:', { message: error.message, stack: error.stack });
-      Alert.alert('Authentication Error', 'Session expired. Please sign in again.');
-      router.replace('/sign-in');
-    } finally {
-      setIsUserLoading(false);
-    }
-  };
 
   const fetchWalletBalance = async (email: string) => {
     try {
@@ -127,8 +93,16 @@ const FundScreen = () => {
   };
 
   useEffect(() => {
-    fetchUserData();
-  }, []);
+    if (!initialized || isLoadingSession || !user || !session) {
+      return;
+    }
+    setUserEmail(user.email || '');
+    setUserName(user.user_metadata?.username || '');
+    setUserId(user.id || '');
+    if (user.email) {
+      fetchWalletBalance(user.email);
+    }
+  }, [user, session, initialized, isLoadingSession]);
 
   useEffect(() => {
     let subscription;
@@ -158,7 +132,7 @@ const FundScreen = () => {
               await fetchWalletBalance(userEmail);
               await sendTestReceipt(paymentReference, amount, userEmail);
               Alert.alert('Success', 'Transaction completed successfully!');
-              router.push('/wallet');
+              router.push('/(app)/(protected)/wallet');
             } else if (payload.new.status === 'failed') {
               setShowWebView(false);
               setIsLoading(false);
@@ -279,7 +253,12 @@ const FundScreen = () => {
       console.log('handleTopUp:', { amount, user: userEmail, userName, userId });
       const parsedAmount = parseFloat(amount);
       
-      // Validation
+      if (!user || !session || !userEmail || !userName || !userId) {
+        Alert.alert('Authentication Error', 'User data missing. Please sign in again.');
+        router.replace('/(app)/(auth)/sign-in');
+        return;
+      }
+
       if (!amount || isNaN(parsedAmount)) {
         setError('Please enter a valid amount');
         return;
@@ -292,13 +271,7 @@ const FundScreen = () => {
         setError('Maximum amount is ₦1,000,000');
         return;
       }
-      if (!userEmail || !userName || !userId) {
-        Alert.alert('Authentication Error', 'User data missing. Please sign in again.');
-        router.replace('/sign-in');
-        return;
-      }
 
-      // Check environment variables again before proceeding
       const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
       if (!paystackKey || !paystackKey.startsWith('pk_')) {
         Alert.alert('Configuration Error', 'Invalid payment configuration. Please contact support.');
@@ -372,7 +345,7 @@ const FundScreen = () => {
         setPaymentReference('');
         setShowVerifyButton(false);
         Alert.alert('Success', 'Transaction verified successfully!');
-        router.push('/wallet');
+        router.push('/(app)/(protected)/wallet');
       }
     } catch (error) {
       console.error('Manual verify error:', { message: error.message });
@@ -522,7 +495,7 @@ const FundScreen = () => {
         setPaymentReference('');
         setShowVerifyButton(false);
         Alert.alert('Success', 'Payment completed successfully!');
-        router.push('/wallet');
+        router.push('/(app)/(protected)/wallet');
         
       } else if (data === 'payment-cancelled') {
         console.log('Payment cancelled by user:', paymentReference);
@@ -585,7 +558,7 @@ const FundScreen = () => {
 
   const presetAmounts = [500, 1000, 5000, 10000];
 
-  if (isUserLoading) {
+  if (!initialized || isLoadingSession || !user || !session) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centeredContainer}>
@@ -660,7 +633,7 @@ const FundScreen = () => {
       <StatusBar style="light" translucent={false} backgroundColor="#1A2526" />
       <View style={styles.inner}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.push('/(app)/(protected)/wallet')}>
             <Ionicons name="arrow-back-outline" size={24} color="white" />
           </Pressable>
           <Text style={styles.title}>Fund Wallet 💰</Text>

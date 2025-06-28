@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from "react";
 import { View, Text, Pressable, StyleSheet, StatusBar, ActivityIndicator, Alert, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useSegments } from "expo-router";
 import { useAuth } from "@/context/supabase-provider";
 import { useFont } from "@/context/font-context";
 import { supabase } from "@/config/supabase";
@@ -57,9 +57,9 @@ interface Purchase {
 const usePurchaseHistory = () => {
   const { user } = useAuth();
   return useQuery<Purchase[]>({
-    queryKey: ["purchaseHistory", user?.email],
+    queryKey: ["purchaseHistory", user?.email ?? "no-user"],
     queryFn: async () => {
-      if (!user?.email) throw new Error("No user email");
+      if (!user?.email) return [];
       const { data, error } = await supabase
         .from("data_purchases")
         .select("plan_name, provider_name, validity, mobile_number, network_id, plan_id, created_at, user_email")
@@ -76,7 +76,7 @@ const usePurchaseHistory = () => {
 const useNewNotificationCount = () => {
   const { user } = useAuth();
   return useQuery<number>({
-    queryKey: ["newNotificationCount", user?.id],
+    queryKey: ["newNotificationCount", user?.id ?? "no-user"],
     queryFn: async () => {
       if (!user?.id) return 0;
       const { data, error } = await supabase
@@ -93,12 +93,13 @@ const useNewNotificationCount = () => {
 
 export default function HomeScreen() {
   const { selectedFont } = useFont();
-  const { user } = useAuth();
+  const { user, initialized } = useAuth();
+  const segments = useSegments();
   const { providerPlans, isLoading: isPlansLoading, errorMessage } = useContext(DataContext);
 
-  const hasTransactionPin = !!user?.user_metadata?.transaction_pin_created;
-  const username = user?.user_metadata?.username || "Guest";
-  const userEmail = user?.email || "";
+  const hasTransactionPin = user ? !!user.user_metadata?.transaction_pin_created : false;
+  const username = user ? user.user_metadata?.username ?? "User" : "User";
+  const userEmail = user?.email ?? "";
 
   const [createPinModalVisible, setCreatePinModalVisible] = useState(false);
   const [newPin, setNewPin] = useState("");
@@ -123,6 +124,14 @@ export default function HomeScreen() {
   const popScale = new Animated.Value(1);
 
   useEffect(() => {
+    if (!initialized) return;
+
+    // Redirect to welcome screen if user is null
+    if (!user && segments[1] !== "(Auth)") {
+      router.replace("/(app)/(Auth)/welcome");
+      return;
+    }
+
     // Blinking animation
     const blink = Animated.loop(
       Animated.sequence([
@@ -162,7 +171,7 @@ export default function HomeScreen() {
       blink.stop();
       pop.stop();
     };
-  }, []);
+  }, [initialized, user, segments]);
 
   useNotificationSubscription();
 
@@ -178,18 +187,16 @@ export default function HomeScreen() {
       image: NETWORK_IMAGES[provider.toLowerCase()] || DEFAULT_PROVIDER_IMAGE,
       amount: amountMatch ? parseInt(amountMatch[1], 10) : 300,
       validity: p.validity || "N/A",
-      phone_number: p.mobile_number || user?.user_metadata?.phone || "",
+      phone_number: p.mobile_number || (user ? user.user_metadata?.phone ?? "" : ""),
       network_id: p.network_id?.toString() || "0",
       plan_id: p.plan_id?.toString() || "0",
     };
   });
 
-  console.log("Popular Plans (from purchase history):", popularPlans);
-
   const hasPlans = popularPlans.length > 0;
   const phoneNumber = hasPlans
     ? popularPlans[0].phone_number
-    : user?.user_metadata?.phone || "";
+    : (user ? user.user_metadata?.phone ?? "" : "");
 
   const getProviderFromPlan = (plan: string): string => {
     const planUpper = plan.toUpperCase();
@@ -208,12 +215,18 @@ export default function HomeScreen() {
   };
 
   const handleCreatePin = async () => {
-    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin > 6) {
+    if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
       Alert.alert("Error", "PIN must be between 4 and 6 digits.");
       return;
     }
     if (newPin !== confirmPin) {
       Alert.alert("Error", "PINs do not match.");
+      return;
+    }
+
+    if (!user) {
+      Alert.alert("Error", "You must be logged in to create a PIN.");
+      router.replace("/(app)/(Auth)/welcome");
       return;
     }
 
@@ -245,7 +258,12 @@ export default function HomeScreen() {
     network_id: string;
     plan_id: string;
   }) => {
-    console.log("handleSwipePurchase called with plan:", plan);
+    if (!user) {
+      Alert.alert("Error", "You must be logged in to make a purchase.");
+      router.replace("/(app)/(Auth)/welcome");
+      return;
+    }
+
     if (!hasTransactionPin) {
       setCreatePinModalVisible(true);
       return;
@@ -280,13 +298,11 @@ export default function HomeScreen() {
       }),
       phoneNumber: plan.phone_number || phoneNumber,
       userEmail,
-      transactionPin: user?.user_metadata?.transaction_pin,
+      transactionPin: user.user_metadata?.transaction_pin ?? "",
       source: "index",
       networkId: plan.network_id,
       planId: plan.plan_id,
     };
-
-    console.log("Navigating to Confirmation with params:", params);
 
     router.push({
       pathname: "/Confirmation",
@@ -294,7 +310,7 @@ export default function HomeScreen() {
     });
   };
 
-  if (isPurchaseHistoryLoading || isNewNotificationCountLoading || isPlansLoading) {
+  if (!initialized || isPurchaseHistoryLoading || isNewNotificationCountLoading || isPlansLoading) {
     return (
       <SwipeWrapper>
         <View style={[styles.container, styles.centerContent]}>
@@ -303,6 +319,11 @@ export default function HomeScreen() {
         </View>
       </SwipeWrapper>
     );
+  }
+
+  // This should not be reached due to the redirect in useEffect, but included for safety
+  if (!user) {
+    return null;
   }
 
   if (purchaseHistoryError) {
@@ -348,7 +369,6 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.headerSubtitle}>Your dashboard is here 🔥</Text>
 
-        {/* Flash Sale Banner */}
         <Animated.View
           style={[
             styles.flashSaleBanner,
@@ -372,7 +392,14 @@ export default function HomeScreen() {
               {actions.map((action, index) => (
                 <Pressable
                   key={index}
-                  onPress={() => router.push(`/${action.route}`)}
+                  onPress={() => {
+                    if (!user && action.route !== "commingsoon") {
+                      Alert.alert("Error", "Please log in to access this feature.");
+                      router.replace("/(app)/(Auth)/sign-in");
+                      return;
+                    }
+                    router.push(`/${action.route}`);
+                  }}
                   style={styles.button}
                 >
                   <Ionicons name={action.icon} size={24} color={action.color} />
@@ -425,7 +452,7 @@ export default function HomeScreen() {
       </View>
     </SwipeWrapper>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -457,6 +484,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: "#fff",
     fontSize: 12,
+    fontWeight: true
     fontWeight: "700",
   },
   greetingContainer: {

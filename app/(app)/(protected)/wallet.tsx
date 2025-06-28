@@ -17,8 +17,8 @@ import { MotiView } from "moti";
 import { supabase } from "@/config/supabase";
 import { usePurchaseHistory } from "@/hooks/useHomeScreenData";
 import SwipeWrapper from "../../../components/SwipeWrapper";
+import { useSupabase } from "@/context/supabase-provider";
 
-// Transaction interface
 interface Transaction {
   type: string;
   amount: number;
@@ -27,7 +27,6 @@ interface Transaction {
   details?: string;
 }
 
-// Recommendation interface
 interface Recommendation {
   id: string;
   plan_name: string;
@@ -36,7 +35,6 @@ interface Recommendation {
   validity: string;
 }
 
-// DataBundle & Provider interfaces
 interface DataBundle {
   id: number;
   data: string;
@@ -65,6 +63,7 @@ interface ConfirmationParams {
 }
 
 export default function WalletScreen() {
+  const { user, session, initialized, isLoadingSession } = useSupabase();
   const [showTransactions, setShowTransactions] = useState(false);
   const [balance, setBalance] = useState(0);
   const [userEmail, setUserEmail] = useState("");
@@ -74,23 +73,16 @@ export default function WalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  // Fetch user and wallet data
   const fetchUserAndWallet = useCallback(async () => {
+    if (!initialized || isLoadingSession || !user || !session) {
+      return;
+    }
+
     try {
       setRefreshing(true);
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user?.email) {
-        router.replace("/sign-in");
-        return;
-      }
-
-      setUserEmail(user.email);
+      setUserEmail(user.email || "");
       setTransactionPin(user.user_metadata?.transaction_pin || "");
 
-      // Fetch wallet balance
       const { data: wallet, error: walletError } = await supabase
         .from("wallets")
         .select("balance")
@@ -101,7 +93,6 @@ export default function WalletScreen() {
         setBalance(wallet?.balance || 0);
       }
 
-      // Subscribe to real-time wallet balance updates
       const subscription = supabase
         .channel(`wallets:user_email=${user.email}`)
         .on(
@@ -120,7 +111,6 @@ export default function WalletScreen() {
         )
         .subscribe();
 
-      // Fetch transactions from one source only
       const { data: txData, error: txError } = await supabase
         .from("transactions")
         .select("amount, status, metadata, created_at")
@@ -133,14 +123,12 @@ export default function WalletScreen() {
 
       const mappedTransactions = txData.map((tx) => {
         const metaType = tx.metadata?.type?.toLowerCase().trim();
-
-        let transactionType = "Wallet Funding"; // Default
+        let transactionType = "Wallet Funding";
         if (metaType === "data") {
           transactionType = "Data Purchase";
         } else if (metaType === "airtime") {
           transactionType = "Airtime Purchase";
         }
-
         return {
           type: transactionType,
           amount: tx.amount,
@@ -156,7 +144,6 @@ export default function WalletScreen() {
 
       setTransactions(mappedTransactions);
 
-      // Check prior purchase history
       const { data: dataPurchases } = await supabase
         .from("data_purchases")
         .select("id")
@@ -180,12 +167,11 @@ export default function WalletScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [user, session, initialized, isLoadingSession]);
 
-  // Auto-refresh every 5 minutes
   useEffect(() => {
     fetchUserAndWallet();
-    const interval = setInterval(fetchUserAndWallet, 5 * 60 * 1000); // 5 minutes
+    const interval = setInterval(fetchUserAndWallet, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchUserAndWallet]);
 
@@ -198,7 +184,7 @@ export default function WalletScreen() {
   })}`;
 
   const handleRecommendationPress = (rec: Recommendation) => {
-    if (balance < rec.price) return;
+    if (balance < rec.price || !user || !session) return;
 
     const bundle = {
       id: Date.now(),
@@ -218,22 +204,20 @@ export default function WalletScreen() {
       code: rec.provider.toLowerCase(),
     };
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const params = {
-        bundle: JSON.stringify(bundle),
-        provider: JSON.stringify(provider),
-        phoneNumber: user?.user_metadata?.phone || user?.user_metadata?.mobile_number,
-        userEmail: user?.email,
-        transactionPin,
-        source: "wallet",
-        networkId: "0",
-        planId: 0,
-        balance: balance.toString(), // Pass balance
-      };
-      router.push({
-        pathname: "../Confirmation",
-        params: params as any,
-      });
+    const params = {
+      bundle: JSON.stringify(bundle),
+      provider: JSON.stringify(provider),
+      phoneNumber: user.user_metadata?.phone || user.user_metadata?.mobile_number,
+      userEmail: user.email,
+      transactionPin,
+      source: "wallet",
+      networkId: "0",
+      planId: 0,
+      balance: balance.toString(),
+    };
+    router.push({
+      pathname: "../Confirmation",
+      params: params as any,
     });
   };
 
@@ -241,7 +225,7 @@ export default function WalletScreen() {
     const params = {
       provider: JSON.stringify(provider),
       networkId: provider.id.toString(),
-      balance: balance.toString(), // Pass balance
+      balance: balance.toString(),
     };
     router.push({
       pathname: "/(app)/(protected)/buy",
@@ -299,11 +283,9 @@ export default function WalletScreen() {
     </Text>
   );
 
-  // Prevent swipe gestures during vertical scrolling
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { velocity } = event.nativeEvent;
     if (velocity && Math.abs(velocity.y) > 0.5) {
-      // Disable horizontal swipe when scrolling vertically
       flatListRef.current?.setNativeProps({ scrollEnabled: true });
     } else {
       flatListRef.current?.setNativeProps({ scrollEnabled: true });
@@ -316,16 +298,13 @@ export default function WalletScreen() {
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <FlatList
           ref={flatListRef}
-          data={[{ key: "wallet" }]} // Dummy data to enable pull-to-refresh
+          data={[{ key: "wallet" }]}
           renderItem={() => (
             <>
-              {/* Header */}
               <View style={styles.header}>
                 <Text style={styles.title}>Wallet 💼</Text>
                 <Text style={styles.subtitle}>Manage your balance and transactions</Text>
               </View>
-
-              {/* Balance Card */}
               <View style={styles.balanceCard}>
                 <View style={styles.balanceHeader}>
                   <Text style={{ color: "rgba(255,255,255,0.7)" }}>
@@ -337,8 +316,6 @@ export default function WalletScreen() {
                   {formattedBalance}
                 </Text>
               </View>
-
-              {/* Fund Button */}
               <MotiView
                 from={{ scale: 1 }}
                 animate={{ scale: [1, 1.05, 1] }}
@@ -346,7 +323,7 @@ export default function WalletScreen() {
                 style={styles.fundButtonContainer}
               >
                 <Pressable
-                  onPress={() => router.push("/(app)/fund")}
+                  onPress={() => router.push("/fund")} // Updated path
                   style={styles.fundButton}
                 >
                   <Ionicons name="add-circle-outline" size={20} color="white" />
@@ -355,8 +332,6 @@ export default function WalletScreen() {
                   </Text>
                 </Pressable>
               </MotiView>
-
-              {/* Transactions Toggle */}
               <Pressable
                 onPress={() => setShowTransactions(!showTransactions)}
                 style={styles.transactionToggle}
@@ -368,8 +343,6 @@ export default function WalletScreen() {
                   color="#fff"
                 />
               </Pressable>
-
-              {/* Scrollable Transaction List */}
               {showTransactions && (
                 <FlatList
                   data={transactions}
@@ -381,8 +354,6 @@ export default function WalletScreen() {
                   nestedScrollEnabled
                 />
               )}
-
-              {/* Recommendations Section */}
               {!showTransactions && hasPriorPurchase && (
                 <View style={styles.recommendationsSection}>
                   <Text style={styles.recommendationsTitle}>💡 Recommended Purchases</Text>
@@ -416,8 +387,6 @@ export default function WalletScreen() {
                   )}
                 </View>
               )}
-
-              {/* Fallback message */}
               {!showTransactions && !hasPriorPurchase && (
                 <Text style={styles.recommendationsTitle}>
                   Make a purchase and set a transaction PIN to see recommendations!

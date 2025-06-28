@@ -117,7 +117,7 @@ const CustomerCare: React.FC = () => {
       return;
     }
 
-    const adminWhatsAppNumber = '+2347015888155';
+    const adminWhatsAppNumber = '+2347057517841';
     const userIdentifier = profile?.username || user?.email || 'Anonymous';
     const message = `Hello, I am ${userIdentifier} requesting assistance from Edges Network with an issue
 Title: ${title}
