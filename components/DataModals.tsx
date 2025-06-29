@@ -1,9 +1,10 @@
-import React, { useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useEffect, useCallback } from "react";
+import { View, StyleSheet, Alert } from "react-native";
 import PurchaseModal from "@/components/homescreen/PurchaseModal";
 import TransactionStatusModal from "@/components/homescreen/TransactionStatusModal";
 import CreatePinModal from "@/components/homescreen/CreatePinModal";
 import { DataBundle } from "@/app/(app)/serviceprovider";
+import { supabase } from "@/config/supabase";
 
 interface DataModalsProps {
   isPurchaseModalOpen: boolean;
@@ -24,7 +25,7 @@ interface DataModalsProps {
   transactionReference: string;
   setTransactionReference: (ref: string) => void;
   hasPin: boolean;
-  updateHasPin: (value: boolean) => void;
+  updateHasPin: (value: boolean) => Promise<void>;
   isTransactionPinVisible: boolean;
   setIsTransactionPinVisible: (visible: boolean) => void;
   newPinInput: string;
@@ -82,23 +83,42 @@ const DataModals: React.FC<DataModalsProps> = ({
   onSavePin,
   onProceed,
 }) => {
-  useEffect(() => {
-    if (isPurchaseModalOpen && userEmail) {
-      console.log("PurchaseModal opened, verifying PIN for email:", userEmail);
-      verifyTransactionPin(userEmail).then((exists) => {
-        console.log("Verified PIN exists:", exists);
-        updateHasPin(exists);
-      });
+  const checkPinStatus = useCallback(async () => {
+    if (!isPurchaseModalOpen || !userEmail) {
+      console.log("Skipping PIN verification: Purchase modal closed or no user email");
+      return;
+    }
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("No authenticated user:", authError);
+        Alert.alert("Error", "User not authenticated. Please log in again.");
+        return;
+      }
+      console.log("PurchaseModal opened, verifying PIN for user:", user.id);
+      const exists = await verifyTransactionPin(userEmail);
+      console.log("Verified PIN exists:", exists);
+      await updateHasPin(exists);
+    } catch (error) {
+      console.error("Error verifying PIN in DataModals:", error);
+      Alert.alert("Error", `Failed to verify PIN status: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }, [isPurchaseModalOpen, userEmail, verifyTransactionPin, updateHasPin]);
 
   useEffect(() => {
-    console.log("DataModals state update:", {
+    checkPinStatus();
+  }, [checkPinStatus]);
+
+  useEffect(() => {
+    console.log("DataModals props updated:", {
       isPurchaseModalOpen,
       isTransactionModalOpen,
       isPinCreationModalOpen,
+      hasPin,
+      userEmail,
+      selectedProvider: selectedProvider?.name,
     });
-  }, [isPurchaseModalOpen, isTransactionModalOpen, isPinCreationModalOpen]);
+  }, [isPurchaseModalOpen, isTransactionModalOpen, isPinCreationModalOpen, hasPin, userEmail, selectedProvider]);
 
   const closePurchaseModal = () => {
     console.log("Closing PurchaseModal");
@@ -126,7 +146,6 @@ const DataModals: React.FC<DataModalsProps> = ({
     setConfirmPinInput("");
   };
 
-  // Only render the modal container if at least one modal is visible
   if (!isPurchaseModalOpen && !isTransactionModalOpen && !isPinCreationModalOpen) {
     return null;
   }
@@ -186,7 +205,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 5,
-    backgroundColor: 'transparent', // Match app theme to prevent white flash
+    backgroundColor: 'transparent',
   },
 });
 

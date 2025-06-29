@@ -104,7 +104,7 @@ const BuyDataScreen: React.FC = () => {
       setDetectedNetwork("");
       setTransactionState("processing");
       setTransactionReference("");
-      fetchData(); // Refresh plans on screen focus
+      fetchData();
     }, [fetchData])
   );
 
@@ -199,7 +199,6 @@ const BuyDataScreen: React.FC = () => {
   }, [params.provider, params.networkId]);
 
   useEffect(() => {
-    // Log providerPlans for debugging
     if (selectedProvider) {
       console.log(`providerPlans for ${selectedProvider.name}:`, {
         count: providerPlans[selectedProvider.name]?.length || 0,
@@ -238,7 +237,7 @@ const BuyDataScreen: React.FC = () => {
     
     let plans: DataBundle[];
     if (activeCategory === "Hot") {
-      plans = []; // DataBundleList fetches Hot plans from Supabase
+      plans = [];
     } else {
       plans = (providerPlans[selectedProvider.name] || [])
         .filter((plan: DataBundle) => {
@@ -261,24 +260,20 @@ const BuyDataScreen: React.FC = () => {
   const bundleCategories = useMemo(() => {
     if (!selectedProvider) return [];
     
-    // Get all unique categories from allBundles that have at least one plan
     const categoriesWithPlans = Array.from(
       new Set(
         allBundles
           .map((bundle: DataBundle) => bundle.category)
       )
     ).filter(category => {
-      // Filter out categories that have no plans
       return allBundles.some(bundle => bundle.category === category);
     });
 
-    // Include "Hot" if provider has Hot plans in Supabase
     const hasHotPlans = ["MTN", "AIRTEL", "GLO", "9MOBILE"].includes(selectedProvider.name.toUpperCase());
     if (hasHotPlans && !categoriesWithPlans.includes("Hot")) {
       categoriesWithPlans.push("Hot");
     }
 
-    // Sort categories in a specific order
     const orderedCategories = [
       "Hot",
       "Daily Plans",
@@ -343,25 +338,84 @@ const BuyDataScreen: React.FC = () => {
     return types;
   }, [dataBundles, activeCategory]);
 
-  const updateHasPin = useCallback((value: boolean) => {
+  const ensureProfileExists = useCallback(async () => {
+    if (!userEmail) return;
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("No authenticated user for profile check:", authError);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .single();
+      if (error && error.code === "PGRST116") {
+        console.log("No profile found, creating one for user:", user.id);
+        const { error: upsertError } = await supabase
+          .from("profiles")
+          .upsert({ id: user.id, email: userEmail });
+        if (upsertError) {
+          console.error("Error creating profile:", upsertError);
+          Alert.alert("Error", `Failed to initialize user profile: ${upsertError.message}`);
+        }
+      } else if (error) {
+        console.error("Error checking profile:", error);
+        Alert.alert("Error", `Failed to verify user profile: ${error.message}`);
+      }
+    } catch (error) {
+      console.error("Error in ensureProfileExists:", error);
+      Alert.alert("Error", "Failed to ensure user profile");
+    }
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (userEmail) {
+      ensureProfileExists();
+    }
+  }, [userEmail, ensureProfileExists]);
+
+  const updateHasPin = useCallback(async (value: boolean) => {
     if (!pinVerified.current || value) {
       console.log("Updating hasPin:", value);
-      setHasPin(value);
-      if (value) pinVerified.current = true;
+      if (value && userEmail) {
+        const pinExists = await verifyTransactionPin(userEmail);
+        setHasPin(pinExists);
+        pinVerified.current = pinExists;
+      } else {
+        setHasPin(false);
+        pinVerified.current = false;
+      }
     }
-  }, []);
+  }, [verifyTransactionPin, userEmail]);
 
   const verifyTransactionPin = useCallback(async (email: string): Promise<boolean> => {
+    if (!email) {
+      console.log("No email provided for PIN verification");
+      return false;
+    }
     try {
-      const { data, error } = await supabase.from("profiles").select("transaction_pin").eq("email", email).single();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.log("No authenticated user");
+        return false;
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("id", user.id)
+        .single();
       if (error) {
         if (error.code === "PGRST116") {
-          console.log("No profile for email:", email);
+          console.log("No profile for user ID:", user.id);
           return false;
         }
-        throw error;
+        console.error("PIN verification error:", error);
+        Alert.alert("Error", `Unable to verify PIN: ${error.message} (Code: ${error.code})`);
+        return false;
       }
-      const exists = !!data?.transaction_pin;
+      const exists = !!data?.transaction_pin && data.transaction_pin !== "";
       console.log("PIN exists:", exists);
       return exists;
     } catch (error) {
@@ -371,10 +425,67 @@ const BuyDataScreen: React.FC = () => {
     }
   }, []);
 
+  const savePin = async () => {
+    setIsLoading(true);
+    try {
+      if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+        return Alert.alert("Error", "PIN must be 4-6 digits");
+      }
+      if (newPin !== confirmPin) {
+        return Alert.alert("Error", "PINs do not match");
+      }
+      if (!userEmail) {
+        return Alert.alert("Error", "User authentication missing");
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("User not authenticated:", authError);
+        return Alert.alert("Error", "User not authenticated. Please log in again.");
+      }
+      // Ensure profile exists before updating
+      await ensureProfileExists();
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ transaction_pin: newPin })
+        .eq("id", user.id);
+      if (updateError) {
+        console.error("PIN save error:", updateError);
+        if (updateError.code === "PGRST204") {
+          return Alert.alert("Error", "PIN save failed: Missing 'transaction_pin' column in profiles table. Contact support.");
+        }
+        return Alert.alert("Error", `Failed to save PIN: ${updateError.message} (Code: ${updateError.code})`);
+      }
+      const { data, error: fetchError } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("id", user.id)
+        .single();
+      if (fetchError || !data || !data.transaction_pin || data.transaction_pin === "") {
+        console.error("PIN verification after save failed:", fetchError);
+        return Alert.alert("Error", "PIN not saved correctly");
+      }
+      console.log("PIN saved and verified:", data.transaction_pin);
+      setHasPin(true);
+      pinVerified.current = true;
+      setIsPinCreationModalOpen(false);
+      setNewPin("");
+      setConfirmPin("");
+      Alert.alert("Success", "PIN created successfully");
+    } catch (error) {
+      console.error("PIN Creation Error:", error);
+      Alert.alert("Error", `Failed to save PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const createTransactionReference = useCallback(async () => {
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user || !user.id) throw new Error("Auth failed");
+      if (error || !user || !user.id) {
+        console.error("Auth failed:", error);
+        throw new Error("Auth failed");
+      }
       return `Edges_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     } catch (error) {
       console.error("Reference error:", error);
@@ -407,7 +518,7 @@ const BuyDataScreen: React.FC = () => {
       userEmail,
       walletBalance,
       detectedNetwork,
-      purchaseType: 'data', // Log to confirm purchaseType
+      purchaseType: 'data',
     });
 
     if (!selectedBundle) return Alert.alert("Error", "No plan selected");
@@ -446,26 +557,31 @@ const BuyDataScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("User not authenticated:", authError);
+        throw new Error("User not authenticated");
+      }
+      await ensureProfileExists();
       const { data: profileData, error: pinError } = await supabase
         .from("profiles")
         .select("transaction_pin")
-        .eq("email", userEmail)
+        .eq("id", user.id)
         .single();
       if (pinError) {
         if (pinError.code === "PGRST116") {
           setIsPinCreationModalOpen(true);
           Alert.alert("Error", "Profile not found. Create a PIN");
         } else {
-          Alert.alert("Error", "PIN verification failed");
+          console.error("PIN verification failed:", pinError);
+          Alert.alert("Error", `PIN verification failed: ${pinError.message} (Code: ${pinError.code})`);
         }
         return;
       }
-
-      if (!profileData || !profileData.transaction_pin) {
+      if (!profileData || !profileData.transaction_pin || profileData.transaction_pin === "") {
         setIsPinCreationModalOpen(true);
         return Alert.alert("Error", "No PIN set. Create a PIN");
       }
-
       if (profileData.transaction_pin !== transactionPinInput) {
         return Alert.alert("Error", "Incorrect PIN");
       }
@@ -506,7 +622,7 @@ const BuyDataScreen: React.FC = () => {
           balance: walletBalance.toString(),
           networkId: finalNetworkId.toString(),
           planId: selectedBundle.id.toString(),
-          purchaseType: 'data', // Explicitly set purchaseType for data purchases
+          purchaseType: 'data',
         },
       });
       console.log('Navigating to ConfirmationScreen with params:', {
@@ -523,38 +639,7 @@ const BuyDataScreen: React.FC = () => {
       });
     } catch (error) {
       console.error("handleProceed error:", error);
-      Alert.alert("Error", "Unable to verify PIN or generate reference");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const savePin = async () => {
-    setIsLoading(true);
-    try {
-      if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
-        return Alert.alert("Error", "PIN must be 4-6 digits");
-      }
-      if (newPin !== confirmPin) {
-        return Alert.alert("Error", "PINs do not match");
-      }
-      if (!userEmail) {
-        return Alert.alert("Error", "User authentication missing");
-      }
-
-      const { error } = await supabase.auth.updateUser({
-        data: { transaction_pin: newPin, transaction_pin_created: true },
-      });
-      if (error) throw error;
-      setHasPin(true);
-      pinVerified.current = true;
-      setIsPinCreationModalOpen(false);
-      setNewPin("");
-      setConfirmPin("");
-      Alert.alert("Success", "PIN created");
-    } catch (error) {
-      console.error("PIN Creation Error:", error);
-      Alert.alert("Error", "Failed to save PIN");
+      Alert.alert("Error", `Unable to verify PIN or generate reference: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsLoading(false);
     }
@@ -570,6 +655,18 @@ const BuyDataScreen: React.FC = () => {
     setIsLoading(true);
     fetchData().finally(() => setIsLoading(false));
   }, [fetchData]);
+
+  useEffect(() => {
+    const checkPin = async () => {
+      if (!userEmail) return;
+      await ensureProfileExists();
+      const pinExists = await verifyTransactionPin(userEmail);
+      console.log("Initial PIN check:", pinExists);
+      setHasPin(pinExists);
+      pinVerified.current = pinExists;
+    };
+    checkPin();
+  }, [userEmail, verifyTransactionPin, ensureProfileExists]);
 
   if (errorMessage) {
     return (
