@@ -92,7 +92,7 @@ const DataModals: React.FC<DataModalsProps> = ({
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         console.error("No authenticated user:", authError);
-        Alert.alert("Error", "User not authenticated. Please log in again.");
+        Alert.alert("Error", `User not authenticated: ${authError?.message || "Unknown error"}`);
         return;
       }
       console.log("PurchaseModal opened, verifying PIN for user:", user.id);
