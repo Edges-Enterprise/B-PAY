@@ -593,6 +593,7 @@ import { router, usePathname } from "expo-router";
 import moment from "moment-timezone";
 import { supabase } from "@/config/supabase";
 import SwipeWrapper from "../../../components/SwipeWrapper";
+import SwipeWrapper from "../../../components/SwipeWrapper";
 
 interface HistoryItem {
   id: string;
@@ -629,10 +630,10 @@ interface HistoryItem {
 }
 
 const statusColors: { [key: string]: string } = {
-  Success: "#22c55e",
-  Failed: "#ef4444",
-  Pending: "#eab308",
-  Unknown: "#888",
+	Success: "#22c55e",
+	Failed: "#ef4444",
+	Pending: "#eab308",
+	Unknown: "#888",
 };
 
 export default function HistoryScreen() {
@@ -680,10 +681,10 @@ export default function HistoryScreen() {
         .eq("user_email", user.email)
         .order("created_at", { ascending: false });
 
-      if (txError) {
-        console.error("Transaction fetch error:", txError.message);
-        throw new Error("Failed to fetch transaction history");
-      }
+			if (txError) {
+				console.error("Transaction fetch error:", txError.message);
+				throw new Error("Failed to fetch transaction history");
+			}
 
       if (txData.length === 0) {
         // console.log("No transactions found for user:", user.email);
@@ -694,12 +695,12 @@ export default function HistoryScreen() {
 
       // console.log("Raw transaction data:", JSON.stringify(txData, null, 2));
 
-      const knownProviders = ["glo", "mtn", "airtel", "9mobile"];
+			const knownProviders = ["glo", "mtn", "airtel", "9mobile"];
 
-      const formattedHistory: HistoryItem[] = txData.map((tx) => {
-        let provider = "Unknown Provider";
-        let data = "Unknown Transaction";
-        let phoneNumber = "N/A";
+			const formattedHistory: HistoryItem[] = txData.map((tx) => {
+				let provider = "Unknown Provider";
+				let data = "Unknown Transaction";
+				let phoneNumber = "N/A";
 
         const transactionType = (tx.type || "unknown").toLowerCase().trim();
         // console.log(`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`);
@@ -752,19 +753,19 @@ export default function HistoryScreen() {
           ? (normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)) as "Success" | "Failed" | "Pending"
           : "Unknown";
 
-        return {
-          id: tx.id,
-          provider,
-          data,
-          price: Math.abs(tx.amount || 0),
-          date: tx.created_at,
-          status,
-          phoneNumber,
-          reference: tx.reference || "N/A",
-          metadata: tx.metadata || {},
-          type: tx.type || "Unknown",
-        };
-      });
+				return {
+					id: tx.id,
+					provider,
+					data,
+					price: Math.abs(tx.amount || 0),
+					date: tx.created_at,
+					status,
+					phoneNumber,
+					reference: tx.reference || "N/A",
+					metadata: tx.metadata || {},
+					type: tx.type || "Unknown",
+				};
+			});
 
       // console.log("Formatted history:", JSON.stringify(formattedHistory, null, 2));
       setHistory(formattedHistory);
@@ -776,20 +777,20 @@ export default function HistoryScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+	useEffect(() => {
+		fetchHistory();
+	}, [fetchHistory]);
 
-  const onRefresh = useCallback(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+	const onRefresh = useCallback(() => {
+		fetchHistory();
+	}, [fetchHistory]);
 
-  const filteredHistory =
-    filter === "All" ? history : history.filter((h) => h.status === filter);
+	const filteredHistory =
+		filter === "All" ? history : history.filter((h) => h.status === filter);
 
-  const formatAmount = (amount: number) => {
-    return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
-  };
+	const formatAmount = (amount: number) => {
+		return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+	};
 
   const handleScroll = (event: any) => {
     const { velocity } = event.nativeEvent;
@@ -909,59 +910,59 @@ export default function HistoryScreen() {
     </Pressable>
   );
 
-  return (
-    <SwipeWrapper flatListRef={flatListRef}>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <Ionicons name="arrow-back-outline" size={24} color="white" />
-          </Pressable>
-          <Text style={styles.title}>Transaction History</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <View style={styles.filterTabs}>
-          {["All", "Success", "Failed", "Pending"].map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setFilter(item as typeof filter)}
-              style={[
-                styles.filterButton,
-                filter === item && styles.activeFilterButton,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterButtonText,
-                  filter === item && styles.activeFilterButtonText,
-                ]}
-              >
-                {item}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <FlatList
-          ref={flatListRef}
-          data={filteredHistory}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="document-text-outline" size={48} color="#888" />
-              <Text style={styles.emptyStateText}>No history to show</Text>
-            </View>
-          }
-        />
-        {renderReceipt()}
-      </SafeAreaView>
-    </SwipeWrapper>
-  );
+	return (
+		<SwipeWrapper flatListRef={flatListRef}>
+			<SafeAreaView style={styles.container}>
+				<View style={styles.header}>
+					<Pressable onPress={() => router.back()}>
+						<Ionicons name="arrow-back-outline" size={24} color="white" />
+					</Pressable>
+					<Text style={styles.title}>Transaction History</Text>
+					<View style={{ width: 24 }} />
+				</View>
+				<View style={styles.filterTabs}>
+					{["All", "Success", "Failed", "Pending"].map((item) => (
+						<Pressable
+							key={item}
+							onPress={() => setFilter(item as typeof filter)}
+							style={[
+								styles.filterButton,
+								filter === item && styles.activeFilterButton,
+							]}
+						>
+							<Text
+								style={[
+									styles.filterButtonText,
+									filter === item && styles.activeFilterButtonText,
+								]}
+							>
+								{item}
+							</Text>
+						</Pressable>
+					))}
+				</View>
+				<FlatList
+					ref={flatListRef}
+					data={filteredHistory}
+					keyExtractor={(item) => item.id}
+					renderItem={renderItem}
+					contentContainerStyle={{ paddingBottom: 40 }}
+					refreshControl={
+						<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+					}
+					onScroll={handleScroll}
+					scrollEventThrottle={16}
+					ListEmptyComponent={
+						<View style={styles.emptyState}>
+							<Ionicons name="document-text-outline" size={48} color="#888" />
+							<Text style={styles.emptyStateText}>No history to show</Text>
+						</View>
+					}
+				/>
+				{renderReceipt()}
+			</SafeAreaView>
+		</SwipeWrapper>
+	);
 }
 
 const styles = StyleSheet.create({

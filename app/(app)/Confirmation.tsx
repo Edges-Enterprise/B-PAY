@@ -9,102 +9,7 @@ import ErrorModal from '@/components/confirmation/ErrorModal';
 
 // Define constants
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-
-// Generate or retrieve Lizzysub token
-const getLizzysubToken = async (userEmail: string): Promise<string> => {
-  const username = process.env.EXPO_PUBLIC_LIZZYSUB_USERNAME;
-  const password = process.env.EXPO_PUBLIC_LIZZYSUB_PASSWORD;
-
-  if (!username || !password) {
-    console.error('Lizzysub credentials missing. Check EXPO_PUBLIC_LIZZYSUB_USERNAME and EXPO_PUBLIC_LIZZYSUB_PASSWORD environment variables.');
-    throw new Error('Lizzysub credentials are not configured.');
-  }
-
-  // Check if a valid token exists in Supabase
-  const { data: tokenData, error: tokenError } = await supabase
-    .from('user_tokens')
-    .select('lizzysub_token, created_at, expires_at, is_valid')
-    .eq('user_email', userEmail)
-    .eq('is_valid', true)
-    .single();
-
-  if (tokenError && tokenError.code !== 'PGRST116') {
-    console.error('Error fetching Lizzysub token:', tokenError);
-    throw new Error(`Failed to fetch Lizzysub token: ${tokenError.message}`);
-  }
-
-  const now = new Date();
-  if (tokenData && tokenData.is_valid && tokenData.lizzysub_token) {
-    const createdAt = new Date(tokenData.created_at);
-    const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null;
-
-    // Check if token is still valid (within 30 days)
-    if (
-      now.getTime() - createdAt.getTime() < THIRTY_DAYS_IN_MS &&
-      (!expiresAt || now < expiresAt)
-    ) {
-      console.log('Using cached Lizzysub token:', `Token ${tokenData.lizzysub_token.slice(0, 4)}...${tokenData.lizzysub_token.slice(-4)}`);
-      return tokenData.lizzysub_token;
-    }
-  }
-
-  // Generate a new token via Lizzysub API using Basic Authentication
-  try {
-    const credentials = `${username}:${password}`;
-    const base64Credentials = Buffer.from(credentials).toString('base64');
-
-    const response = await fetch('https://lizzysub.com/api/user', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Basic ${base64Credentials}`,
-      },
-    });
-
-    const responseData = await response.json();
-    if (!response.ok || responseData.status !== 'success') {
-      throw new Error(`Failed to generate Lizzysub token: ${responseData.message || 'Unknown error'}`);
-    }
-
-    const newToken = responseData.AccessToken;
-    const expiresAt = new Date(now.getTime() + THIRTY_DAYS_IN_MS);
-
-    // Store the new token in Supabase
-    const { error: upsertError } = await supabase
-      .from('user_tokens')
-      .upsert({
-        user_email: userEmail,
-        lizzysub_token: newToken,
-        created_at: now.toISOString(),
-        expires_at: expiresAt.toISOString(),
-        is_valid: true,
-      });
-
-    if (upsertError) {
-      throw new Error(`Failed to store Lizzysub token: ${upsertError.message}`);
-    }
-
-    console.log('Generated and stored new Lizzysub token:', `Token ${newToken.slice(0, 4)}...${newToken.slice(-4)}`);
-    return newToken;
-  } catch (error: any) {
-    console.error('Error generating Lizzysub token:', error);
-    throw new Error(`Failed to generate Lizzysub token: ${error.message}`);
-  }
-};
-
-// Invalidate Lizzysub token on logout or session expiry
-const invalidateToken = async (userEmail: string): Promise<void> => {
-  const { error } = await supabase
-    .from('user_tokens')
-    .update({ is_valid: false })
-    .eq('user_email', userEmail);
-
-  if (error) {
-    console.error('Error invalidating Lizzysub token:', error);
-    throw new Error(`Failed to invalidate Lizzysub token: ${error.message}`);
-  }
-  console.log('Lizzysub token invalidated for user:', userEmail);
-};
+const LIZZYSUB_TOKEN = 'b5b39c2645893a318c432507d00a91270f39bd987e5fcc904dc72276a00c';
 
 // Define interfaces
 interface DataBundle {
@@ -561,7 +466,7 @@ const ConfirmationScreen: React.FC = () => {
             return;
           }
 
-          // Use Lizzysub API for Hot plans
+          // Use Lizzysub API for Hot plans with static token
           const requestBody = {
             network: parsedNetworkId,
             phone: editableMobileNumber,
@@ -572,23 +477,11 @@ const ConfirmationScreen: React.FC = () => {
 
           console.log('Lizzysub API request:', requestBody);
 
-          let token;
-          try {
-            token = await getLizzysubToken(userEmail);
-          } catch (error: any) {
-            if (error.message.includes('Invalid AccessToken')) {
-              await invalidateToken(userEmail);
-              token = await getLizzysubToken(userEmail);
-            } else {
-              throw error;
-            }
-          }
-
           apiResponse = await fetch('https://lizzysub.com/api/data', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Token ${token}`,
+              Authorization: `Token ${LIZZYSUB_TOKEN}`,
             },
             body: JSON.stringify(requestBody),
           });
@@ -636,11 +529,6 @@ const ConfirmationScreen: React.FC = () => {
               setErrorModalVisible(true);
               Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
               return;
-            }
-
-            if (apiResponse.status === 403 && responseText.includes('Invalid AccessToken')) {
-              await invalidateToken(userEmail);
-              throw new Error('Invalid Lizzysub token. A new token will be generated on the next attempt.');
             }
 
             if (responseText.includes('Invalid Data Plan ID or Network')) {
@@ -947,19 +835,6 @@ const ConfirmationScreen: React.FC = () => {
   };
 
   const purchaseDescription = () => purchaseType === 'data' ? (selectedBundle.data || `Plan ID ${parsedPlanId}`) : `Airtime ₦${(selectedBundle.price || selectedBundle.amount) ?? 0}`;
-
-  // Handle logout or session expiry
-  useEffect(() => {
-    const authListener = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        invalidateToken(userEmail).catch(err => console.error('Error invalidating token on logout:', err));
-      }
-    });
-
-    return () => {
-      authListener.data.subscription.unsubscribe();
-    };
-  }, [userEmail]);
 
   return (
     <View style={styles.container}>

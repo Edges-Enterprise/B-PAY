@@ -318,47 +318,74 @@ const BuyDataScreen: React.FC = () => {
   }, [activeCategory, categoryPlanTypes, activePlanType, selectedProvider]);
 
   const planTypeOptions = useMemo(() => {
-    // console.log("Processing PlanTypeOptions:", {
-    //   dataBundlesLength: dataBundles.length,
-    //   activeCategory,
-    //   searchTerm,
-    //   provider: selectedProvider?.name,
-    //   availablePlanTypes: categoryPlanTypes.length,
-    // });
+    if (activeCategory === "Hot") return [];
 
-    if (activeCategory === "Hot") {
-      return [];
-    }
+    const types = [...new Set(
+      dataBundles
+        .filter(bundle => bundle.category === activeCategory)
+        .map(bundle => bundle.planType.toUpperCase())
+    )];
 
-    if (!dataBundles.length) {
-      console.warn("No dataBundles available");
-      return availablePlanTypes;
-    }
-
-    let types: string[] = [];
-    if (searchTerm) {
-      const results = dataBundles.filter((bundle: DataBundle) => {
-        const search = searchTerm.toLowerCase().trim();
-        return (
-          bundle.data.toLowerCase().includes(search) ||
-          bundle.validity.toLowerCase().includes(search) ||
-          bundle.planType?.toLowerCase()?.includes(search) ||
-          bundle.description?.toLowerCase()?.includes(search) ||
-          bundle.variation_code?.toLowerCase()?.includes(search)
-        );
-      });
-      types = [...new Set(results.map((bundle: DataBundle) => bundle.planType))];
-    } else {
-      types = categoryPlanTypes;
-    }
-
-    types = types.filter((planType: string) => VALID_PLAN_TYPES.includes(planType));
-    if (!types.length) {
-      console.warn(`No plan types available for ${activeCategory} with searchTerm: ${searchTerm}`);
-    }
-    // console.log("Computed planTypeOptions:", types);
+    console.log("Computed planTypeOptions:", types);
     return types;
-  }, [dataBundles, activeCategory, searchTerm, categoryPlanTypes]);
+  }, [dataBundles, activeCategory]);
+
+  const ensureProfileExists = useCallback(async () => {
+    if (!userEmail) {
+      console.error("No user email provided for profile creation");
+      Alert.alert("Error", "User authentication missing");
+      return;
+    }
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("No authenticated user for profile check:", authError);
+        Alert.alert("Error", `Failed to verify user: ${authError?.message || "Unknown error"}`);
+        return;
+      }
+      console.log("Checking profile for user:", { userId: user.id, email: userEmail });
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id);
+      console.log("Profile check result:", { userId: user.id, data, error });
+      if (error && error.code !== "PGRST116") {
+        console.error("Error checking profile:", error);
+        Alert.alert("Error", `Failed to verify user profile: ${error.message} (Code: ${error.code})`);
+        return;
+      }
+      if (!data || data.length === 0) {
+        console.log("No profile found, creating one for user:", user.id);
+        const derivedUsername = userEmail.split("@")[0] || `user_${user.id}`;
+        const { error: upsertError } = await supabase
+          .from("profiles")
+          .upsert({
+            id: user.id,
+            email: userEmail,
+            username: derivedUsername,
+            transaction_pin: "",
+            is_admin: false
+          }, { onConflict: "id" });
+        if (upsertError) {
+          console.error("Error upserting profile:", upsertError);
+          Alert.alert("Error", `Failed to initialize user profile: ${upsertError.message} (Code: ${upsertError.code})`);
+        } else {
+          console.log("Profile created/updated with username:", derivedUsername);
+        }
+      } else {
+        console.log("Profile exists for user:", user.id);
+      }
+    } catch (error) {
+      console.error("Error in ensureProfileExists:", error);
+      Alert.alert("Error", `Failed to ensure user profile: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (userEmail) {
+      ensureProfileExists();
+    }
+  }, [userEmail, ensureProfileExists]);
 
   const updateHasPin = useCallback((value: boolean) => {
     if (!pinVerified.current || value) {
@@ -370,7 +397,18 @@ const BuyDataScreen: React.FC = () => {
 
   const verifyTransactionPin = useCallback(async (email: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.from("profiles").select("transaction_pin").eq("email", email).single();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.log("No authenticated user");
+        Alert.alert("Error", `No authenticated user: ${authError?.message || "Unknown error"}`);
+        return false;
+      }
+      console.log("Verifying PIN for user:", { userId: user.id, email });
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("id", user.id)
+        .single();
       if (error) {
         if (error.code === "PGRST116") {
           // console.log("No profile for email:", email);
@@ -383,10 +421,100 @@ const BuyDataScreen: React.FC = () => {
       return exists;
     } catch (error) {
       console.error("PIN verification error:", error);
-      Alert.alert("Error", "Unable to verify PIN");
+      Alert.alert("Error", `Unable to verify PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
       return false;
     }
   }, []);
+
+  const savePin = async () => {
+    setIsLoading(true);
+    try {
+      if (newPin.length < 4 || newPin.length > 6 || confirmPin.length < 4 || confirmPin.length > 6) {
+        return Alert.alert("Error", "PIN must be 4-6 digits");
+      }
+      if (newPin !== confirmPin) {
+        return Alert.alert("Error", "PINs do not match");
+      }
+      if (!userEmail) {
+        return Alert.alert("Error", "User authentication missing");
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("User not authenticated:", authError);
+        return Alert.alert("Error", `User not authenticated: ${authError?.message || "Unknown error"}`);
+      }
+      console.log("Saving PIN for user:", { userId: user.id, email: userEmail, newPin: "****" });
+      // Ensure profile exists before updating
+      await ensureProfileExists();
+      // Debug: Check all profiles for this user
+      const { data: debugData, error: debugError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id);
+      console.log("Debug profiles query:", { userId: user.id, data: debugData, error: debugError });
+      if (debugData && debugData.length > 1) {
+        console.warn("Multiple profiles found for user:", { userId: user.id, profiles: debugData });
+        Alert.alert("Error", "Multiple profiles detected for this user. Contact support to resolve.");
+        return;
+      }
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ transaction_pin: newPin })
+        .eq("id", user.id);
+      if (updateError) {
+        console.error("PIN save error:", updateError);
+        if (updateError.code === "42501") {
+          return Alert.alert("Error", "PIN save failed: Permission denied. Please enable RLS on the profiles table.");
+        }
+        return Alert.alert("Error", `Failed to save PIN: ${updateError.message} (Code: ${updateError.code})`);
+      }
+      // Verify the PIN was saved correctly
+      const { data, error: fetchError } = await supabase
+        .from("profiles")
+        .select("transaction_pin, updated_at")
+        .eq("id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (fetchError) {
+        console.error("PIN verification after save failed:", fetchError, { userId: user.id });
+        if (fetchError.code === "PGRST301") {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from("profiles")
+            .select("transaction_pin, updated_at")
+            .eq("id", user.id)
+            .order("updated_at", { ascending: false })
+            .limit(1);
+          if (fallbackError || !fallbackData || fallbackData.length === 0) {
+            console.error("Fallback query failed:", fallbackError, { userId: user.id });
+            return Alert.alert("Error", `PIN verification failed: ${fallbackError?.message || "No profile found"}`);
+          }
+          console.log("Multiple rows detected, using latest:", fallbackData);
+          if (fallbackData[0].transaction_pin !== newPin) {
+            return Alert.alert("Error", "PIN not saved correctly: Verification failed");
+          }
+        } else {
+          return Alert.alert("Error", `PIN verification failed: ${fetchError.message} (Code: ${fetchError.code})`);
+        }
+      }
+      if (!data || data.transaction_pin !== newPin) {
+        console.error("PIN verification mismatch:", { expected: newPin, actual: data?.transaction_pin, userId: user.id });
+        return Alert.alert("Error", "PIN not saved correctly: Verification failed");
+      }
+      console.log("PIN saved and verified:", { transaction_pin: data.transaction_pin, userId: user.id });
+      setHasPin(true);
+      pinVerified.current = true;
+      setIsPinCreationModalOpen(false);
+      setNewPin("");
+      setConfirmPin("");
+      Alert.alert("Success", "PIN created successfully");
+    } catch (error) {
+      console.error("PIN Creation Error:", error);
+      Alert.alert("Error", `Failed to save PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const createTransactionReference = useCallback(async () => {
     try {
@@ -491,6 +619,12 @@ const BuyDataScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("User not authenticated:", authError);
+        throw new Error(`User not authenticated: ${authError?.message || "Unknown error"}`);
+      }
+      await ensureProfileExists();
       const { data: profileData, error: pinError } = await supabase
         .from("profiles")
         .select("transaction_pin")
@@ -506,9 +640,7 @@ const BuyDataScreen: React.FC = () => {
         }
         return;
       }
-
-      if (!profileData || !profileData.transaction_pin) {
-        // console.log("No PIN set, opening PIN creation modal");
+      if (!profileData || profileData.transaction_pin === "") {
         setIsPinCreationModalOpen(true);
         return Alert.alert("Error", "No PIN set. Create a PIN");
       }

@@ -251,6 +251,7 @@ const AirtimeProvider: React.FC = () => {
               filter: `user_email=eq.${user.email}`,
             },
             (payload) => {
+              console.log("Wallet update received:", payload.new.balance);
               setBalance(payload.new.balance ?? 0);
             }
           )
@@ -342,7 +343,7 @@ const AirtimeProvider: React.FC = () => {
       },
       onPanResponderGrant: () => {
         console.log("PanResponder granted");
-        gestureRef.current = { ...stateRef.current }; // Capture state at gesture start
+        gestureRef.current = { ...stateRef.current };
         console.log("Gesture ref captured:", gestureRef.current);
         scrollViewRef.current?.setNativeProps({ scrollEnabled: false });
       },
@@ -376,7 +377,7 @@ const AirtimeProvider: React.FC = () => {
           useNativeDriver: true,
         }).start();
       },
-    }), // Fixed: Added proper closing parenthesis and bracket
+    }),
     [isSlideEnabled]
   );
 
@@ -385,7 +386,7 @@ const AirtimeProvider: React.FC = () => {
     const { selectedProvider, phoneNumber, selectedAmount, discountedPrice } = gestureRef.current;
     console.log("handlePurchase called with:", { selectedProvider, phoneNumber, selectedAmount, discountedPrice, userEmail, balance });
 
-    if (!selectedProvider || !phoneNumber || !selectedAmount || balance === null || !userEmail) {
+    if (!selectedProvider || !phoneNumber || !selectedAmount || !discountedPrice || balance === null || !userEmail) {
       Alert.alert("Error", "Missing required information.");
       setTransactionModalVisible(true);
       setTransactionStatus("failed");
@@ -407,7 +408,7 @@ const AirtimeProvider: React.FC = () => {
       return;
     }
 
-    if (discountedPrice && balance < discountedPrice) {
+    if (balance < discountedPrice) {
       Alert.alert(
         "Error",
         `Insufficient balance. Required: ₦${formatNumberWithCommas(discountedPrice)}, Available: ₦${formatNumberWithCommas(balance)}`
@@ -432,9 +433,7 @@ const AirtimeProvider: React.FC = () => {
       const reference = await createTransactionReference();
       setReferenceId(reference);
 
-      const actualCost = discountedPrice || selectedAmount;
-
-      // Verify wallet balance
+      // Fetch current wallet balance
       const { data: wallet, error: walletError } = await supabase
         .from("wallet")
         .select("balance")
@@ -446,10 +445,12 @@ const AirtimeProvider: React.FC = () => {
       }
 
       currentBalance = wallet?.balance ?? balance;
-      if (currentBalance < actualCost) {
+      console.log("Pre-transaction wallet balance:", currentBalance);
+
+      if (currentBalance < discountedPrice) {
         Alert.alert(
           "Error",
-          `Insufficient balance. Required: ₦${formatNumberWithCommas(actualCost)}, Available: ₦${formatNumberWithCommas(currentBalance)}`
+          `Insufficient balance. Required: ₦${formatNumberWithCommas(discountedPrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}`
         );
         setTransactionModalVisible(false);
         return;
@@ -458,7 +459,7 @@ const AirtimeProvider: React.FC = () => {
       // Record pending transaction
       const transactionData = {
         user_email: userEmail,
-        amount: -actualCost,
+        amount: -discountedPrice,
         reference,
         status: "pending",
         env: "live",
@@ -467,17 +468,17 @@ const AirtimeProvider: React.FC = () => {
           phone_number: phoneNumber,
           validity: "N/A",
           type: "airtime",
-          actual_cost: actualCost,
+          actual_cost: discountedPrice,
           fees: {
             vat: 10,
             total_fee: 50,
-            net_amount: actualCost - 50,
+            net_amount: discountedPrice - 50,
             transfer_fee: 10,
             api_network_fee: 30,
             wallet_management_fee: 10,
           },
           payment_date: new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }),
-          custom_fields: [ // Fixed: Proper object syntax
+          custom_fields: [
             {
               value: "Edges Network",
               display_name: "Mobile Payment",
@@ -488,8 +489,10 @@ const AirtimeProvider: React.FC = () => {
         },
       };
 
+      console.log("Recording transaction with amount:", -discountedPrice);
+
       const { data: pendingTx, error: pendingTxError } = await supabase
-        .from("transactions") // Fixed: Correct table name and insert syntax
+        .from("transactions")
         .insert(transactionData)
         .select("id, created_at")
         .single();
@@ -498,18 +501,66 @@ const AirtimeProvider: React.FC = () => {
         throw new Error(`Failed to record pending transaction: ${pendingTxError.message}`);
       }
 
-      // Deduct balance
-      const newBalance = currentBalance - actualCost;
-      const { error: walletUpdateError } = await supabase
-        .from("wallet")
-        .update({ balance: newBalance })
-        .eq("user_email", userEmail);
+      // Calculate new balance
+      const newBalance = currentBalance - discountedPrice;
+      console.log("Calculated new balance:", { currentBalance, discountedPrice, newBalance });
 
-      if (walletUpdateError) {
-        throw new Error(`Failed to update wallet: ${walletUpdateError.message}`);
+      // Update wallet balance with retry mechanism
+      let walletUpdateSuccess = false;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!walletUpdateSuccess && attempts < maxAttempts) {
+        attempts++;
+        console.log(`Attempt ${attempts} to update wallet balance to:`, newBalance);
+
+        const { data: updatedWallet, error: walletUpdateError } = await supabase
+          .from("wallet")
+          .update({ balance: newBalance })
+          .eq("user_email", userEmail)
+          .select("balance")
+          .single();
+
+        if (walletUpdateError) {
+          console.error(`Wallet update attempt ${attempts} failed:`, walletUpdateError.message);
+          if (attempts === maxAttempts) {
+            throw new Error(`Failed to update wallet after ${maxAttempts} attempts: ${walletUpdateError.message}`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait before retry
+          continue;
+        }
+
+        // Verify the updated balance
+        const { data: verifiedWallet, error: verifyError } = await supabase
+          .from("wallet")
+          .select("balance")
+          .eq("user_email", userEmail)
+          .single();
+
+        if (verifyError) {
+          throw new Error(`Failed to verify wallet balance: ${verifyError.message}`);
+        }
+
+        const verifiedBalance = verifiedWallet?.balance ?? newBalance;
+        console.log("Verified wallet balance after update:", verifiedBalance);
+
+        if (verifiedBalance !== newBalance) {
+          console.error(`Balance mismatch: Expected ${newBalance}, got ${verifiedBalance}`);
+          if (attempts === maxAttempts) {
+            throw new Error(`Wallet balance verification failed: Expected ${newBalance}, got ${verifiedBalance}`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait before retry
+          continue;
+        }
+
+        walletUpdateSuccess = true;
+        setBalance(verifiedBalance);
+        console.log("Wallet updated successfully with balance:", verifiedBalance);
       }
 
-      setBalance(newBalance);
+      if (!walletUpdateSuccess) {
+        throw new Error("Failed to update wallet balance after maximum attempts");
+      }
 
       // Call Ebenkdata API
       const requestBody = {
@@ -523,10 +574,10 @@ const AirtimeProvider: React.FC = () => {
       console.log("Ebenkdata API request:", requestBody);
 
       const purchaseResponse = await fetch("https://ebenkdata.com/api/topup/", {
-        method: "POST", // Fixed: Correct fetch options structure
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03", // Fixed: Corrected token
+          Authorization: "Token de883370902cf73e68ed63f566dbf38a38719f03",
         },
         body: JSON.stringify(requestBody),
       });
@@ -538,10 +589,16 @@ const AirtimeProvider: React.FC = () => {
       });
 
       if (!purchaseResponse.ok) {
+        // Revert wallet balance on failure
+        await supabase
+          .from("wallet")
+          .update({ balance: currentBalance })
+          .eq("user_email", userEmail);
         await supabase
           .from("transactions")
           .update({ status: "failed" })
           .eq("id", pendingTx.id);
+        setBalance(currentBalance);
         setTransactionStatus("failed");
         Alert.alert("Error", "Airtime purchase failed. Please try again.");
         return;
@@ -561,7 +618,7 @@ const AirtimeProvider: React.FC = () => {
 
       Alert.alert(
         "Success",
-        `Successfully purchased Airtime ₦${formatNumberWithCommas(selectedAmount)} on ${selectedProvider.name} for ₦${formatNumberWithCommas(actualCost)}. Sent to ${phoneNumber}.`
+        `Successfully purchased Airtime ₦${formatNumberWithCommas(selectedAmount)} on ${selectedProvider.name} for ₦${formatNumberWithCommas(discountedPrice)}. Sent to ${phoneNumber}.`
       );
 
       router.push({
@@ -570,8 +627,8 @@ const AirtimeProvider: React.FC = () => {
           id: pendingTx.id,
           provider: selectedProvider.name,
           data: `Airtime ₦${selectedAmount.toLocaleString()}`,
-          price: actualCost.toString(),
-          date: new Date().toISOString(), // Fixed: Removed duplicate date key
+          price: discountedPrice.toString(),
+          date: new Date().toISOString(),
           status: "Success",
           phoneNumber,
           reference,
@@ -579,7 +636,7 @@ const AirtimeProvider: React.FC = () => {
             validity: "N/A",
             payment_method: "Wallet",
             type: "airtime",
-            actual_cost: actualCost, // Fixed: Corrected variable name
+            actual_cost: discountedPrice,
           }),
         },
       });
@@ -591,6 +648,8 @@ const AirtimeProvider: React.FC = () => {
           .from("wallet")
           .update({ balance: currentBalance })
           .eq("user_email", userEmail);
+        setBalance(currentBalance);
+        console.log("Wallet balance reverted to:", currentBalance);
       }
       setTransactionModalVisible(false);
       Alert.alert("Error", `Failed to process purchase: ${error.message || "Please try again."}`);
@@ -621,7 +680,7 @@ const AirtimeProvider: React.FC = () => {
         .single();
 
       if (fetchError && fetchError.code !== "PGRST116") {
-        throw fetchError; // Fixed: Correct error variable
+        throw fetchError;
       }
 
       if (profile) {
@@ -686,7 +745,7 @@ const AirtimeProvider: React.FC = () => {
         <View style={styles.walletBalanceContainer}>
           <Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
           <Text style={styles.walletBalanceValue}>
-            {isBalanceLoading ? "Loading..." : `₦${formatNumberWithCommas(balance)}`} {/* Fixed: Removed invalid true expression */}
+            {isBalanceLoading ? "Loading..." : `₦${formatNumberWithCommas(balance)}`}
           </Text>
         </View>
       </View>
@@ -749,13 +808,13 @@ const AirtimeProvider: React.FC = () => {
             <TouchableOpacity
               key={amount}
               onPress={() => selectAmount(amount)}
-              style={[ // Fixed: Correct style array syntax
+              style={[
                 styles.amountButton,
                 selectedAmount === amount && styles.amountButtonSelected,
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.amountText}>₦{formatNumberWithCommas(amount)}</Text> {/* Fixed: Correct currency symbol */}
+              <Text style={styles.amountText}>₦{formatNumberWithCommas(amount)}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -763,7 +822,7 @@ const AirtimeProvider: React.FC = () => {
         <View style={styles.discountBar}>
           <Text style={styles.discountLabel}>Amount to pay:</Text>
           <Text style={styles.discountValue}>
-            ₦{formatNumberWithCommas(discountedPrice)} {/* Fixed: Correct currency symbol */}
+            ₦{formatNumberWithCommas(discountedPrice)}
           </Text>
         </View>
 
@@ -890,7 +949,7 @@ const styles = StyleSheet.create({
   providerCard: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E1E1E", // Fixed: Corrected hex code
+    backgroundColor: "#1E1E1E",
     borderRadius: 12,
     padding: 16,
     width: 100,

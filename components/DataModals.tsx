@@ -82,13 +82,25 @@ const DataModals: React.FC<DataModalsProps> = ({
   onSavePin,
   onProceed,
 }) => {
-  useEffect(() => {
-    if (isPurchaseModalOpen && userEmail) {
-      // console.log("PurchaseModal opened, verifying PIN for email:", userEmail);
-      verifyTransactionPin(userEmail).then((exists) => {
-        // console.log("Verified PIN exists:", exists);
-        updateHasPin(exists);
-      });
+  const checkPinStatus = useCallback(async () => {
+    if (!isPurchaseModalOpen || !userEmail) {
+      console.log("Skipping PIN verification: Purchase modal closed or no user email");
+      return;
+    }
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("No authenticated user:", authError);
+        Alert.alert("Error", `User not authenticated: ${authError?.message || "Unknown error"}`);
+        return;
+      }
+      console.log("PurchaseModal opened, verifying PIN for user:", user.id);
+      const exists = await verifyTransactionPin(userEmail);
+      console.log("Verified PIN exists:", exists);
+      await updateHasPin(exists);
+    } catch (error) {
+      console.error("Error verifying PIN in DataModals:", error);
+      Alert.alert("Error", `Failed to verify PIN status: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }, [isPurchaseModalOpen, userEmail, verifyTransactionPin, updateHasPin]);
 

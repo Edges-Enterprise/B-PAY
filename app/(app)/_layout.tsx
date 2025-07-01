@@ -85,11 +85,7 @@ function AppStack() {
 				<Stack.Screen name="welcome" options={{ headerShown: false }} />
 				<Stack.Screen name="serviceprovider" options={{ headerShown: false }} />
 				<Stack.Screen
-					name="airtimeprovider"
-					options={{
-						headerTitle: "Airtime Purchase",
-					}}
-				/>
+					name="airtimeprovider" options={{ headerShown: false }} />
 				<Stack.Screen
 					name="receipt"
 					options={{ headerTitle: "Transaction Receipt" }}
