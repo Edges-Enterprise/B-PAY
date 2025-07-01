@@ -21,11 +21,26 @@ serve(async (req: Request) => {
   }
 
   const payload = await req.text();
-  const secret = paystackSecretKey; // Use your Paystack test or live secret key
-  const hash = crypto
-    .createHmac("sha512", secret)
-    .update(payload)
-    .digest("hex");
+  const secret = paystackSecretKey;
+
+  // Validate Paystack signature
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"]
+  );
+
+  const signatureBytes = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payload)
+  );
+
+  const hashArray = Array.from(new Uint8Array(signatureBytes));
+  const hash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 
   if (hash !== signature) {
     return new Response(JSON.stringify({ error: "Invalid signature" }), {
@@ -34,7 +49,7 @@ serve(async (req: Request) => {
     });
   }
 
-  // Parse the webhook payload
+  // Parse webhook payload
   const event = JSON.parse(payload);
 
   if (event.event !== "charge.success") {
@@ -45,7 +60,8 @@ serve(async (req: Request) => {
   }
 
   const { reference, amount, customer } = event.data;
-  const userEmail = customer.email;
+  const userEmail = customer.email.toLowerCase(); // standardize email
+  const depositAmount = amount / 100; // Convert kobo to Naira
 
   try {
     // Verify the transaction with Paystack
@@ -76,15 +92,38 @@ serve(async (req: Request) => {
 
     if (txError) throw txError;
 
-    // Update or insert wallet balance
-    const { error: walletError } = await supabase.rpc("update_wallet_balance", {
-      p_user_email: userEmail,
-      p_amount: amount / 100, // Convert kobo to Naira
-    });
+    // Check if wallet exists
+    const { data: wallet, error: walletFetchError } = await supabase
+      .from("wallet")
+      .select("*")
+      .eq("user_email", userEmail)
+      .single();
 
-    if (walletError) throw walletError;
+    if (walletFetchError && walletFetchError.code !== "PGRST116") {
+      // If error is not "No rows found", throw
+      throw walletFetchError;
+    }
 
-    return new Response(JSON.stringify({ message: "Transaction processed" }), {
+    if (wallet) {
+      // Wallet exists, update balance
+      const { error: updateError } = await supabase
+        .from("wallet")
+        .update({ balance: wallet.balance + depositAmount })
+        .eq("user_email", userEmail);
+
+      if (updateError) throw updateError;
+    } else {
+      // Wallet doesn't exist, create it
+      const { error: insertError } = await supabase
+        .from("wallet")
+        .insert([{ user_email: userEmail, balance: depositAmount }]);
+
+      if (insertError) throw insertError;
+    }
+
+    console.log(`✅ Wallet successfully updated for ${userEmail}`);
+
+    return new Response(JSON.stringify({ message: "Transaction processed and wallet updated" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
