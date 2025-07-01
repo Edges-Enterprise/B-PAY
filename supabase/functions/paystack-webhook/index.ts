@@ -1,98 +1,293 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import axios from "https://esm.sh/axios@1.6.8";
 
-// Supabase client configuration (use environment variables in production)
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+	Deno.env.get("SUPABASE_URL")!,
+	Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, // Use service role key instead of anon key
+	{ auth: { persistSession: false } },
+);
 
-// Paystack secret key (store securely in environment variables)
 const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY")!;
 
-serve(async (req: Request) => {
-  // Verify the request is from Paystack
-  const signature = req.headers.get("x-paystack-signature");
-  if (!signature) {
-    return new Response(JSON.stringify({ error: "No signature provided" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+serve(async (req) => {
+	console.log("➡️ Webhook triggered");
 
-  const payload = await req.text();
-  const secret = paystackSecretKey; // Use your Paystack test or live secret key
-  const hash = crypto
-    .createHmac("sha512", secret)
-    .update(payload)
-    .digest("hex");
+	if (req.method !== "POST") {
+		console.log("❌ Invalid method:", req.method);
+		return new Response("Method Not Allowed", { status: 405 });
+	}
 
-  if (hash !== signature) {
-    return new Response(JSON.stringify({ error: "Invalid signature" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	const signature = req.headers.get("x-paystack-signature");
+	if (!signature) {
+		console.log("❌ Missing signature");
+		return new Response("Unauthorized", { status: 401 });
+	}
 
-  // Parse the webhook payload
-  const event = JSON.parse(payload);
+	const bodyArrayBuffer = await req.arrayBuffer();
+	const rawBody = new TextDecoder().decode(bodyArrayBuffer);
 
-  if (event.event !== "charge.success") {
-    return new Response(JSON.stringify({ message: "Event not handled" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	const valid = await verifyPaystackSignature(rawBody, signature);
+	console.log("🔐 Signature valid:", valid);
 
-  const { reference, amount, customer } = event.data;
-  const userEmail = customer.email;
+	if (!valid) {
+		console.log("❌ Invalid signature");
+		return new Response("Unauthorized", { status: 401 });
+	}
 
-  try {
-    // Verify the transaction with Paystack
-    const verifyResponse = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      {
-        headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+	let payload;
+	try {
+		payload = JSON.parse(rawBody);
+	} catch (err) {
+		console.error("❌ Failed to parse payload:", err);
+		return new Response("Invalid payload", { status: 400 });
+	}
 
-    const transactionData = verifyResponse.data.data;
-    if (transactionData.status !== "success") {
-      return new Response(JSON.stringify({ error: "Transaction not successful" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+	const event = payload?.event;
+	const data = payload?.data;
+	const reference = data?.reference;
+	const email = data?.customer?.email || data?.customer?.[0]?.email;
 
-    // Update transactions table
-    const { error: txError } = await supabase
-      .from("transactions")
-      .update({ status: "success" })
-      .eq("reference", reference)
-      .eq("status", "pending");
+	const grossAmountKobo = data?.amount ?? null; // still in kobo
+	const grossAmount = grossAmountKobo / 100; // convert to naira
+	const fees = grossAmount * 0.1;
+	const netAmount = grossAmount - fees;
 
-    if (txError) throw txError;
+	console.log("📦 Event:", event);
+	console.log("🔗 Reference:", reference);
+	console.log("🔗 Payload data:", data);
+	console.log("📧 Email:", email);
+	console.log("💵 Gross Amount:", grossAmount);
+	console.log("💸 Fees (10%):", fees);
+	console.log("🧾 Net Amount to save:", netAmount);
 
-    // Update or insert wallet balance
-    const { error: walletError } = await supabase.rpc("update_wallet_balance", {
-      p_user_email: userEmail,
-      p_amount: amount / 100, // Convert kobo to Naira
-    });
+	if (!reference || !email || netAmount == null) {
+		console.log("❌ Missing critical fields");
+		return new Response("Missing fields", { status: 400 });
+	}
 
-    if (walletError) throw walletError;
+	try {
+		if (event === "charge.success" && data.status === "success") {
+			console.log("✅ Payment success — attempting to update transaction");
 
-    return new Response(JSON.stringify({ message: "Transaction processed" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Error processing webhook:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+			const MAX_RETRIES = 5;
+			const RETRY_INTERVAL_MS = 2000;
+
+			let tx = null;
+			let txError = null;
+			let attempt = 0;
+
+			while (attempt < MAX_RETRIES) {
+				attempt++;
+
+				console.log(
+					`🔍 Attempt ${attempt} — Searching for transaction with reference: ${reference}`,
+				);
+
+				const { data: existingTx, error: checkError } = await supabase
+					.from("transactions")
+					.select("*")
+					.eq("reference", reference)
+					.maybeSingle();
+
+				console.log(`🔍 Query result:`, {
+					found: !!existingTx,
+					error: checkError?.message,
+					transaction: existingTx
+						? {
+								id: existingTx.id,
+								reference: existingTx.reference,
+								status: existingTx.status,
+								email: existingTx.user_email,
+							}
+						: null,
+				});
+
+				if (checkError) {
+					console.error(
+						`❌ Attempt ${attempt} — DB error checking transaction:`,
+						checkError.message,
+					);
+					txError = checkError;
+					break;
+				}
+
+				if (!existingTx) {
+					console.warn(
+						`⏳ Attempt ${attempt} — transaction not found in DB yet: ${reference}`,
+					);
+					if (attempt < MAX_RETRIES) {
+						await new Promise((res) => setTimeout(res, RETRY_INTERVAL_MS));
+						continue;
+					}
+				} else {
+					console.log(`📍 Found transaction on attempt ${attempt}:`, {
+						id: existingTx.id,
+						status: existingTx.status,
+						reference: existingTx.reference,
+						email: existingTx.user_email,
+					});
+
+					if (existingTx.status === "success") {
+						console.log("✅ Transaction already marked as success");
+						return new Response("OK - Already processed", { status: 200 });
+					}
+
+					const { data: updatedTx, error: updateError } = await supabase
+						.from("transactions")
+						.update({
+							status: "success",
+							amount: netAmount,
+							metadata: {
+								...existingTx.metadata,
+								verified_by: "paystack-webhook",
+								gateway_response: data.gateway_response,
+								channel: data.channel,
+								paid_at: data.paid_at,
+								paystack_id: data.id,
+								fees,
+								gross_amount: grossAmount,
+								authorization: data.authorization,
+							},
+						})
+						.eq("id", existingTx.id)
+						.eq("status", "pending")
+						.select("*")
+						.maybeSingle();
+
+					tx = updatedTx;
+					txError = updateError;
+
+					if (updateError) {
+						console.error(
+							`❌ Attempt ${attempt} — Update error:`,
+							updateError.message,
+						);
+						break;
+					}
+
+					if (tx) {
+						console.log(
+							`✅ Transaction updated successfully on attempt ${attempt}`,
+						);
+						break;
+					}
+				}
+
+				if (attempt < MAX_RETRIES) {
+					console.log(`⏳ Waiting ${RETRY_INTERVAL_MS}ms before retry...`);
+					await new Promise((res) => setTimeout(res, RETRY_INTERVAL_MS));
+				}
+			}
+
+			if (txError) {
+				console.error("❌ Final error after retries:", txError.message);
+				return new Response("Transaction update error", { status: 500 });
+			}
+
+			if (!tx) {
+				console.warn(
+					`⚠️ Transaction still not found/updated after ${MAX_RETRIES} attempts: ${reference}`,
+				);
+
+				const { data: txsByEmailAmount } = await supabase
+					.from("transactions")
+					.select("*")
+					.eq("user_email", email)
+					.eq("amount", netAmount)
+					.eq("status", "pending")
+					.order("created_at", { ascending: false })
+					.limit(5);
+
+				if (txsByEmailAmount && txsByEmailAmount.length > 0) {
+					const matchingTx = txsByEmailAmount[0];
+					console.log(
+						"🎯 Found potential matching transaction, attempting update...",
+					);
+
+					const { data: updatedTx, error: updateError } = await supabase
+						.from("transactions")
+						.update({
+							status: "success",
+							reference: reference,
+							amount: netAmount,
+							metadata: {
+								...matchingTx.metadata,
+								verified_by: "paystack-webhook",
+								gateway_response: data.gateway_response,
+								channel: data.channel,
+								paid_at: data.paid_at,
+								paystack_id: data.id,
+								fees,
+								gross_amount: grossAmount,
+								authorization: data.authorization,
+								original_reference: matchingTx.reference,
+							},
+						})
+						.eq("id", matchingTx.id)
+						.eq("status", "pending")
+						.select("*")
+						.maybeSingle();
+
+					if (updateError) {
+						console.error(
+							"❌ Error updating matching transaction:",
+							updateError.message,
+						);
+					} else if (updatedTx) {
+						console.log("✅ Successfully updated matching transaction");
+						return new Response("OK", { status: 200 });
+					}
+				}
+
+				return new Response("Transaction not found or already processed", {
+					status: 404,
+				});
+			}
+
+			console.log(
+				"✅ Transaction marked as success. Trigger will credit wallet.",
+			);
+			return new Response("OK", { status: 200 });
+		}
+
+		console.log("ℹ️ Event ignored:", event);
+		return new Response("Ignored", { status: 200 });
+	} catch (err) {
+		console.error("🔥 Unhandled error:", err);
+		return new Response("Internal Error", { status: 500 });
+	}
 });
+
+async function verifyPaystackSignature(
+	rawBody: string,
+	signature: string,
+): Promise<boolean> {
+	const encoder = new TextEncoder();
+	const key = encoder.encode(paystackSecretKey);
+
+	const cryptoKey = await crypto.subtle.importKey(
+		"raw",
+		key,
+		{ name: "HMAC", hash: "SHA-512" },
+		false,
+		["verify"],
+	);
+
+	const expectedSignatureBytes = hexToBytes(signature);
+	const bodyBytes = encoder.encode(rawBody);
+
+	return await crypto.subtle.verify(
+		"HMAC",
+		cryptoKey,
+		expectedSignatureBytes,
+		bodyBytes,
+	);
+}
+
+function hexToBytes(hex: string): Uint8Array {
+	const bytes = new Uint8Array(hex.length / 2);
+	for (let i = 0; i < bytes.length; i++) {
+		bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+	}
+	return bytes;
+}

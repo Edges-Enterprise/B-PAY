@@ -1,10 +1,9 @@
-import React, { useEffect, useCallback } from "react";
-import { View, StyleSheet, Alert } from "react-native";
+import React, { useEffect } from "react";
+import { View, StyleSheet } from "react-native";
 import PurchaseModal from "@/components/homescreen/PurchaseModal";
 import TransactionStatusModal from "@/components/homescreen/TransactionStatusModal";
 import CreatePinModal from "@/components/homescreen/CreatePinModal";
 import { DataBundle } from "@/app/(app)/serviceprovider";
-import { supabase } from "@/config/supabase";
 
 interface DataModalsProps {
   isPurchaseModalOpen: boolean;
@@ -25,7 +24,7 @@ interface DataModalsProps {
   transactionReference: string;
   setTransactionReference: (ref: string) => void;
   hasPin: boolean;
-  updateHasPin: (value: boolean) => Promise<void>;
+  updateHasPin: (value: boolean) => void;
   isTransactionPinVisible: boolean;
   setIsTransactionPinVisible: (visible: boolean) => void;
   newPinInput: string;
@@ -83,45 +82,26 @@ const DataModals: React.FC<DataModalsProps> = ({
   onSavePin,
   onProceed,
 }) => {
-  const checkPinStatus = useCallback(async () => {
-    if (!isPurchaseModalOpen || !userEmail) {
-      console.log("Skipping PIN verification: Purchase modal closed or no user email");
-      return;
-    }
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        console.error("No authenticated user:", authError);
-        Alert.alert("Error", "User not authenticated. Please log in again.");
-        return;
-      }
-      console.log("PurchaseModal opened, verifying PIN for user:", user.id);
-      const exists = await verifyTransactionPin(userEmail);
-      console.log("Verified PIN exists:", exists);
-      await updateHasPin(exists);
-    } catch (error) {
-      console.error("Error verifying PIN in DataModals:", error);
-      Alert.alert("Error", `Failed to verify PIN status: ${error instanceof Error ? error.message : "Unknown error"}`);
+  useEffect(() => {
+    if (isPurchaseModalOpen && userEmail) {
+      // console.log("PurchaseModal opened, verifying PIN for email:", userEmail);
+      verifyTransactionPin(userEmail).then((exists) => {
+        // console.log("Verified PIN exists:", exists);
+        updateHasPin(exists);
+      });
     }
   }, [isPurchaseModalOpen, userEmail, verifyTransactionPin, updateHasPin]);
 
-  useEffect(() => {
-    checkPinStatus();
-  }, [checkPinStatus]);
-
-  useEffect(() => {
-    console.log("DataModals props updated:", {
-      isPurchaseModalOpen,
-      isTransactionModalOpen,
-      isPinCreationModalOpen,
-      hasPin,
-      userEmail,
-      selectedProvider: selectedProvider?.name,
-    });
-  }, [isPurchaseModalOpen, isTransactionModalOpen, isPinCreationModalOpen, hasPin, userEmail, selectedProvider]);
+  // useEffect(() => {
+  //   console.log("DataModals state update:", {
+  //     isPurchaseModalOpen,
+  //     isTransactionModalOpen,
+  //     isPinCreationModalOpen,
+  //   });
+  // }, [isPurchaseModalOpen, isTransactionModalOpen, isPinCreationModalOpen]);
 
   const closePurchaseModal = () => {
-    console.log("Closing PurchaseModal");
+    // console.log("Closing PurchaseModal");
     setIsPurchaseModalOpen(false);
     setPhoneNumberInput("");
     setTransactionPinInput("");
@@ -130,7 +110,7 @@ const DataModals: React.FC<DataModalsProps> = ({
   };
 
   const closeTransactionModal = () => {
-    console.log("Closing TransactionStatusModal");
+    // console.log("Closing TransactionStatusModal");
     setIsTransactionModalOpen(false);
     setPhoneNumberInput("");
     setTransactionPinInput("");
@@ -140,12 +120,13 @@ const DataModals: React.FC<DataModalsProps> = ({
   };
 
   const closePinCreationModal = () => {
-    console.log("Closing CreatePinModal");
+    // console.log("Closing CreatePinModal");
     setIsPinCreationModalOpen(false);
     setNewPinInput("");
     setConfirmPinInput("");
   };
 
+  // Only render the modal container if at least one modal is visible
   if (!isPurchaseModalOpen && !isTransactionModalOpen && !isPinCreationModalOpen) {
     return null;
   }
@@ -205,7 +186,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 5,
-    backgroundColor: 'transparent',
+    backgroundColor: 'transparent', // Match app theme to prevent white flash
   },
 });
 

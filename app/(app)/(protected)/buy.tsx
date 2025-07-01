@@ -66,7 +66,7 @@ const ServiceProviderScreen: React.FC = () => {
       let data;
       try {
         data = JSON.parse(rawResponse);
-        console.log("Parsed API Response:", Object.keys(data));
+        // console.log("Parsed API Response:", Object.keys(data));
       } catch (parseError) {
         console.error("JSON Parse Error:", {
           error: parseError,
@@ -122,11 +122,11 @@ const ServiceProviderScreen: React.FC = () => {
               imageKey: networkName,
               availablePlanTypes: VALID_PLAN_TYPES,
             };
-            console.log(`Assigned image for ${networkName}:`, {
-              image: providerImage === DEFAULT_PROVIDER_IMAGE ? "Default" : "Loaded",
-              imageKey,
-              rawNetworkName,
-            });
+            // console.log(`Assigned image for ${networkName}:`, {
+            //   image: providerImage === DEFAULT_PROVIDER_IMAGE ? "Default" : "Loaded",
+            //   imageKey,
+            //   rawNetworkName,
+            // });
           }
         } else {
           console.warn(`Invalid or empty plans for ${networkKey}:`, plans);
@@ -139,10 +139,10 @@ const ServiceProviderScreen: React.FC = () => {
       if (providerArray.length === 0) {
         throw new Error("No valid providers found");
       }
-      console.log(
-        "Fetched Providers:",
-        providerArray.map((p) => ({ name: p.name, imageKey: p.imageKey }))
-      );
+      // console.log(
+      //   "Fetched Providers:",
+      //   providerArray.map((p) => ({ name: p.name, imageKey: p.imageKey }))
+      // );
     } catch (error: any) {
       console.error("Fetch error:", {
         message: error.message,
@@ -176,10 +176,10 @@ const ServiceProviderScreen: React.FC = () => {
     };
 
     const balance = params.balance || "0";
-    console.log("Navigating to BuyDataScreen with:", {
-      ...serializableProvider,
-      balance,
-    });
+    // console.log("Navigating to BuyDataScreen with:", {
+    //   ...serializableProvider,
+    //   balance,
+    // });
 
     router.push({
       pathname: "/(app)/serviceprovider",
@@ -192,7 +192,7 @@ const ServiceProviderScreen: React.FC = () => {
   };
 
   const handleRetry = useCallback(() => {
-    console.log("Retrying provider fetch");
+    // console.log("Retrying provider fetch");
     fetchProviders();
     Alert.alert("Retrying", "Fetching providers...");
   }, []);
