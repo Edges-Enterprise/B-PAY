@@ -460,26 +460,9 @@ const BuyDataScreen: React.FC = () => {
 		if (userEmail) {
 			ensureProfileExists();
 		}
-	}, [userEmail, ensureProfileExists]);
-
-	const updateHasPin = useCallback(
-		async (value: boolean) => {
-			if (!pinVerified.current || value) {
-				console.log("Updating hasPin:", value);
-				if (value && userEmail) {
-					const pinExists = await verifyTransactionPin(userEmail);
-					setHasPin(pinExists);
-					pinVerified.current = pinExists;
-				} else {
-					setHasPin(false);
-					pinVerified.current = false;
-				}
-			}
-		},
-		[verifyTransactionPin, userEmail],
-	);
-
-	const verifyTransactionPin = useCallback(
+  }, [userEmail, ensureProfileExists]);
+  
+  const verifyTransactionPin = useCallback(
 		async (email: string): Promise<boolean> => {
 			if (!email) {
 				console.log("No email provided for PIN verification");
@@ -530,6 +513,25 @@ const BuyDataScreen: React.FC = () => {
 		},
 		[],
 	);
+
+	const updateHasPin = useCallback(
+		async (value: boolean) => {
+			if (!pinVerified.current || value) {
+				console.log("Updating hasPin:", value);
+				if (value && userEmail) {
+					const pinExists = await verifyTransactionPin(userEmail);
+					setHasPin(pinExists);
+					pinVerified.current = pinExists;
+				} else {
+					setHasPin(false);
+					pinVerified.current = false;
+				}
+			}
+		},
+		[verifyTransactionPin, userEmail],
+	);
+
+
 
 	const savePin = async () => {
 		setIsLoading(true);
