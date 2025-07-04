@@ -899,7 +899,7 @@ const AirtimeProvider: React.FC = () => {
 	return (
 		<View style={styles.container}>
 			<View style={styles.fixedHeader}>
-				<View style={styles.header}>
+				{/* <View style={styles.header}>
 					<TouchableOpacity
 						onPress={() => router.back()}
 						style={styles.backButton}
@@ -907,7 +907,7 @@ const AirtimeProvider: React.FC = () => {
 						<Ionicons name="arrow-back" size={24} color="#fff" />
 					</TouchableOpacity>
 					<Text style={styles.headerTitle}>Buy Airtime</Text>
-				</View>
+				</View> */}
 				<View style={styles.walletBalanceContainer}>
 					<Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
 					<Text style={styles.walletBalanceValue}>
@@ -1064,7 +1064,7 @@ const styles = StyleSheet.create({
 	},
 	fixedHeader: {
 		backgroundColor: "#000",
-		paddingTop: 48,
+		// paddingTop: 48,
 		paddingHorizontal: 16,
 		zIndex: 1,
 	},
