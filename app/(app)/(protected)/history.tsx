@@ -258,6 +258,102 @@ export default function HistoryScreen() {
 		}
 	};
 
+	// const renderReceipt = () => {
+	// 	if (!selectedTransaction) return null;
+	// 	const {
+	// 		price,
+	// 		reference,
+	// 		metadata,
+	// 		date,
+	// 		status,
+	// 		provider,
+	// 		phoneNumber,
+	// 		type,
+	// 		data,
+	// 	} = selectedTransaction;
+	// 	const fees = metadata.fees || {};
+
+	// 	return (
+	// 		<Modal
+	// 			visible={!!selectedTransaction}
+	// 			transparent={true}
+	// 			animationType="slide"
+	// 			onRequestClose={() => setSelectedTransaction(null)}
+	// 		>
+	// 			<View style={styles.modalOverlay}>
+	// 				<View style={styles.receiptContainer}>
+	// 					<Pressable
+	// 						style={styles.closeButton}
+	// 						onPress={() => setSelectedTransaction(null)}
+	// 					>
+	// 						<Ionicons name="close" size={24} color="#FFF" />
+	// 					</Pressable>
+	// 					<ScrollView>
+	// 						<Text style={styles.receiptTitle}>
+	// 							{type.toLowerCase() === "deposit"
+	// 								? "Deposit Receipt"
+	// 								: "Purchase Receipt"}
+	// 						</Text>
+	// 						<View style={styles.receiptDivider} />
+	// 						<Text style={styles.receiptField}>Reference: {reference}</Text>
+	// 						{type.toLowerCase() === "deposit" ? (
+	// 							<>
+	// 								<Text style={styles.receiptField}>
+	// 									Amount Received: {formatAmount(metadata.gross_amount)}
+	// 								</Text>
+	// 								<Text style={styles.receiptField}>Fees:</Text>
+	// 								<Text style={styles.receiptSubField}>
+	// 									- Transfer Fee: Transfer Fee:{" "}
+	// 									{formatAmount(metadata.gross_amount * 0.02 || 0)}
+	// 								</Text>
+	// 								<Text style={styles.receiptSubField}>
+	// 									- Wallet Management Fee:{" "}
+	// 									{formatAmount(metadata.gross_amount * 0.04 || 0)}
+	// 								</Text>
+	// 								<Text style={styles.receiptSubField}>
+	// 									- API & Network Fee:{" "}
+	// 									{formatAmount(metadata.gross_amount * 0.02 || 0)}
+	// 								</Text>
+	// 								<Text style={styles.receiptSubField}>
+	// 									- VAT: {formatAmount(metadata.gross_amount * 0.02 || 0)}
+	// 								</Text>
+	// 								<Text style={styles.receiptField}>
+	// 									Total Fees: {formatAmount(metadata?.fees || 0)}
+	// 								</Text>
+	// 								<Text style={styles.receiptField}>
+	// 									Amount Credited: {formatAmount(price)}
+	// 								</Text>
+	// 							</>
+	// 						) : (
+	// 							<>
+	// 								<Text style={styles.receiptField}>Plan: {data}</Text>
+	// 								<Text style={styles.receiptField}>Provider: {provider}</Text>
+	// 								<Text style={styles.receiptField}>
+	// 									Amount: {formatAmount(price)}
+	// 								</Text>
+	// 								<Text style={styles.receiptField}>
+	// 									Phone Number: {phoneNumber}
+	// 								</Text>
+	// 								<Text style={styles.receiptField}>
+	// 									Validity: {metadata.validity || "N/A"}
+	// 								</Text>
+	// 							</>
+	// 						)}
+	// 						<Text style={styles.receiptField}>
+	// 							Date:{" "}
+	// 							{moment(date).tz("Africa/Lagos").format("MMM D, YYYY h:mm A")}
+	// 						</Text>
+	// 						<Text style={styles.receiptField}>Status: {status}</Text>
+	// 						<Text style={styles.receiptField}>
+	// 							Payment Method: {metadata.payment_method || "Not Available"}
+	// 						</Text>
+	// 					</ScrollView>
+	// 				</View>
+	// 			</View>
+	// 		</Modal>
+	// 	);
+	// };
+
 	const renderReceipt = () => {
 		if (!selectedTransaction) return null;
 		const {
@@ -271,7 +367,12 @@ export default function HistoryScreen() {
 			type,
 			data,
 		} = selectedTransaction;
-		const fees = metadata.fees || {};
+
+		// Safely access metadata with fallbacks
+		const fees = metadata?.fees || {};
+		const grossAmount = metadata?.gross_amount || 0;
+		const paymentMethod = metadata?.payment_method || "Not Available";
+		const validity = metadata?.validity || "N/A";
 
 		return (
 			<Modal
@@ -296,33 +397,49 @@ export default function HistoryScreen() {
 							</Text>
 							<View style={styles.receiptDivider} />
 							<Text style={styles.receiptField}>Reference: {reference}</Text>
+
 							{type.toLowerCase() === "deposit" ? (
 								<>
-									<Text style={styles.receiptField}>
-										Amount Received: {formatAmount(metadata.gross_amount)}
-									</Text>
-									<Text style={styles.receiptField}>Fees:</Text>
-									<Text style={styles.receiptSubField}>
-										- Transfer Fee: Transfer Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.02 || 0)}
-									</Text>
-									<Text style={styles.receiptSubField}>
-										- Wallet Management Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.04 || 0)}
-									</Text>
-									<Text style={styles.receiptSubField}>
-										- API & Network Fee:{" "}
-										{formatAmount(metadata.gross_amount * 0.02 || 0)}
-									</Text>
-									<Text style={styles.receiptSubField}>
-										- VAT: {formatAmount(metadata.gross_amount * 0.02 || 0)}
-									</Text>
-									<Text style={styles.receiptField}>
-										Total Fees: {formatAmount(metadata?.fees || 0)}
-									</Text>
-									<Text style={styles.receiptField}>
-										Amount Credited: {formatAmount(price)}
-									</Text>
+									{/* Only show detailed breakdown for successful deposits */}
+									{status === "Success" && grossAmount > 0 ? (
+										<>
+											<Text style={styles.receiptField}>
+												Amount Received: {formatAmount(grossAmount)}
+											</Text>
+											<Text style={styles.receiptField}>Fees:</Text>
+											<Text style={styles.receiptSubField}>
+												- Transfer Fee: {formatAmount(grossAmount * 0.02)}
+											</Text>
+											<Text style={styles.receiptSubField}>
+												- Wallet Management Fee:{" "}
+												{formatAmount(grossAmount * 0.04)}
+											</Text>
+											<Text style={styles.receiptSubField}>
+												- API & Network Fee: {formatAmount(grossAmount * 0.02)}
+											</Text>
+											<Text style={styles.receiptSubField}>
+												- VAT: {formatAmount(grossAmount * 0.02)}
+											</Text>
+											<Text style={styles.receiptField}>
+												Total Fees:{" "}
+												{formatAmount(fees.total_fee || grossAmount * 0.1)}
+											</Text>
+											<Text style={styles.receiptField}>
+												Amount Credited: {formatAmount(price)}
+											</Text>
+										</>
+									) : (
+										<>
+											<Text style={styles.receiptField}>
+												Amount: {formatAmount(price)}
+											</Text>
+											{status !== "Success" && (
+												<Text style={styles.receiptField}>
+													Transaction Status: {status}
+												</Text>
+											)}
+										</>
+									)}
 								</>
 							) : (
 								<>
@@ -334,19 +451,41 @@ export default function HistoryScreen() {
 									<Text style={styles.receiptField}>
 										Phone Number: {phoneNumber}
 									</Text>
-									<Text style={styles.receiptField}>
-										Validity: {metadata.validity || "N/A"}
-									</Text>
+									<Text style={styles.receiptField}>Validity: {validity}</Text>
 								</>
 							)}
+
 							<Text style={styles.receiptField}>
 								Date:{" "}
 								{moment(date).tz("Africa/Lagos").format("MMM D, YYYY h:mm A")}
 							</Text>
 							<Text style={styles.receiptField}>Status: {status}</Text>
 							<Text style={styles.receiptField}>
-								Payment Method: {metadata.payment_method || "Not Available"}
+								Payment Method: {paymentMethod}
 							</Text>
+
+							{/* Show additional info for failed transactions */}
+							{status === "Failed" && (
+								<View style={styles.failedTransactionInfo}>
+									<Text style={styles.receiptField}>
+										❌ This transaction was not completed successfully.
+									</Text>
+									{metadata?.error_message && (
+										<Text style={styles.receiptField}>
+											Error: {metadata.error_message}
+										</Text>
+									)}
+								</View>
+							)}
+
+							{/* Show additional info for pending transactions */}
+							{status === "Pending" && (
+								<View style={styles.pendingTransactionInfo}>
+									<Text style={styles.receiptField}>
+										⏳ This transaction is still being processed.
+									</Text>
+								</View>
+							)}
 						</ScrollView>
 					</View>
 				</View>
@@ -561,5 +700,21 @@ const styles = StyleSheet.create({
 		color: "#FFF",
 		marginLeft: 16,
 		marginBottom: 4,
+	},
+	failedTransactionInfo: {
+		marginTop: 16,
+		padding: 8,
+		backgroundColor: "rgba(239, 68, 68, 0.1)",
+		borderRadius: 4,
+		borderLeftWidth: 3,
+		borderLeftColor: "#ef4444",
+	},
+	pendingTransactionInfo: {
+		marginTop: 16,
+		padding: 8,
+		backgroundColor: "rgba(234, 179, 8, 0.1)",
+		borderRadius: 4,
+		borderLeftWidth: 3,
+		borderLeftColor: "#eab308",
 	},
 });
