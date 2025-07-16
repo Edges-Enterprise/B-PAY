@@ -33,17 +33,17 @@ export const sections = [
 	{
 		title: "Security",
 		items: [
-			"Authentication",
-			"Biometric Login",
-			"Two-Factor Authentication",
-			"Device Management",
-			"Change PIN",
+			// "Authentication",
+			// "Biometric Login",
+			// "Two-Factor Authentication",
+			// "Device Management",
+			"Change Transaction PIN",
 		],
 	},
-	{
-		title: "Billing",
-		items: ["Manage Subscriptions", "Payment Methods", "Invoices"],
-	},
+	// {
+	// 	title: "Billing",
+	// 	items: ["Manage Subscriptions", "Payment Methods", "Invoices"],
+	// },
 	{
 		title: "Privacy",
 		items: [
