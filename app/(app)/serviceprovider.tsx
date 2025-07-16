@@ -69,7 +69,7 @@ const BuyDataScreen: React.FC = () => {
 		null,
 	);
 	const [networkId, setNetworkId] = useState<number | null>(null);
-	const [activeCategory, setActiveCategory] = useState<string>("Hot");
+	const [activeCategory, setActiveCategory] = useState<string>("Daily Plans");
 	const [activePlanType, setActivePlanType] = useState<string>("");
 	const [isPurchaseModalOpen, setIsPurchaseModalOpen] =
 		useState<boolean>(false);
@@ -153,7 +153,7 @@ const BuyDataScreen: React.FC = () => {
 
 			const balance = data?.balance ?? 0;
 			setWalletBalance(balance);
-			console.log("Fetched wallet balance:", balance);
+			// console.log("Fetched wallet balance:", balance);
 		} catch (error) {
 			console.error("Error in fetchWalletBalance:", error);
 			Alert.alert("Error", "Failed to fetch wallet balance");
@@ -208,12 +208,12 @@ const BuyDataScreen: React.FC = () => {
 					};
 					setSelectedProvider(normalizedProvider);
 					setNetworkId(id);
-					console.log(
-						"Initialized provider:",
-						normalizedProvider,
-						"networkId:",
-						id,
-					);
+					// console.log(
+					// 	"Initialized provider:",
+					// 	normalizedProvider,
+					// 	"networkId:",
+					// 	id,
+					// );
 				} else {
 					console.error("Invalid provider or networkId:", { provider, id });
 					Alert.alert("Error", "Invalid provider data");
@@ -878,18 +878,7 @@ const BuyDataScreen: React.FC = () => {
 					purchaseType: "data",
 				},
 			});
-			console.log("Navigating to ConfirmationScreen with params:", {
-				bundle: selectedBundle,
-				provider: selectedProvider,
-				phoneNumber: phoneNumberInput,
-				transactionPin: "****",
-				userEmail,
-				referenceId: reference,
-				balance: walletBalance,
-				networkId: finalNetworkId,
-				planId: selectedBundle.id,
-				purchaseType: "data",
-			});
+
 		} catch (error) {
 			console.error("handleProceed error:", error);
 			Alert.alert(
