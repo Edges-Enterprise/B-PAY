@@ -399,20 +399,6 @@ const ConfirmationScreen: React.FC = () => {
       currentBalance = wallet?.balance ?? balanceValue;
       const basePrice = (selectedBundle.price || selectedBundle.amount) ?? 0;
 
-      console.log('Purchase details:', {
-        currentBalance,
-        basePrice,
-        mobile_number: editableMobileNumber,
-        networkId: parsedNetworkId,
-        planId: parsedPlanId,
-        referenceId,
-        userEmail,
-        category: selectedBundle.category,
-        planType: selectedBundle.planType,
-        bundle: selectedBundle,
-        purchaseType,
-      });
-
       if (currentBalance < basePrice) {
         Alert.alert(
           'Error',
@@ -421,19 +407,6 @@ const ConfirmationScreen: React.FC = () => {
         setTransactionModalVisible(false);
         return;
       }
-
-      // Deduct base price from wallet
-      const newBalance = currentBalance - basePrice;
-      const { error: walletUpdateError } = await supabase
-        .from('wallet')
-        .update({ balance: newBalance })
-        .eq('user_email', userEmail);
-
-      if (walletUpdateError) {
-        throw new Error(`Wallet update failed: ${walletUpdateError.message}`);
-      }
-
-      setBalanceValue(newBalance);
 
       let apiResponse: Response;
       let responseText: string;
@@ -487,11 +460,11 @@ const ConfirmationScreen: React.FC = () => {
           });
 
           responseText = await apiResponse.text();
-          console.log('Lizzysub API response:', {
-            status: apiResponse.status,
-            headers: Object.fromEntries(apiResponse.headers.entries()),
-            responseText: responseText.slice(0, 500),
-          });
+          // console.log('Lizzysub API response:', {
+          //   status: apiResponse.status,
+          //   headers: Object.fromEntries(apiResponse.headers.entries()),
+          //   responseText: responseText.slice(0, 500),
+          // });
 
           let responseData;
           try {
