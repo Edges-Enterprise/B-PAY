@@ -485,14 +485,6 @@ const AirtimeProvider: React.FC = () => {
 	const handlePurchase = async () => {
 		const { selectedProvider, phoneNumber, selectedAmount, discountedPrice } =
 			gestureRef.current;
-		console.log("handlePurchase called with:", {
-			selectedProvider,
-			phoneNumber,
-			selectedAmount,
-			discountedPrice,
-			userEmail,
-			balance,
-		});
 
 		if (
 			!selectedProvider ||
@@ -632,88 +624,88 @@ const AirtimeProvider: React.FC = () => {
 			}
 
 			// Calculate new balance
-			const newBalance = currentBalance - discountedPrice;
-			console.log("Calculated new balance:", {
-				currentBalance,
-				discountedPrice,
-				newBalance,
-			});
+			// const newBalance = currentBalance - discountedPrice;
+			// console.log("Calculated new balance:", {
+			// 	currentBalance,
+			// 	discountedPrice,
+			// 	newBalance,
+			// });
 
 			// Update wallet balance with retry mechanism
-			let walletUpdateSuccess = false;
-			let attempts = 0;
-			const maxAttempts = 3;
+			// let walletUpdateSuccess = false;
+			// let attempts = 0;
+			// const maxAttempts = 3;
 
-			while (!walletUpdateSuccess && attempts < maxAttempts) {
-				attempts++;
-				console.log(
-					`Attempt ${attempts} to update wallet balance to:`,
-					newBalance,
-				);
+			// while (!walletUpdateSuccess && attempts < maxAttempts) {
+			// 	attempts++;
+			// 	console.log(
+			// 		`Attempt ${attempts} to update wallet balance to:`,
+			// 		newBalance,
+			// 	);
 
-				const { data: updatedWallet, error: walletUpdateError } = await supabase
-					.from("wallet")
-					.update({ balance: newBalance })
-					.eq("user_email", userEmail)
-					.select("balance")
-					.single();
+				// const { data: updatedWallet, error: walletUpdateError } = await supabase
+				// 	.from("wallet")
+				// 	.update({ balance: newBalance })
+				// 	.eq("user_email", userEmail)
+				// 	.select("balance")
+				// 	.single();
 
-				if (walletUpdateError) {
-					console.error(
-						`Wallet update attempt ${attempts} failed:`,
-						walletUpdateError.message,
-					);
-					if (attempts === maxAttempts) {
-						throw new Error(
-							`Failed to update wallet after ${maxAttempts} attempts: ${walletUpdateError.message}`,
-						);
-					}
-					await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
-					continue;
-				}
+				// if (walletUpdateError) {
+				// 	console.error(
+				// 		`Wallet update attempt ${attempts} failed:`,
+				// 		walletUpdateError.message,
+				// 	);
+				// 	if (attempts === maxAttempts) {
+				// 		throw new Error(
+				// 			`Failed to update wallet after ${maxAttempts} attempts: ${walletUpdateError.message}`,
+				// 		);
+				// 	}
+				// 	await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
+				// 	continue;
+				// }
 
 				// Verify the updated balance
-				const { data: verifiedWallet, error: verifyError } = await supabase
-					.from("wallet")
-					.select("balance")
-					.eq("user_email", userEmail)
-					.single();
+				// const { data: verifiedWallet, error: verifyError } = await supabase
+				// 	.from("wallet")
+				// 	.select("balance")
+				// 	.eq("user_email", userEmail)
+				// 	.single();
 
-				if (verifyError) {
-					throw new Error(
-						`Failed to verify wallet balance: ${verifyError.message}`,
-					);
-				}
+				// if (verifyError) {
+				// 	throw new Error(
+				// 		`Failed to verify wallet balance: ${verifyError.message}`,
+				// 	);
+				// }
 
-				const verifiedBalance = verifiedWallet?.balance ?? newBalance;
-				console.log("Verified wallet balance after update:", verifiedBalance);
+				// const verifiedBalance = verifiedWallet?.balance ?? newBalance;
+				// console.log("Verified wallet balance after update:", verifiedBalance);
 
-				if (verifiedBalance !== newBalance) {
-					console.error(
-						`Balance mismatch: Expected ${newBalance}, got ${verifiedBalance}`,
-					);
-					if (attempts === maxAttempts) {
-						throw new Error(
-							`Wallet balance verification failed: Expected ${newBalance}, got ${verifiedBalance}`,
-						);
-					}
-					await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
-					continue;
-				}
+				// if (verifiedBalance !== newBalance) {
+				// 	console.error(
+				// 		`Balance mismatch: Expected ${newBalance}, got ${verifiedBalance}`,
+				// 	);
+				// 	if (attempts === maxAttempts) {
+				// 		throw new Error(
+				// 			`Wallet balance verification failed: Expected ${newBalance}, got ${verifiedBalance}`,
+				// 		);
+				// 	}
+				// 	await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
+				// 	continue;
+				// }
 
-				walletUpdateSuccess = true;
-				setBalance(verifiedBalance);
-				console.log(
-					"Wallet updated successfully with balance:",
-					verifiedBalance,
-				);
-			}
+			// 	walletUpdateSuccess = true;
+			// 	setBalance(verifiedBalance);
+			// 	console.log(
+			// 		"Wallet updated successfully with balance:",
+			// 		verifiedBalance,
+			// 	);
+			// }
 
-			if (!walletUpdateSuccess) {
-				throw new Error(
-					"Failed to update wallet balance after maximum attempts",
-				);
-			}
+			// if (!walletUpdateSuccess) {
+			// 	throw new Error(
+			// 		"Failed to update wallet balance after maximum attempts",
+			// 	);
+			// }
 
 			// Call Ebenkdata API
 			const requestBody = {
@@ -899,15 +891,6 @@ const AirtimeProvider: React.FC = () => {
 	return (
 		<View style={styles.container}>
 			<View style={styles.fixedHeader}>
-				{/* <View style={styles.header}>
-					<TouchableOpacity
-						onPress={() => router.back()}
-						style={styles.backButton}
-					>
-						<Ionicons name="arrow-back" size={24} color="#fff" />
-					</TouchableOpacity>
-					<Text style={styles.headerTitle}>Buy Airtime</Text>
-				</View> */}
 				<View style={styles.walletBalanceContainer}>
 					<Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
 					<Text style={styles.walletBalanceValue}>
@@ -1064,7 +1047,7 @@ const styles = StyleSheet.create({
 	},
 	fixedHeader: {
 		backgroundColor: "#000",
-		// paddingTop: 48,
+		paddingTop: 48,
 		paddingHorizontal: 16,
 		zIndex: 1,
 	},
