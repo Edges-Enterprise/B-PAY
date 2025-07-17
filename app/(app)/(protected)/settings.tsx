@@ -162,6 +162,10 @@ export default function Settings() {
 			setThemeModalVisible(true);
 		} else if (item === "Notifications") {
 			toggleNotifications();
+		} else if (item === "Privacy Policy") {
+			router.push("/(app)/(legal)/privacy");
+		} else if (item === "Terms of Service") {
+			router.push("/terms");
 		} else {
 			Alert.alert("Feature", `${item} feature will be implemented soon.`);
 		}
