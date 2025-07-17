@@ -29,13 +29,6 @@ export default function LegalLayout() {
       }}
     >
       <Stack.Screen
-        name="eula"
-        options={{
-          title: "EULA Agreement",
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen
         name="terms"
         options={{
           title: "Terms Of Service",
