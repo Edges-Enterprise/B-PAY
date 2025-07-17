@@ -50,7 +50,7 @@ export const sections = [
 			// "Data Sharing", "Location Services", "Ad Preferences",
 			"Privacy Policy",
 			"Terms of Service",
-			"User Agreement",
+			// "User Agreement",
 		],
 	},
 ];
@@ -224,12 +224,12 @@ export const actions = [
 		color: "#3B82F6",
 		route: "../Customer" as const,
 	},
-	{
-		title: "Referral",
-		icon: ICONS.REFERRAL,
-		color: "#F59E0B",
-		route: "../referral" as const,
-	},
+	// {
+	// 	title: "Referral",
+	// 	icon: ICONS.REFERRAL,
+	// 	color: "#F59E0B",
+	// 	route: "../referral" as const,
+	// },
 ] satisfies Array<{
 	title: string;
 	icon: string;
