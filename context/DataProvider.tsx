@@ -69,7 +69,7 @@ const calculateMTNPrice = (plan: any, provider: string): number => {
   if (provider.toUpperCase() !== "MTN") {
     const price = parseFloat(plan.plan_amount || "0");
     const adjustedPrice = price > 0 ? price + 50 : 0;
-    console.log(`Price for ${provider} plan ID ${plan.id}: ${plan.plan || "Unknown"}, ${plan.month_validate || "Not Specified"} -> ₦${adjustedPrice}`);
+    // console.log(`Price for ${provider} plan ID ${plan.id}: ${plan.plan || "Unknown"}, ${plan.month_validate || "Not Specified"} -> ₦${adjustedPrice}`);
     return adjustedPrice;
   }
 
@@ -79,12 +79,12 @@ const calculateMTNPrice = (plan: any, provider: string): number => {
   for (const key in MTN_PRICE_ADJUSTMENTS) {
     const adjustment = MTN_PRICE_ADJUSTMENTS[key];
     if (planData === adjustment.data && planValidity === adjustment.validity) {
-      console.log(`Price match for MTN plan ID ${plan.id}: ${planData}, ${planValidity} -> ₦${adjustment.targetPrice}`);
+      // console.log(`Price match for MTN plan ID ${plan.id}: ${planData}, ${planValidity} -> ₦${adjustment.targetPrice}`);
       return adjustment.targetPrice;
     }
   }
   const defaultPrice = parseFloat(plan.plan_amount || "0") + 50;
-  console.log(`No price match for MTN plan ID ${plan.id}: ${planData}, ${planValidity}, using default ₦${defaultPrice}`);
+  // console.log(`No price match for MTN plan ID ${plan.id}: ${planData}, ${planValidity}, using default ₦${defaultPrice}`);
   return defaultPrice;
 };
 
@@ -124,14 +124,14 @@ const determineCategory = (plan: any): string => {
       category = "Weekly Plans";
     }
   }
-  console.log(`Category for plan ID ${plan.id}: ${planName}, ${validity} -> ${category}`);
+  // console.log(`Category for plan ID ${plan.id}: ${planName}, ${validity} -> ${category}`);
   return category;
 };
 
 const mapPlanType = (plan: any): string => {
   const variationCode = plan.dataplan_id ? String(plan.dataplan_id).toUpperCase() : "";
   const planTypeRaw = plan.plan_type ? String(plan.plan_type).toUpperCase() : "";
-  console.log(`Mapping plan ID ${plan.id}: variation_code=${plan.dataplan_id || "N/A"}, plan_type=${plan.plan_type || "N/A"}`);
+  // console.log(`Mapping plan ID ${plan.id}: variation_code=${plan.dataplan_id || "N/A"}, plan_type=${plan.plan_type || "N/A"}`);
 
   if (variationCode) {
     if (
@@ -157,7 +157,7 @@ const mapPlanType = (plan: any): string => {
 
   // Fallback to plan_type or provider name if variation_code is missing
   const fallbackPlanType = planTypeRaw || plan.network || "SME";
-  console.log(`Fallback planType for ID ${plan.id}: ${fallbackPlanType}`);
+  // console.log(`Fallback planType for ID ${plan.id}: ${fallbackPlanType}`);
   return fallbackPlanType;
 };
 
@@ -250,7 +250,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const cacheKey = provider.toUpperCase();
         let plans: DataBundle[] = [];
 
-        console.log(`Checking cache for ${provider}, cacheExists: ${!!planCache[cacheKey]}, age: ${planCache[cacheKey] ? (Date.now() - planCache[cacheKey].timestamp) / 1000 / 60 : "N/A"} minutes`);
+        // console.log(`Checking cache for ${provider}, cacheExists: ${!!planCache[cacheKey]}, age: ${planCache[cacheKey] ? (Date.now() - planCache[cacheKey].timestamp) / 1000 / 60 : "N/A"} minutes`);
 
         if (planCache[cacheKey] && Date.now() - planCache[cacheKey].timestamp < CACHE_DURATION) {
           console.log(`Using cached plans for ${provider}`, { planCount: planCache[cacheKey].data.length });
@@ -312,7 +312,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setProviderPlans(newPlans);
-      console.log("Provider plans updated:", Object.keys(newPlans).map(key => `${key}: ${newPlans[key].length} plans`));
+      // console.log("Provider plans updated:", Object.keys(newPlans).map(key => `${key}: ${newPlans[key].length} plans`));
 
       return () => {
         supabase.removeChannel(subscription);
