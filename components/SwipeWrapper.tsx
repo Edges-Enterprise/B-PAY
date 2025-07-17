@@ -14,17 +14,17 @@ export default function SwipeWrapper({ children, scrollViewRef, flatListRef }) {
 
   // Normalize pathname for matching
   const normalizedPathname = pathname.replace(/^\/\(app\)\/\(protected\)\//, "/").replace(/^\/+/, "/");
-  console.log(`Normalized pathname: ${normalizedPathname}`);
+  // console.log(`Normalized pathname: ${normalizedPathname}`);
 
   // Get current tab index based on normalized pathname
   const currentTabIndex = tabOrder.findIndex((tab) => {
     const tabPath = tab === "index" ? "/" : `/${tab}`;
     const matches = normalizedPathname === tabPath || normalizedPathname.startsWith(`${tabPath}/`);
-    console.log(`Checking tab: ${tab}, tabPath: ${tabPath}, matches: ${matches}`);
+    // console.log(`Checking tab: ${tab}, tabPath: ${tabPath}, matches: ${matches}`);
     return matches;
   });
 
-  console.log(`Current tab index: ${currentTabIndex}, pathname: ${pathname}`);
+  // console.log(`Current tab index: ${currentTabIndex}, pathname: ${pathname}`);
 
   const onGestureEvent = ({ nativeEvent }) => {
     gestureX.current = nativeEvent.translationX;
@@ -34,9 +34,9 @@ export default function SwipeWrapper({ children, scrollViewRef, flatListRef }) {
     if (nativeEvent.state === State.END) {
       const swipeDistance = gestureX.current;
 
-      console.log(
-        `Swipe detected: distance=${swipeDistance}, currentTabIndex=${currentTabIndex}, pathname=${pathname}`
-      );
+      // console.log(
+      //   `Swipe detected: distance=${swipeDistance}, currentTabIndex=${currentTabIndex}, pathname=${pathname}`
+      // );
 
       if (Math.abs(swipeDistance) > swipeThreshold && currentTabIndex !== -1) {
         let nextTabIndex;
@@ -50,9 +50,9 @@ export default function SwipeWrapper({ children, scrollViewRef, flatListRef }) {
 
         const nextTab = tabOrder[nextTabIndex];
         const targetPath = nextTab === "index" ? "/(app)/(protected)/" : `/(app)/(protected)/${nextTab}`;
-        console.log(
-          `Navigating from ${tabOrder[currentTabIndex]} to ${nextTab} (index ${nextTabIndex}, path ${targetPath})`
-        );
+        // console.log(
+        //   `Navigating from ${tabOrder[currentTabIndex]} to ${nextTab} (index ${nextTabIndex}, path ${targetPath})`
+        // );
 
         router.push(targetPath);
       } else {
