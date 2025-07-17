@@ -175,7 +175,7 @@ export default function SignInScreen() {
 							<Text style={styles.rememberMeText}>Remember me</Text>
 						</View>
 
-						<TouchableOpacity onPress={() => router.push("/reset-password")}>
+						<TouchableOpacity onPress={() => router.push("/forgot-password")}>
 							<Text style={styles.forgotPasswordText}>Forgot?</Text>
 						</TouchableOpacity>
 					</View>
