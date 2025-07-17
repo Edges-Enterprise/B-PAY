@@ -1,10 +1,10 @@
-import { View, Text } from 'react-native'
+import { SafeAreaView, Text } from 'react-native'
 import React from 'react'
 
 export default function Terms() {
   return (
-    <View>
+    <SafeAreaView>
       <Text>Terms</Text>
-    </View>
+    </SafeAreaView>
   )
 }

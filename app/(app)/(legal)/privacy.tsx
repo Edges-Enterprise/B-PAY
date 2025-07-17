@@ -1,10 +1,10 @@
-import { View, Text } from 'react-native'
+import { SafeAreaView, Text } from 'react-native'
 import React from 'react'
 
 export default function Privacy() {
   return (
-    <View>
-      <Text>Privacy</Text>
-    </View>
+    <SafeAreaView>
+      <Text style={{color:"red"}}>Privacy</Text>
+    </SafeAreaView>
   )
 }
