@@ -93,7 +93,7 @@ export default function ResetPasswordScreen() {
 							source={require("@/assets/images/playstore.jpg")}
 							style={styles.logo}
 						/>
-						<Text style={styles.welcomeText}>Reset Password</Text>
+						{/* <Text style={styles.welcomeText}>Reset Password</Text> */}
 					</View>
 
 					<Text style={styles.instructionsText}>

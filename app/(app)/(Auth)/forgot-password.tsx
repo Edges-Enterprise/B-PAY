@@ -75,7 +75,7 @@ export default function ForgotPasswordScreen() {
 							source={require("@/assets/images/playstore.jpg")}
 							style={styles.logo}
 						/>
-						<Text style={styles.welcomeText}>Forgot your Password ?</Text>
+						{/* <Text style={styles.welcomeText}>Forgot your Password ?</Text> */}
 					</View>
 					
 					<Text
