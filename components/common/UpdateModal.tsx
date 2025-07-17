@@ -21,7 +21,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({ visible, onClose, isStoreUpda
       // Fixed App Store URLs with correct format
       const storeUrl = Platform.OS === 'ios'
         ? 'https://apps.apple.com/us/app/id6741070697'
-        : 'https://play.google.com/store/apps/details?id=com.challenzsocialapp.app';
+        : 'https://play.google.com/store/apps/details?id=com.app.app';
       Linking.openURL(storeUrl).catch((err) => console.error('Error opening store:', err));
     }
     onClose();
