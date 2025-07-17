@@ -290,6 +290,32 @@ export default function SignUpScreen() {
 						)}
 					</TouchableOpacity>
 
+					<Text
+						style={{
+							color: "#aaa",
+							fontSize: 12,
+							textAlign: "center",
+							marginBottom: 10,
+							lineHeight: 18,
+						}}
+					>
+						By signing up, you agree to our{" "}
+						<Text
+							style={{ color: "#D7A77F", textDecorationLine: "underline" }}
+							onPress={() => router.push("/terms")}
+						>
+							Terms of Service
+						</Text>{" "}
+						and{" "}
+						<Text
+							style={{ color: "#D7A77F", textDecorationLine: "underline" }}
+							onPress={() => router.push("/privacy")}
+						>
+							Privacy Policy
+						</Text>
+						.
+					</Text>
+
 					<View
 						style={{
 							flexDirection: "row",
