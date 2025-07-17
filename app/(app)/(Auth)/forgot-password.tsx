@@ -1,170 +1,214 @@
-// import { useState } from "react";
-// import {
-//   View,
-//   Text,
-//   TextInput,
-//   TouchableOpacity,
-//   Alert,
-//   ScrollView,
-// } from "react-native";
-// import { useTranslation } from "react-i18next";
-// import { SafeAreaView } from "@/components/safe-area-view";
-// import { supabase } from "@/config/supabase";
-// import { router } from "expo-router";
-// import { Image } from "@/components/image";
-// import { colors } from "@/constants/colors";
-// import { useTheme } from "@/context/theme-context";
-// import { useFont } from "@/context/font-context";
+import React, { useState } from "react";
+import {
+	View,
+	Text,
+	TextInput,
+	TouchableOpacity,
+	StyleSheet,
+	ScrollView,
+	StatusBar,
+	KeyboardAvoidingView,
+	Alert,
+	Image,
+} from "react-native";
+import { router } from "expo-router";
+import { supabase } from "@/config/supabase";
 
-// export default function ForgotPassword() {
-//   const { t } = useTranslation();
-//   const { selectedFont } = useFont();
-//   const { colorScheme } = useTheme();
+export default function ForgotPasswordScreen() {
+	const [email, setEmail] = useState("");
+	const [loading, setLoading] = useState(false);
 
-//   const [email, setEmail] = useState("");
-//   const [loading, setLoading] = useState(false);
+	const handleResetPassword = async () => {
+		if (!email.trim()) {
+			Alert.alert("Error", "Please enter your email.");
+			return;
+		}
 
-//   async function handleResetPassword() {
-//     if (!email) {
-//       Alert.alert(
-//         t("forgotPassword.title"),
-//         t("forgotPassword.alerts.enterEmail")
-//       );
-//       return;
-//     }
-//     try {
-//       setLoading(true);
-//       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-//         redirectTo: "https://challenzapp.com/redirect",
-//       });
-//       if (error) throw error;
-//       Alert.alert(
-//         t("forgotPassword.title"),
-//         t("forgotPassword.alerts.checkEmail")
-//       );
-//       router.push("/sign-in");
-//     } catch (error) {
-//       Alert.alert(t("forgotPassword.alerts.resetError"), error.message);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
+		setLoading(true);
+		try {
+			const { error } = await supabase.auth.resetPasswordForEmail(email, {
+				redirectTo: "https://app.com/redirect",
+			});
 
-//   return (
-//     <SafeAreaView
-//       style={{
-//         flex: 1,
-//         backgroundColor: colors[colorScheme]?.foreground,
-//         paddingHorizontal: 24,
-//       }}
-//     >
-//       <ScrollView
-//         contentContainerStyle={{ flexGrow: 0.5, justifyContent: "center" }}
-//       >
-//         <View style={{ alignItems: "center" }}>
-//           <View className="flex items-center justify-start py-4 my-8 gap-4">
-//             <Image
-//               style={{ backgroundColor: colors[colorScheme]?.background }}
-//               className="w-[50px] h-[50px] rounded-full"
-//               source={require("@/assets/images/playstore.png")}
-//             />
-            
-//           </View>
-//           <Text
-//             style={{
-//               fontSize: 14,
-//               color: colors[colorScheme]?.mutedForeground,
-//               fontFamily: selectedFont,
-//               textAlign: "center",
-//             }}
-//           >
-//             {t("forgotPassword.description")}
-//           </Text>
-//         </View>
+			if (error) throw error;
 
-//         <View style={{ marginBottom: 20 }}>
-//           <TextInput
-//             placeholder={t("forgotPassword.form.email")}
-//             style={{
-//               borderWidth: 1,
-//               borderColor: colors[colorScheme]?.border,
-//               padding: 14,
-//               borderRadius: 10,
-//               backgroundColor: colors[colorScheme]?.input,
-//               fontSize: 16,
-//               fontFamily: selectedFont,
-//             }}
-//             autoCapitalize="none"
-//             onChangeText={setEmail}
-//             value={email}
-//           />
-//         </View>
+			Alert.alert(
+				"Check your Email",
+				"A password reset link has been sent to your email.",
+			);
+			router.push("/sign-in");
+		} catch (error) {
+			const err = error as Error;
+			Alert.alert("Reset Error", err.message);
+		} finally {
+			setLoading(false);
+		}
+	};
 
-//         <TouchableOpacity
-//           onPress={handleResetPassword}
-//           style={{
-//             backgroundColor: colors[colorScheme]?.background,
-//             paddingVertical: 14,
-//             borderRadius: 10,
-//             alignItems: "center",
-//           }}
-//           disabled={loading}
-//         >
-//           <Text
-//             style={{
-//               color: colors[colorScheme]?.foreground,
-//               fontSize: 16,
-//               fontWeight: "bold",
-//             }}
-//           >
-//             {loading
-//               ? t("forgotPassword.buttons.sending")
-//               : t("forgotPassword.buttons.reset")}
-//           </Text>
-//         </TouchableOpacity>
+	return (
+		<KeyboardAvoidingView
+			style={{ flex: 1, backgroundColor: "black" }}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
+		>
+			<StatusBar
+				translucent
+				backgroundColor="transparent"
+				barStyle="light-content"
+			/>
+			<ScrollView
+				style={{
+					flex: 1,
+					paddingHorizontal: 20,
+					paddingTop: StatusBar.currentHeight || 40,
+				}}
+				contentContainerStyle={{
+					flexGrow: 1,
+					justifyContent: "center",
+					paddingBottom: 20,
+				}}
+				keyboardShouldPersistTaps="handled"
+			>
+				<View style={styles.container}>
+					<View style={styles.logoContainer}>
+						<Image
+							source={require("@/assets/images/playstore.jpg")}
+							style={styles.logo}
+						/>
+						<Text style={styles.welcomeText}>Forgot your Password ?</Text>
+					</View>
+					
+					<Text
+						style={{
+							color: "#aaa",
+							fontSize: 14,
+							textAlign: "center",
+							marginBottom: 30,
+						}}
+					>
+						Enter your email address below and we’ll send you a link to reset your
+						password.
+					</Text>
 
-//         <View
-//           style={{
-//             flexDirection: "row",
-//             justifyContent: "center",
-//             marginTop: 16,
-//           }}
-//         >
-//           <Text
-//             style={{
-//               fontSize: 14,
-//               fontFamily: selectedFont,
-//               color: colors[colorScheme]?.mutedForeground,
-//             }}
-//           >
-//             {t("forgotPassword.buttons.remembered")}
-//           </Text>
-//           <TouchableOpacity onPress={() => router.push("/sign-in")}>
-//             <Text
-//               style={{
-//                 color: colors[colorScheme]?.accent,
-//                 fontSize: 14,
-//                 fontWeight: "600",
-//                 marginLeft: 5,
-//               }}
-//             >
-//               {t("forgotPassword.buttons.signIn")}
-//             </Text>
-//           </TouchableOpacity>
-//         </View>
-//       </ScrollView>
-//     </SafeAreaView>
-//   );
-// }
+					<View style={styles.inputContainer}>
+						<TextInput
+							placeholder="Email"
+							placeholderTextColor="#aaa"
+							style={styles.input}
+							autoCapitalize="none"
+							keyboardType="email-address"
+							value={email}
+							onChangeText={setEmail}
+						/>
+					</View>
 
+					<TouchableOpacity
+						style={[
+							styles.resetButton,
+							email.trim()
+								? styles.resetButtonActive
+								: styles.resetButtonDisabled,
+						]}
+						onPress={handleResetPassword}
+						disabled={loading || !email.trim()}
+					>
+						<Text
+							style={[
+								styles.resetButtonText,
+								email.trim()
+									? styles.resetButtonTextActive
+									: styles.resetButtonTextDisabled,
+							]}
+						>
+							{loading ? "Sending..." : "Reset Password"}
+						</Text>
+					</TouchableOpacity>
 
-import { View, Text } from 'react-native'
-import React from 'react'
-
-export default function ForgotPassword() {
-  return (
-    <View>
-      <Text>ForgotPassword</Text>
-    </View>
-  )
+					<View style={styles.signinContainer}>
+						<Text style={styles.signinText}>Remember your password?</Text>
+						<TouchableOpacity onPress={() => router.push("/sign-in")}>
+							<Text style={styles.signinLink}> Sign In</Text>
+						</TouchableOpacity>
+					</View>
+				</View>
+			</ScrollView>
+		</KeyboardAvoidingView>
+	);
 }
+
+const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		backgroundColor: "#000",
+		justifyContent: "center",
+		alignItems: "center",
+		paddingHorizontal: 20,
+	},
+	logoContainer: {
+		alignItems: "center",
+		marginBottom: 30,
+	},
+	logo: {
+		width: 150,
+		height: 150,
+		borderRadius: 70,
+		marginBottom: 10,
+	},
+	welcomeText: {
+		color: "#fff",
+		fontSize: 24,
+		fontWeight: "bold",
+	},
+	inputContainer: {
+		width: "100%",
+		backgroundColor: "#333",
+		borderRadius: 8,
+		marginBottom: 20,
+	},
+	input: {
+		height: 50,
+		paddingHorizontal: 10,
+		color: "#fff",
+		fontSize: 16,
+	},
+	resetButton: {
+		width: "100%",
+		height: 50,
+		borderRadius: 8,
+		justifyContent: "center",
+		alignItems: "center",
+		marginBottom: 20,
+	},
+	resetButtonDisabled: {
+		backgroundColor: "#666",
+	},
+	resetButtonActive: {
+		backgroundColor: "transparent",
+		borderWidth: 2,
+		borderColor: "#D7A77F",
+	},
+	resetButtonText: {
+		fontSize: 16,
+		fontWeight: "bold",
+	},
+	resetButtonTextDisabled: {
+		color: "#aaa",
+	},
+	resetButtonTextActive: {
+		color: "#fff",
+	},
+	signinContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginTop: 30,
+	},
+	signinText: {
+		color: "#aaa",
+		fontSize: 14,
+	},
+	signinLink: {
+		color: "#D7A77F",
+		fontSize: 14,
+		fontWeight: "bold",
+	},
+});
