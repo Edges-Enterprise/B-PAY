@@ -19,7 +19,9 @@ export const sections = [
 		title: "Account",
 		items: [
 			// "Edit Profile",
-			"Change Password", "Change Email"],
+			"Change Password",
+			"Change Email",
+		],
 	},
 	{
 		title: "Preferences",
@@ -57,7 +59,8 @@ export const sections = [
 
 export const availableThemes = [
 	// "light",
-	"dark"];
+	"dark",
+];
 
 export const NETWORK_IMAGES: { [key: string]: string } = {
 	"9MOBILE": require("../assets/icons/sp-9mobile.jpeg"),
@@ -67,8 +70,6 @@ export const NETWORK_IMAGES: { [key: string]: string } = {
 };
 
 export const DEFAULT_PROVIDER_IMAGE = require("../assets/images/icon.png");
-
-
 
 interface DiscosProvider {
 	id: number;
@@ -236,7 +237,6 @@ export const actions = [
 	color: string;
 	route: `/${string}` | `../${string}`;
 }>;
-  
 
 export const CONSTANTS = {
 	COLORS: {
@@ -468,3 +468,209 @@ export const DEV_FLAGS = {
 	enableAnalytics: !__DEV__,
 	showPerformanceMetrics: __DEV__,
 } as const;
+
+// utils/legalTexts.js
+
+export const privacyPolicy = `
+Edges Network
+Last Updated: July 10, 2025
+
+At Edges Network, developed by Edges Enterprise, your privacy and data protection are of utmost importance to us. This Privacy Policy explains the types of data we collect, how we use it, and your rights regarding your information.
+By using our app, you acknowledge and consent to the practices described herein.
+
+1. Consent
+By accessing or using the Edges Network mobile application, you agree to this Privacy Policy. If you do not agree with our policies or practices, please do not use the application.
+
+2. Who We Are
+Edges Network is a mobile data reselling platform operated by Edges Enterprise, a technology company based in Nigeria. We provide secure, affordable, and fast mobile data services to users across Nigeria.
+📧 Contact Email: edgesenterprise@outlook.com
+
+3. Information We Collect
+We collect personal and technical information to ensure secure transactions and improve your user experience.
+a. Personal Information
+UserName
+Phone Number
+Email Address
+b. Account and Transaction Information
+Data plan selections and purchase history
+Payment confirmation and status (via Paystack)
+Wallet or top-up activity (if applicable)
+c. Device and Usage Information
+Device model and operating system
+Timestamps and frequency of app usage
+Crash logs and app performance data
+General, non-identifiable usage analytics
+d. Support and Communication
+When you contact us, we collect message content and any file attachments to resolve your issue effectively.
+
+4. How We Use Your Information
+Your information is used to:
+Operate and maintain the Edges Network app
+Process and verify mobile data purchases via Paystack
+Improve app performance and user experience
+Prevent fraud and ensure platform security
+Communicate with you about purchases, updates, or service changes
+Provide responsive customer support
+
+5. Payments and Financial Security
+All payments are processed securely through Paystack, a PCI-DSS-compliant payment provider.
+Edges Network does not store any card or bank details.
+
+6. Log Files and Technical Data
+We may automatically collect technical log data such as:
+IP Address
+Device Type
+Operating System Version
+Time and Date of Usage
+This helps with diagnostics, performance monitoring, and improving service reliability.
+
+7. Cookies and Local Storage
+While we do not use traditional web cookies, the app may utilize local storage or similar technologies to:
+Remember login sessions
+Save preferences for a smoother user experience
+
+8. Third-Party Services
+We collaborate with trusted third-party providers, including:
+Paystack (payment processing)
+API providers (data delivery)
+Analytics providers (for future performance optimization)
+Each provider operates under its own privacy policy, and we encourage users to review those separately.
+
+9. Data Protection Rights
+We respect your privacy rights under GDPR and other global standards. You have the right to:
+Access: Request a copy of your personal data
+Rectification: Correct inaccurate or incomplete data
+Erasure: Request deletion of your data
+Restriction: Request we limit how we use your data
+Objection: Object to processing under certain conditions
+Portability: Request transfer of your data to another platform
+📩 To exercise these rights, contact: edgesenterprise@outlook.com
+We respond within 30 days of verified requests.
+
+10. Children’s Privacy
+Our services are not intended for children under the age of 13.
+We do not knowingly collect personal data from children. If we learn that such data was collected, we will delete it immediately.
+
+11. Updates to This Privacy Policy
+We may revise this Privacy Policy periodically to reflect:
+Changes in the app
+Legal or regulatory updates
+Enhancements in data protection practices
+You will be notified of major changes via the app or official communication channels.
+
+12. Contact Us
+For any privacy-related concerns or questions:
+Edges Enterprise
+📧 Email: edgesenterprise@outlook.com
+
+© 2025 Edges Network — All Rights Reserved
+Developed by Edges Enterprise
+`;
+
+export const termsAndConditions = `
+Edges Network
+Effective Date: July 10, 2025
+
+Welcome to Edges Network, a mobile data reselling platform operated by Edges Enterprise.
+These Terms and Conditions govern your access to and use of our mobile application and services.
+By accessing or using the platform, you agree to be bound by these Terms.
+If you do not agree, do not use our services.
+
+1. About Us
+Edges Network is developed and operated by Edges Enterprise, a Nigerian-based technology company offering secure, affordable, and fast mobile data services nationwide.
+
+📧 Email: edgesenterprise@outlook.com
+
+📱 WhatsApp Support: +2347057517841 | +234701588815
+
+2. Acceptance of Terms
+By using our platform, you confirm that:
+You are at least 18 years old or have consent from a parent/guardian.
+You have read, understood, and agree to comply with these Terms and our [Privacy Policy].
+You will not use the platform for any unlawful, fraudulent, or unauthorized activities.
+
+3. Description of Services
+Edges Network provides users with a seamless way to purchase mobile data bundles via our app.
+Services are currently accessible through a downloadable APK (Google Drive) and will be available on the Google Play Store.
+All payments are processed securely via Paystack.
+A 10% processing fee applies to every deposit to cover operational and transaction costs.
+
+4. Account Registration and Use
+By registering an account, you agree to:
+Provide accurate and up-to-date personal information (e.g., username, name, phone number, email).
+Keep your login credentials secure and confidential.
+Accept full responsibility for all activities conducted under your account.
+
+5. Payments and Deposits
+A 10% fee is automatically deducted from deposits.
+We do not store your card or bank details.
+All completed transactions are final and non-refundable.
+Payments are made securely through Paystack.
+
+6. Delivery of Services
+Data bundles are delivered instantly or within a short processing window.
+Delays may occur due to external factors (e.g., network outages).
+Once data is marked as delivered, no refunds, reversals, or compensations will be issued.
+
+7. Prohibited Activities
+You agree not to:
+Use the platform for any illegal or unauthorized purpose.
+Resell or redistribute services without written approval.
+Impersonate Edges Network, its team, or other users.
+Upload malicious software or disrupt platform functionality.
+Misrepresent the service or inflate pricing to mislead others.
+
+8. Data Privacy and Security
+We collect only essential data for service delivery (e.g., contact and transaction information).
+All payment data is handled by Paystack, a PCI-DSS-compliant provider.
+Technical and usage data may be collected to improve platform performance.
+
+9. Third-Party Services
+We may integrate with third-party providers including:
+Paystack – for secure payment processing
+Telecom APIs – for data delivery
+Analytics tools (future use) – for app monitoring
+Each third-party operates under its own terms and privacy policies. We are not liable for their service disruptions but will assist in resolving major issues.
+
+10. Suspension and Termination
+We reserve the right to suspend or terminate your account at any time without notice or explanation.
+This may result in:
+Loss of wallet balance and access to services.
+Deletion of your account and associated data.
+Withholding of any pending service delivery.
+You waive any right to dispute such actions. Continued use of the platform implies full acceptance of this clause.
+
+11. User Liability
+You are financially and legally liable for any damage, fraud, or misuse tied to your account. This includes:
+Reputational or financial damage caused to Edges Network or its users.
+Misleading or overpricing our services to other users.
+Operating a resale business without written approval from Edges Enterprise.
+
+12. No Guarantees or Refunds
+All services are provided “as-is” and “as-available”.
+We do not guarantee uninterrupted service or exact delivery times.
+Once a transaction is completed and service is delivered, no refunds or replacements will be issued.
+
+13. Indemnification
+You agree to indemnify and hold harmless Edges Enterprise, its affiliates, subsidiaries, sub-subsidiaries and employees against any claims, damages, losses, or legal expenses arising from:
+Your use or misuse of the platform
+Your violation of these Terms
+Your infringement of third-party rights
+
+14. Children’s Privacy
+Our platform is not intended for children under 13. We do not knowingly collect data from minors. If such data is identified, it will be permanently deleted.
+
+15. Changes to Terms
+We may update these Terms periodically. All updates will be posted in the app or sent via official channels. Continued use of the platform indicates your acceptance of the latest version.
+
+16. Governing Law
+These Terms are governed by the laws of the Federal Republic of Nigeria. Any disputes will be handled under the jurisdiction of Nigerian courts.
+
+17. Contact Us
+For support or inquiries:
+📧 Email: edgesenterprise@outlook.com
+📱 WhatsApp: +2347057517841 | +2347015888155
+
+© 2025 Edges Network — All Rights Reserved
+Developed by Edges Enterprise
+`;
