@@ -98,12 +98,12 @@ const ConfirmationScreen: React.FC = () => {
       };
       const expectedNetworkId = networkIds[selectedBundle.planType];
       if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
-        console.log('Synchronizing networkId:', {
-          currentNetworkId: parsedNetworkId,
-          expectedNetworkId,
-          planType: selectedBundle.planType,
-          bundleId: selectedBundle.id,
-        });
+        // console.log('Synchronizing networkId:', {
+        //   currentNetworkId: parsedNetworkId,
+        //   expectedNetworkId,
+        //   planType: selectedBundle.planType,
+        //   bundleId: selectedBundle.id,
+        // });
         setParsedNetworkId(expectedNetworkId);
         setNetworkProvider(selectedBundle.planType);
         setSelectedProvider({ ...selectedProvider, name: selectedBundle.planType, id: expectedNetworkId });
@@ -147,20 +147,20 @@ const ConfirmationScreen: React.FC = () => {
   }, [errorModalVisible, timeLeft]);
 
   // Log initial parameters
-  useEffect(() => {
-    console.log('Received navigation params:', {
-      bundle: selectedBundle,
-      provider: selectedProvider,
-      phoneNumber,
-      transactionPin: '****',
-      userEmail,
-      referenceId,
-      balance: balanceValue,
-      networkId: parsedNetworkId,
-      planId: parsedPlanId,
-      purchaseType,
-    });
-  }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId, purchaseType]);
+  // useEffect(() => {
+  //   console.log('Received navigation params:', {
+  //     bundle: selectedBundle,
+  //     provider: selectedProvider,
+  //     phoneNumber,
+  //     transactionPin: '****',
+  //     userEmail,
+  //     referenceId,
+  //     balance: balanceValue,
+  //     networkId: parsedNetworkId,
+  //     planId: parsedPlanId,
+  //     purchaseType,
+  //   });
+  // }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId, purchaseType]);
 
   // Fetch wallet balance and set up real-time subscription
   useEffect(() => {
@@ -329,7 +329,7 @@ const ConfirmationScreen: React.FC = () => {
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dx > 100) {
-          console.log('Slide to purchase triggered', { referenceId });
+          // console.log('Slide to purchase triggered', { referenceId });
           handlePurchase();
         }
         Animated.spring(slideAnim, {
@@ -414,7 +414,7 @@ const ConfirmationScreen: React.FC = () => {
       if (purchaseType === 'data') {
         // Check if plan is a Hot plan
         const isHotPlan = selectedBundle.category === 'Hot';
-        console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
+        // console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
 
         if (isHotPlan) {
           // Validate Hot Plan and Network ID
@@ -448,7 +448,7 @@ const ConfirmationScreen: React.FC = () => {
             'request-id': `Data_${referenceId}`,
           };
 
-          console.log('Lizzysub API request:', requestBody);
+          // console.log('Lizzysub API request:', requestBody);
 
           apiResponse = await fetch('https://lizzysub.com/api/data', {
             method: 'POST',
@@ -540,7 +540,7 @@ const ConfirmationScreen: React.FC = () => {
             Ported_number: true,
           };
 
-          console.log('Ebenkdata API request:', requestBody);
+          // console.log('Ebenkdata API request:', requestBody);
 
           apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
             method: 'POST',
@@ -552,11 +552,11 @@ const ConfirmationScreen: React.FC = () => {
           });
 
           responseText = await apiResponse.text();
-          console.log('Ebenkdata API response:', {
-            status: apiResponse.status,
-            headers: Object.fromEntries(apiResponse.headers.entries()),
-            responseText: responseText.slice(0, 500),
-          });
+          // console.log('Ebenkdata API response:', {
+          //   status: apiResponse.status,
+          //   headers: Object.fromEntries(apiResponse.headers.entries()),
+          //   responseText: responseText.slice(0, 500),
+          // });
 
           let responseData;
           try {
@@ -626,7 +626,7 @@ const ConfirmationScreen: React.FC = () => {
           Ported_number: true,
         };
 
-        console.log('Ebenkdata Airtime API request:', requestBody);
+        // console.log('Ebenkdata Airtime API request:', requestBody);
 
         apiResponse = await fetch(`${ebenkUrl}/api/airtime/`, {
           method: 'POST',
@@ -638,11 +638,11 @@ const ConfirmationScreen: React.FC = () => {
         });
 
         responseText = await apiResponse.text();
-        console.log('Ebenkdata Airtime API response:', {
-          status: apiResponse.status,
-          headers: Object.fromEntries(apiResponse.headers.entries()),
-          responseText: responseText.slice(0, 500),
-        });
+        // console.log('Ebenkdata Airtime API response:', {
+        //   status: apiResponse.status,
+        //   headers: Object.fromEntries(apiResponse.headers.entries()),
+        //   responseText: responseText.slice(0, 500),
+        // });
 
         let responseData;
         try {

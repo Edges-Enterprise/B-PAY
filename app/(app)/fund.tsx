@@ -38,12 +38,12 @@ const FundScreen = () => {
 
   useEffect(() => {
     const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
-    console.log('Loaded Paystack Public Key:', paystackKey);
-    console.log('Environment variables:', {
-      PAYSTACK_PUBLIC_KEY: paystackKey ? `Set (${paystackKey.substring(0, 7)}...)` : 'Missing',
-      SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL || 'Missing',
-      SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Set (eyJ...)' : 'Missing',
-    });
+    // console.log('Loaded Paystack Public Key:', paystackKey);
+    // console.log('Environment variables:', {
+    //   PAYSTACK_PUBLIC_KEY: paystackKey ? `Set (${paystackKey.substring(0, 7)}...)` : 'Missing',
+    //   SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL || 'Missing',
+    //   SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'Set (eyJ...)' : 'Missing',
+    // });
 
     if (!paystackKey) {
       Alert.alert('Configuration Error', 'Paystack public key is missing. Please contact support.');
@@ -63,10 +63,10 @@ const FundScreen = () => {
   }, []);
 
   useEffect(() => {
-    console.log('showWebView:', showWebView);
+    // console.log('showWebView:', showWebView);
     if (showWebView && paymentReference) {
       const fallbackTimeout = setTimeout(async () => {
-        console.log('Fallback verification triggered:', paymentReference);
+        // console.log('Fallback verification triggered:', paymentReference);
         setShowVerifyButton(true);
         Alert.alert('Warning', 'Payment response not received. Please verify manually.');
       }, 60000);
@@ -76,7 +76,7 @@ const FundScreen = () => {
 
   const fetchWalletBalance = async (email: string) => {
     try {
-      console.log('Fetching wallet balance:', email);
+      // console.log('Fetching wallet balance:', email);
       const { data: wallet, error: walletError } = await supabase
         .from('wallet')
         .select('balance')
@@ -86,7 +86,7 @@ const FundScreen = () => {
         throw new Error(`Wallet query failed: ${walletError.message}`);
       }
       setWalletBalance(wallet?.balance || 0);
-      console.log('Wallet balance:', wallet?.balance || 0);
+      // console.log('Wallet balance:', wallet?.balance || 0);
     } catch (error) {
       console.error('fetchWalletBalance error:', { message: error.message });
     }

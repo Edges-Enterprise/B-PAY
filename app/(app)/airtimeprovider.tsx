@@ -107,10 +107,10 @@ const AirtimeProvider: React.FC = () => {
 	const scrollViewRef = useRef<ScrollView>(null);
 
 	// Debug component mount/unmount
-	useEffect(() => {
-		console.log("AirtimeProvider mounted");
-		return () => console.log("AirtimeProvider unmounted");
-	}, []);
+	// useEffect(() => {
+	// 	console.log("AirtimeProvider mounted");
+	// 	return () => console.log("AirtimeProvider unmounted");
+	// }, []);
 
 	// Update stateRef when state changes
 	useEffect(() => {
@@ -120,7 +120,7 @@ const AirtimeProvider: React.FC = () => {
 			selectedAmount,
 			discountedPrice,
 		};
-		console.log("State updated:", stateRef.current);
+		// console.log("State updated:", stateRef.current);
 	}, [selectedProvider, phoneNumber, selectedAmount, discountedPrice]);
 
 	// Check if slide gesture should be enabled
@@ -130,12 +130,12 @@ const AirtimeProvider: React.FC = () => {
 			!!phoneNumber &&
 			phoneNumber.length === 11 &&
 			!!selectedAmount;
-		console.log("canSlideToPurchase:", {
-			isValid,
-			selectedProvider,
-			phoneNumber,
-			selectedAmount,
-		});
+		// console.log("canSlideToPurchase:", {
+		// 	isValid,
+		// 	selectedProvider,
+		// 	phoneNumber,
+		// 	selectedAmount,
+		// });
 		return isValid;
 	}, [selectedProvider, phoneNumber, selectedAmount]);
 
@@ -178,7 +178,7 @@ const AirtimeProvider: React.FC = () => {
 			});
 
 			const providerArray = Object.values(providerMap);
-			console.log("Fetched providers:", providerArray);
+			// console.log("Fetched providers:", providerArray);
 			setProviders(providerArray);
 
 			if (providerArray.length === 0) {
@@ -195,9 +195,9 @@ const AirtimeProvider: React.FC = () => {
 
 	// Handle provider selection
 	const handleSelectProvider = (provider: Provider) => {
-		console.log("Provider clicked:", provider);
+		// console.log("Provider clicked:", provider);
 		setSelectedProvider(provider);
-		console.log("Selected provider set to:", provider);
+		// console.log("Selected provider set to:", provider);
 	};
 
 	// Verify transaction PIN existence
@@ -279,7 +279,7 @@ const AirtimeProvider: React.FC = () => {
 							filter: `user_email=eq.${user.email}`,
 						},
 						(payload) => {
-							console.log("Wallet update received:", payload.new.balance);
+							// console.log("Wallet update received:", payload.new.balance);
 							setBalance(payload.new.balance ?? 0);
 						},
 					)
@@ -427,11 +427,11 @@ const AirtimeProvider: React.FC = () => {
 			PanResponder.create({
 				onStartShouldSetPanResponder: () => isSlideEnabled,
 				onMoveShouldSetPanResponder: (_, gestureState) => {
-					console.log("Move should set responder:", {
-						isSlideEnabled,
-						dx: gestureState.dx,
-						dy: gestureState.dy,
-					});
+					// console.log("Move should set responder:", {
+					// 	isSlideEnabled,
+					// 	dx: gestureState.dx,
+					// 	dy: gestureState.dy,
+					// });
 					return (
 						isSlideEnabled &&
 						Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
@@ -439,25 +439,25 @@ const AirtimeProvider: React.FC = () => {
 					);
 				},
 				onPanResponderGrant: () => {
-					console.log("PanResponder granted");
+					// console.log("PanResponder granted");
 					gestureRef.current = { ...stateRef.current };
-					console.log("Gesture ref captured:", gestureRef.current);
+					// console.log("Gesture ref captured:", gestureRef.current);
 					scrollViewRef.current?.setNativeProps({ scrollEnabled: false });
 				},
 				onPanResponderMove: (_, gestureState) => {
-					console.log("PanResponder move:", { dx: gestureState.dx });
+					// console.log("PanResponder move:", { dx: gestureState.dx });
 					if (gestureState.dx > 0 && gestureState.dx <= 200) {
 						slideAnim.setValue(gestureState.dx);
 					}
 				},
 				onPanResponderRelease: async (_, gestureState) => {
-					console.log("PanResponder released:", { dx: gestureState.dx });
+					// console.log("PanResponder released:", { dx: gestureState.dx });
 					scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
 					if (gestureState.dx >= 100 && isSlideEnabled) {
-						console.log(
-							"Slide completed, triggering handlePurchase with:",
-							gestureRef.current,
-						);
+						// console.log(
+						// 	"Slide completed, triggering handlePurchase with:",
+						// 	gestureRef.current,
+						// );
 						await handlePurchase();
 					}
 					Animated.spring(slideAnim, {
@@ -468,7 +468,7 @@ const AirtimeProvider: React.FC = () => {
 					}).start();
 				},
 				onPanResponderTerminate: () => {
-					console.log("PanResponder terminated");
+					// console.log("PanResponder terminated");
 					scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
 					Animated.spring(slideAnim, {
 						toValue: 0,
@@ -563,7 +563,7 @@ const AirtimeProvider: React.FC = () => {
 			}
 
 			currentBalance = wallet?.balance ?? balance;
-			console.log("Pre-transaction wallet balance:", currentBalance);
+			// console.log("Pre-transaction wallet balance:", currentBalance);
 
 			if (currentBalance < discountedPrice) {
 				Alert.alert(
@@ -609,7 +609,7 @@ const AirtimeProvider: React.FC = () => {
 				},
 			};
 
-			console.log("Recording transaction with amount:", -discountedPrice);
+			// console.log("Recording transaction with amount:", -discountedPrice);
 
 			const { data: pendingTx, error: pendingTxError } = await supabase
 				.from("transactions")
@@ -716,7 +716,7 @@ const AirtimeProvider: React.FC = () => {
 				airtime_type: "VTU",
 			};
 
-			console.log("Ebenkdata API request:", requestBody);
+			// console.log("Ebenkdata API request:", requestBody);
 
 			const purchaseResponse = await fetch("https://ebenkdata.com/api/topup/", {
 				method: "POST",
@@ -728,10 +728,10 @@ const AirtimeProvider: React.FC = () => {
 			});
 
 			const responseText = await purchaseResponse.text();
-			console.log("Ebenkdata API response:", {
-				status: purchaseResponse.status,
-				responseText: responseText.slice(0, 100),
-			});
+			// console.log("Ebenkdata API response:", {
+			// 	status: purchaseResponse.status,
+			// 	responseText: responseText.slice(0, 100),
+			// });
 
 			if (!purchaseResponse.ok) {
 				// Revert wallet balance on failure
@@ -796,7 +796,7 @@ const AirtimeProvider: React.FC = () => {
 					.update({ balance: currentBalance })
 					.eq("user_email", userEmail);
 				setBalance(currentBalance);
-				console.log("Wallet balance reverted to:", currentBalance);
+				// console.log("Wallet balance reverted to:", currentBalance);
 			}
 			setTransactionModalVisible(false);
 			Alert.alert(
@@ -871,12 +871,12 @@ const AirtimeProvider: React.FC = () => {
 
 	// Close modals
 	const closeTransactionModal = () => {
-		console.log("Closing TransactionStatusModal");
+		// console.log("Closing TransactionStatusModal");
 		setTransactionModalVisible(false);
 	};
 
 	const closePinCreationModal = () => {
-		console.log("Closing CreatePinModal");
+		// console.log("Closing CreatePinModal");
 		setIsPinCreationModalOpen(false);
 		setNewPin("");
 		setConfirmPin("");

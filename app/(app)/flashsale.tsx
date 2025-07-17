@@ -129,7 +129,7 @@ export default function FlashSaleScreen() {
       planId: plan.id,
     };
 
-    console.log("Navigating to Confirmation with params:", params);
+    // console.log("Navigating to Confirmation with params:", params);
 
     router.push({
       pathname: "/Confirmation",
