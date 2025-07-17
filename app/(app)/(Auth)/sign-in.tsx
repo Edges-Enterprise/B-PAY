@@ -154,7 +154,7 @@ export default function SignInScreen() {
 						</TouchableOpacity>
 					</View>
 
-					<View style={styles.rememberMeContainer}>
+					{/* <View style={styles.rememberMeContainer}>
 						<Switch
 							value={rememberMe}
 							onValueChange={setRememberMe}
@@ -162,6 +162,22 @@ export default function SignInScreen() {
 							trackColor={{ false: "#444", true: "#D7A77F" }}
 						/>
 						<Text style={styles.rememberMeText}>Remember me</Text>
+					</View> */}
+
+					<View style={styles.rememberMeContainer}>
+						<View style={styles.rememberMeLeft}>
+							<Switch
+								value={rememberMe}
+								onValueChange={setRememberMe}
+								thumbColor={rememberMe ? "#E9C9AF" : "#666"}
+								trackColor={{ false: "#444", true: "#D7A77F" }}
+							/>
+							<Text style={styles.rememberMeText}>Remember me</Text>
+						</View>
+
+						<TouchableOpacity onPress={() => router.push("/reset-password")}>
+							<Text style={styles.forgotPasswordText}>Forgot?</Text>
+						</TouchableOpacity>
 					</View>
 
 					<TouchableOpacity
@@ -237,16 +253,38 @@ const styles = StyleSheet.create({
 	eyeIcon: {
 		padding: 8,
 	},
+	// rememberMeContainer: {
+	// 	flexDirection: "row",
+	// 	alignItems: "center",
+	// 	alignSelf: "flex-start",
+	// 	marginBottom: 20,
+	// },
+	// rememberMeText: {
+	// 	marginLeft: 10,
+	// 	color: "#aaa",
+	// 	fontSize: 14,
+	// },
 	rememberMeContainer: {
 		flexDirection: "row",
+		justifyContent: "space-between",
 		alignItems: "center",
-		alignSelf: "flex-start",
+		width: "100%",
 		marginBottom: 20,
 	},
+	rememberMeLeft: {
+		flexDirection: "row",
+		alignItems: "center",
+	},
 	rememberMeText: {
-		marginLeft: 10,
+		// marginLeft: 4,
 		color: "#aaa",
 		fontSize: 14,
+	},
+	forgotPasswordText: {
+		color: "#D7A77F",
+		fontSize: 14,
+		fontWeight: "500",
+		textDecorationLine: "underline",
 	},
 	signInButton: {
 		width: "100%",
