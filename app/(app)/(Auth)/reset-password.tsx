@@ -1,202 +1,246 @@
-// import { Ionicons } from "@expo/vector-icons";
-// import { useLocalSearchParams, router } from "expo-router";
-// import React, { useEffect, useState } from "react";
-// import { useTranslation } from "react-i18next";
-// import { Alert, View, TextInput, TouchableOpacity } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+	Alert,
+	View,
+	Text,
+	TextInput,
+	TouchableOpacity,
+	StyleSheet,
+	KeyboardAvoidingView,
+	StatusBar,
+	ScrollView,
+	Image,
+} from "react-native";
+import { useLocalSearchParams, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { supabase } from "@/config/supabase";
 
-// import CustomButton from "@/components/common/CustomButton";
-// import { Image } from "@/components/image";
-// import { SafeAreaView } from "@/components/safe-area-view";
-// import { H2, P } from "@/components/ui/typography";
-// import { supabase } from "@/config/supabase";
-// import { colors } from "@/constants/colors";
-// import { useFont } from "@/context/font-context";
-// import { useTheme } from "@/context/theme-context";
+export default function ResetPasswordScreen() {
+	const { token, type } = useLocalSearchParams();
 
-// export default function ResetPasswordScreen() {
-//   const { colorScheme } = useTheme();
-//   const { selectedFont } = useFont();
-//   const { t } = useTranslation();
+	const [newPassword, setNewPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
+	const [loading, setLoading] = useState(false);
 
-//   // Extract the recovery token and type from the URL
-//   const { token, type } = useLocalSearchParams();
-//   const [isSubmitting, setSubmitting] = useState(false);
-//   const [newPassword, setNewPassword] = useState("");
-//   const [showPassword, setShowPassword] = useState(false);
+	useEffect(() => {
+		if (!token || type !== "recovery") {
+			Alert.alert("Error", "Invalid or missing recovery token.");
+		}
+	}, [token, type]);
 
-//   useEffect(() => {
-//     console.log("token:", token);
-//     console.log("type:", type);
+	const handleUpdatePassword = async () => {
+		if (!token || type !== "recovery") return;
 
-//     if (!token || type !== "recovery") {
-//       Alert.alert(
-//         t(
-//           "resetPasswordScreen.error.missingTokens",
-//           "Invalid or missing recovery token."
-//         )
-//       );
-//       return;
-//     }
-//     // Optionally, verify the token here if needed.
-//   }, [token, type]);
+		if (!newPassword || newPassword.length < 8) {
+			Alert.alert("Error", "Password must be at least 8 characters.");
+			return;
+		}
 
-//   async function handleUpdatePassword() {
-//     if (!token || type !== "recovery") return;
+		setLoading(true);
+		try {
+			const sessionToken = Array.isArray(token) ? token[0] : token;
 
-//     if (!newPassword || newPassword.length < 8) {
-//       Alert.alert(t("resetPasswordScreen.error.invalidPassword"));
-//       return;
-//     }
-//     setSubmitting(true);
-//     try {
-//       // 1️⃣ Set the session using the token from the URL
-//       const sessionToken = Array.isArray(token) ? token[0] : token;
-//       const { error: sessionError } = await supabase.auth.setSession({
-//         access_token: sessionToken,
-//         refresh_token: sessionToken, // Use the same token for refresh
-//       });
+			const { error: sessionError } = await supabase.auth.setSession({
+				access_token: sessionToken,
+				refresh_token: sessionToken,
+			});
 
-//       if (sessionError) {
-//         console.error("Session Error:", sessionError.message);
-//         throw sessionError;
-//       }
+			if (sessionError) throw sessionError;
 
-//       // 2️⃣ Now update the password
-//       const { error: updateError } = await supabase.auth.updateUser({
-//         password: newPassword,
-//       });
+			const { error: updateError } = await supabase.auth.updateUser({
+				password: newPassword,
+			});
 
-//       if (updateError) {
-//         console.error("Update User Error:", updateError.message);
-//         throw updateError;
-//       }
+			if (updateError) throw updateError;
 
-//       Alert.alert(t("resetPasswordScreen.success.passwordUpdated"));
-//       router.replace("/(app)/(auth)/sign-in");
-//     } catch (err: any) {
-//       console.error("Error in handleUpdatePassword:", err.message);
-//       Alert.alert(
-//         t(
-//           "resetPasswordScreen.error.updateFailed",
-//           "Failed to update your password."
-//         )
-//       );
-//       setSubmitting(false);
-//     }
-//   }
+			Alert.alert("Success", "Password updated successfully.");
+			router.replace("/sign-in");
+		} catch (err) {
+			const error = err as Error;
+			Alert.alert("Error", error.message || "Failed to update password.");
+		} finally {
+			setLoading(false);
+		}
+	};
 
-//   return (
-//     <SafeAreaView
-//       style={{
-//         flex: 1,
-//         backgroundColor: colors[colorScheme]?.foreground,
-//         paddingHorizontal: 24,
-//       }}
-//     >
-//       <View className="flex-1 gap-4 web:m-4">
-//         {/* Header / Title */}
-//         <View className="flex items-center justify-start pt-[6px] gap-4">
-//           <View
-//             style={{
-//               // backgroundColor: colors[colorScheme]?.primary,
-//               shadowColor: "#000",
-//               shadowOffset: { width: 0, height: 4 },
-//               shadowOpacity: 0.3,
-//               shadowRadius: 4,
-//               elevation: 10,
-//             }}
-//             className="w-[60px] h-[60px] rounded-full justify-center items-center"
-//           >
-//             <Image
-//               style={{ backgroundColor: colors[colorScheme]?.background }}
-//               className="w-[50px] h-[50px] rounded-full"
-//               source={require("@/assets/images/playstore.png")}
-//             />
-//           </View>
+	return (
+		<KeyboardAvoidingView
+			style={{ flex: 1, backgroundColor: "black" }}
+			behavior={"height"}
+			keyboardVerticalOffset={0}
+		>
+			<StatusBar
+				translucent
+				backgroundColor="transparent"
+				barStyle="light-content"
+			/>
+			<ScrollView
+				style={{
+					flex: 1,
+					paddingHorizontal: 20,
+					paddingTop: StatusBar.currentHeight || 40,
+				}}
+				contentContainerStyle={{
+					flexGrow: 1,
+					justifyContent: "center",
+					paddingBottom: 20,
+				}}
+				keyboardShouldPersistTaps="handled"
+			>
+				<View style={styles.container}>
+					<View style={styles.logoContainer}>
+						<Image
+							source={require("@/assets/images/playstore.jpg")}
+							style={styles.logo}
+						/>
+						<Text style={styles.welcomeText}>Reset Password</Text>
+					</View>
 
-//           <P
-//             style={{
-//               color: colors[colorScheme]?.primary,
-//               fontFamily: selectedFont,
-//             }}
-//             className="text-[16px]"
-//           >
-//             {t("resetPasswordScreen.instructions")}
-//           </P>
-//         </View>
+					<Text style={styles.instructionsText}>
+						Enter your new password below to reset your account.
+					</Text>
 
-//         {/* Password Input */}
-//         <View className="mt-[4px]">
-//           <View className="mb-4">
-//             <P
-//               style={{
-//                 color: colors[colorScheme]?.primary,
-//                 fontFamily: selectedFont,
-//               }}
-//               className="mb-2 text-sm"
-//             >
-//               {t("resetPasswordScreen.labels.newPassword")}
-//             </P>
+					<View style={styles.inputContainer}>
+						<TextInput
+							placeholder="New Password"
+							placeholderTextColor="#aaa"
+							style={[styles.input, { flex: 1 }]}
+							autoCapitalize="none"
+							secureTextEntry={!showPassword}
+							value={newPassword}
+							onChangeText={setNewPassword}
+						/>
+						<TouchableOpacity
+							style={styles.eyeIcon}
+							onPress={() => setShowPassword(!showPassword)}
+						>
+							<Ionicons
+								name={showPassword ? "eye" : "eye-off"}
+								size={24}
+								color="#aaa"
+							/>
+						</TouchableOpacity>
+					</View>
 
-//             {/* Password Input with Eye Icon */}
-//             <View
-//               className="flex-row items-center rounded-md border border-gray-300 px-2"
-//               style={{ backgroundColor: colors[colorScheme]?.input }}
-//             >
-//               <TextInput
-//                 style={{
-//                   fontFamily: selectedFont,
-//                   backgroundColor: colors[colorScheme]?.input,
-//                   color: colors[colorScheme]?.foreground,
-//                   borderColor: colors[colorScheme]?.border,
-//                 }}
-//                 className="flex-1 py-4"
-//                 placeholder={t("resetPasswordScreen.placeholders.newPassword")}
-//                 placeholderTextColor={colors[colorScheme]?.primary}
-//                 secureTextEntry={!showPassword}
-//                 value={newPassword}
-//                 onChangeText={setNewPassword}
-//                 autoCapitalize="none"
-//               />
-//               <TouchableOpacity
-//                 onPress={() => setShowPassword(!showPassword)}
-//                 className="w-[30px] h-[30px] flex justify-center items-center"
-//               >
-//                 <Ionicons
-//                   style={{ textAlign: "center" }}
-//                   name={showPassword ? "eye-off" : "eye"}
-//                   size={20}
-//                   color="gray"
-//                 />
-//               </TouchableOpacity>
-//             </View>
-//           </View>
-//         </View>
-//       </View>
+					<TouchableOpacity
+						style={[
+							styles.resetButton,
+							newPassword.trim().length >= 8
+								? styles.resetButtonActive
+								: styles.resetButtonDisabled,
+						]}
+						onPress={handleUpdatePassword}
+						disabled={loading || newPassword.trim().length < 8}
+					>
+						<Text
+							style={[
+								styles.resetButtonText,
+								newPassword.trim().length >= 8
+									? styles.resetButtonTextActive
+									: styles.resetButtonTextDisabled,
+							]}
+						>
+							{loading ? "Updating..." : "Update Password"}
+						</Text>
+					</TouchableOpacity>
 
-//       {/* Update Password Button */}
-//       <CustomButton
-//         title={t("resetPasswordScreen.buttons.updatePassword")}
-//         handlePress={handleUpdatePassword}
-//         isLoading={isSubmitting}
-//         style={{
-//           backgroundColor: colors[colorScheme]?.background,
-//           marginBottom: 4
-//         }}
-//         textStyles={"text-white"}
-//       />
-//     </SafeAreaView>
-//   );
-// }
-
-
-import { View, Text } from 'react-native'
-import React from 'react'
-
-export default function ResetPassword() {
-  return (
-    <View>
-      <Text>ResetPassword</Text>
-    </View>
-  )
+					<View style={styles.signinContainer}>
+						<Text style={styles.signinText}>Remember your password?</Text>
+						<TouchableOpacity onPress={() => router.push("/sign-in")}>
+							<Text style={styles.signinLink}> Sign In</Text>
+						</TouchableOpacity>
+					</View>
+				</View>
+			</ScrollView>
+		</KeyboardAvoidingView>
+	);
 }
+
+const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		backgroundColor: "#000",
+		justifyContent: "center",
+		alignItems: "center",
+		paddingHorizontal: 20,
+	},
+	logoContainer: {
+		alignItems: "center",
+		marginBottom: 30,
+	},
+	logo: {
+		width: 150,
+		height: 150,
+		borderRadius: 70,
+		marginBottom: 10,
+	},
+	welcomeText: {
+		color: "#fff",
+		fontSize: 24,
+		fontWeight: "bold",
+	},
+	instructionsText: {
+		color: "#aaa",
+		fontSize: 14,
+		textAlign: "center",
+		marginBottom: 30,
+	},
+	inputContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		width: "100%",
+		backgroundColor: "#333",
+		borderRadius: 8,
+		marginBottom: 20,
+		paddingRight: 10,
+	},
+	input: {
+		height: 50,
+		paddingHorizontal: 10,
+		color: "#fff",
+		fontSize: 16,
+	},
+	eyeIcon: {
+		padding: 8,
+	},
+	resetButton: {
+		width: "100%",
+		height: 50,
+		borderRadius: 8,
+		justifyContent: "center",
+		alignItems: "center",
+		marginBottom: 20,
+	},
+	resetButtonDisabled: {
+		backgroundColor: "#666",
+	},
+	resetButtonActive: {
+		backgroundColor: "transparent",
+		borderWidth: 2,
+		borderColor: "#D7A77F",
+	},
+	resetButtonText: {
+		fontSize: 16,
+		fontWeight: "bold",
+	},
+	resetButtonTextDisabled: {
+		color: "#aaa",
+	},
+	resetButtonTextActive: {
+		color: "#fff",
+	},
+	signinContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginTop: 30,
+	},
+	signinText: {
+		color: "#aaa",
+		fontSize: 14,
+	},
+	signinLink: {
+		color: "#D7A77F",
+		fontSize: 14,
+		fontWeight: "bold",
+	},
+});
