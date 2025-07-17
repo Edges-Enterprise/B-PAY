@@ -578,9 +578,7 @@ If you do not agree, do not use our services.
 
 1. About Us
 Edges Network is developed and operated by Edges Enterprise, a Nigerian-based technology company offering secure, affordable, and fast mobile data services nationwide.
-
 📧 Email: edgesenterprise@outlook.com
-
 📱 WhatsApp Support: +2347057517841 | +234701588815
 
 2. Acceptance of Terms
