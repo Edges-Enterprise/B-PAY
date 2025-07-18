@@ -623,90 +623,6 @@ const AirtimeProvider: React.FC = () => {
 				);
 			}
 
-			// Calculate new balance
-			// const newBalance = currentBalance - discountedPrice;
-			// console.log("Calculated new balance:", {
-			// 	currentBalance,
-			// 	discountedPrice,
-			// 	newBalance,
-			// });
-
-			// Update wallet balance with retry mechanism
-			// let walletUpdateSuccess = false;
-			// let attempts = 0;
-			// const maxAttempts = 3;
-
-			// while (!walletUpdateSuccess && attempts < maxAttempts) {
-			// 	attempts++;
-			// 	console.log(
-			// 		`Attempt ${attempts} to update wallet balance to:`,
-			// 		newBalance,
-			// 	);
-
-				// const { data: updatedWallet, error: walletUpdateError } = await supabase
-				// 	.from("wallet")
-				// 	.update({ balance: newBalance })
-				// 	.eq("user_email", userEmail)
-				// 	.select("balance")
-				// 	.single();
-
-				// if (walletUpdateError) {
-				// 	console.error(
-				// 		`Wallet update attempt ${attempts} failed:`,
-				// 		walletUpdateError.message,
-				// 	);
-				// 	if (attempts === maxAttempts) {
-				// 		throw new Error(
-				// 			`Failed to update wallet after ${maxAttempts} attempts: ${walletUpdateError.message}`,
-				// 		);
-				// 	}
-				// 	await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
-				// 	continue;
-				// }
-
-				// Verify the updated balance
-				// const { data: verifiedWallet, error: verifyError } = await supabase
-				// 	.from("wallet")
-				// 	.select("balance")
-				// 	.eq("user_email", userEmail)
-				// 	.single();
-
-				// if (verifyError) {
-				// 	throw new Error(
-				// 		`Failed to verify wallet balance: ${verifyError.message}`,
-				// 	);
-				// }
-
-				// const verifiedBalance = verifiedWallet?.balance ?? newBalance;
-				// console.log("Verified wallet balance after update:", verifiedBalance);
-
-				// if (verifiedBalance !== newBalance) {
-				// 	console.error(
-				// 		`Balance mismatch: Expected ${newBalance}, got ${verifiedBalance}`,
-				// 	);
-				// 	if (attempts === maxAttempts) {
-				// 		throw new Error(
-				// 			`Wallet balance verification failed: Expected ${newBalance}, got ${verifiedBalance}`,
-				// 		);
-				// 	}
-				// 	await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
-				// 	continue;
-				// }
-
-			// 	walletUpdateSuccess = true;
-			// 	setBalance(verifiedBalance);
-			// 	console.log(
-			// 		"Wallet updated successfully with balance:",
-			// 		verifiedBalance,
-			// 	);
-			// }
-
-			// if (!walletUpdateSuccess) {
-			// 	throw new Error(
-			// 		"Failed to update wallet balance after maximum attempts",
-			// 	);
-			// }
-
 			// Call Ebenkdata API
 			const requestBody = {
 				network: selectedProvider.networkId,
@@ -918,7 +834,33 @@ const AirtimeProvider: React.FC = () => {
 				) : providers.length === 0 ? (
 					<Text style={styles.noProviderText}>No providers available.</Text>
 				) : (
-					<View style={styles.providerContainer}>
+					// <View style={styles.providerContainer}>
+					// 	{providers.map((provider) => (
+					// 		<TouchableOpacity
+					// 			key={provider.id}
+					// 			onPress={() => handleSelectProvider(provider)}
+					// 			style={[
+					// 				styles.providerCard,
+					// 				selectedProvider?.id === provider.id &&
+					// 					styles.providerCardSelected,
+					// 			]}
+					// 			activeOpacity={0.7}
+					// 		>
+					// 			<Image
+					// 				source={provider.image}
+					// 				style={styles.providerLogo}
+					// 				resizeMode="contain"
+					// 			/>
+					// 			<Text style={styles.providerName}>{provider.name}</Text>
+					// 		</TouchableOpacity>
+					// 	))}
+					// </View>
+
+					<ScrollView
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						contentContainerStyle={styles.providerContainer}
+					>
 						{providers.map((provider) => (
 							<TouchableOpacity
 								key={provider.id}
@@ -938,7 +880,7 @@ const AirtimeProvider: React.FC = () => {
 								<Text style={styles.providerName}>{provider.name}</Text>
 							</TouchableOpacity>
 						))}
-					</View>
+					</ScrollView>
 				)}
 
 				<View style={styles.inputContainer}>
@@ -1047,7 +989,7 @@ const styles = StyleSheet.create({
 	},
 	fixedHeader: {
 		backgroundColor: "#000",
-		paddingTop: 48,
+		paddingTop: 16,
 		paddingHorizontal: 16,
 		zIndex: 1,
 	},
