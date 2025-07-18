@@ -1,5 +1,5 @@
 import React from "react";
-import { View, ScrollView, Text, Linking, Pressable } from "react-native";
+import { View, ScrollView, Text, Linking } from "react-native";
 import { privacyPolicy } from "@/constants/helper";
 
 export default function Privacy() {
@@ -93,7 +93,7 @@ export default function Privacy() {
 						fontSize: 12,
 						lineHeight: 20,
 						textAlign: "justify",
-						marginBottom: 8,
+						// marginBottom: 4,
 						color: "#ccc",
 					}}
 				>

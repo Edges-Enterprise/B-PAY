@@ -1,5 +1,5 @@
 import React from "react";
-import { View, ScrollView, Text, Linking, Pressable } from "react-native";
+import { View, ScrollView, Text, Linking } from "react-native";
 import { termsAndConditions } from "@/constants/helper";
 
 export default function Terms() {
@@ -141,7 +141,7 @@ export default function Terms() {
 						fontSize: 12,
 						lineHeight: 20,
 						textAlign: "justify",
-						marginBottom: 8,
+						// marginBottom: 8,
 						color: "#ccc",
 					}}
 				>
