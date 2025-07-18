@@ -253,7 +253,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // console.log(`Checking cache for ${provider}, cacheExists: ${!!planCache[cacheKey]}, age: ${planCache[cacheKey] ? (Date.now() - planCache[cacheKey].timestamp) / 1000 / 60 : "N/A"} minutes`);
 
         if (planCache[cacheKey] && Date.now() - planCache[cacheKey].timestamp < CACHE_DURATION) {
-          console.log(`Using cached plans for ${provider}`, { planCount: planCache[cacheKey].data.length });
+          // console.log(`Using cached plans for ${provider}`, { planCount: planCache[cacheKey].data.length });
           plans = planCache[cacheKey].data;
         } else {
           const providerKey = `${provider}_PLAN`;
