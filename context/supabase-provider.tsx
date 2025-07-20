@@ -311,7 +311,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     if (!initialized || !fontsLoaded || isLoadingSession) return;
 
     const inProtected = segments[1] === "(protected)";
-    const inAuth = segments[1] === "(Auth)";
+    const inAuth = segments[1] === "(auth)";
     if (session && !inProtected) {
       router.replace("/(app)/(protected)");
     } else if (!session && !inAuth) {
