@@ -116,6 +116,20 @@ function AppStack() {
 				/>
 
 				<Stack.Screen
+					name="changePin"
+					options={{
+						headerTitle: "Change Transaction Pin",
+					}}
+				/>
+
+				<Stack.Screen
+					name="changePassword"
+					options={{
+						headerTitle: "Change Account Password",
+					}}
+				/>
+
+				<Stack.Screen
 					name="referral"
 					options={{
 						headerTitle: "Refer & Earn",
