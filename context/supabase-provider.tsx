@@ -10,31 +10,33 @@ import CustomSuccessModal from "@/components/CustomSuccessModal";
 SplashScreen.preventAutoHideAsync();
 
 type UserProfile = {
-  id: string;
-  email: string;
-  username: string;
-  created_at: string;
+	id: string;
+	email: string;
+	username: string;
+	created_at: string;
+	transaction_pin?: string; // Added to support transaction PIN
 };
 
 type SupabaseContextProps = {
-  auth: any;
-  profile: UserProfile | null;
-  user: User | null;
-  session: Session | null;
-  initialized?: boolean;
-  signUp: (
-    username: string,
-    email: string,
-    password: string,
-    rememberMe?: boolean,
-  ) => Promise<any>;
-  signInWithPassword: (
-    email: string,
-    password: string,
-    rememberMe?: boolean,
-  ) => Promise<void>;
-  signOut: () => Promise<void>;
-  deleteOwnAccount: () => Promise<void>;
+	auth: any;
+	profile: UserProfile | null;
+	user: User | null;
+	session: Session | null;
+	initialized?: boolean;
+	signUp: (
+		username: string,
+		email: string,
+		password: string,
+		rememberMe?: boolean,
+	) => Promise<any>;
+	signInWithPassword: (
+		email: string,
+		password: string,
+		rememberMe?: boolean,
+	) => Promise<void>;
+	signOut: () => Promise<void>;
+	deleteOwnAccount: () => Promise<void>;
+	updateTransactionPin: (currentPin: string, newPin: string) => Promise<void>;
 };
 
 type SupabaseProviderProps = {
@@ -42,15 +44,16 @@ type SupabaseProviderProps = {
 };
 
 export const SupabaseContext = createContext<SupabaseContextProps>({
-  auth: supabase.auth,
-  user: null,
-  profile: null,
-  session: null,
-  initialized: false,
-  signUp: async () => {},
-  signInWithPassword: async () => {},
-  signOut: async () => {},
-  deleteOwnAccount: async () => {},
+	auth: supabase.auth,
+	user: null,
+	profile: null,
+	session: null,
+	initialized: false,
+	signUp: async () => {},
+	signInWithPassword: async () => {},
+	signOut: async () => {},
+	deleteOwnAccount: async () => {},
+	updateTransactionPin: async () => {},
 });
 
 export const useSupabase = () => useContext(SupabaseContext);
@@ -229,6 +232,44 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     }
   };
 
+  const updateTransactionPin = async (currentPin: string, newPin: string) => {
+		if (!user || !session) {
+			throw new Error("You must be logged in to update your transaction PIN.");
+		}
+
+		try {
+			// Fetch the current profile to verify the PIN
+			const { data: profileData, error: fetchError } = await supabase
+				.from("profiles")
+				.select("transaction_pin")
+				.eq("id", user.id)
+				.single();
+
+			if (fetchError) throw fetchError;
+
+			// Verify current PIN (assuming it's stored as plain text for simplicity; in production, use hashing)
+			if (profileData.transaction_pin !== currentPin) {
+				throw new Error("Current PIN is incorrect.");
+			}
+
+			// Update the transaction PIN
+			const { error: updateError } = await supabase
+				.from("profiles")
+				.update({ transaction_pin: newPin })
+				.eq("id", user.id);
+
+			if (updateError) throw updateError;
+
+			// Update local profile state
+			setProfile((prev) =>
+				prev ? { ...prev, transaction_pin: newPin } : prev,
+			);
+		} catch (err: any) {
+			console.error("Update Transaction PIN Error:", err.message);
+			throw new Error(err.message || "Failed to update transaction PIN.");
+		}
+	};
+
   useEffect(() => {
     const initializeAuth = async () => {
       setIsLoadingSession(true);
@@ -322,30 +363,31 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   }, [initialized, fontsLoaded, session, isLoadingSession]);
 
   return (
-    <SupabaseContext.Provider
-      value={{
-        auth: supabase.auth,
-        user,
-        session,
-        profile,
-        initialized,
-        signUp,
-        signInWithPassword,
-        signOut,
-        deleteOwnAccount,
-      }}
-    >
-      <CustomSuccessModal
-        visible={showSuccessModal}
-        username={newUsername}
-        onClose={() => {
-          setShowSuccessModal(false);
-          setTimeout(() => {
-            router.replace("/(app)/(protected)");
-          }, 100);
-        }}
-      />
-      {children}
-    </SupabaseContext.Provider>
-  );
+		<SupabaseContext.Provider
+			value={{
+				auth: supabase.auth,
+				user,
+				session,
+				profile,
+				initialized,
+				signUp,
+				signInWithPassword,
+				signOut,
+				deleteOwnAccount,
+				updateTransactionPin,
+			}}
+		>
+			<CustomSuccessModal
+				visible={showSuccessModal}
+				username={newUsername}
+				onClose={() => {
+					setShowSuccessModal(false);
+					setTimeout(() => {
+						router.replace("/(app)/(protected)");
+					}, 100);
+				}}
+			/>
+			{children}
+		</SupabaseContext.Provider>
+	);
 };
