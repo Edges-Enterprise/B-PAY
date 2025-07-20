@@ -15,7 +15,7 @@ interface CustomSuccessModalProps {
 	visible: boolean;
 	username: string;
 	onClose: () => void;
-	colorScheme: string;
+	// colorScheme: string;
 	selectedFont?: string;
 }
 
@@ -23,7 +23,7 @@ const CustomSuccessModal: React.FC<CustomSuccessModalProps> = ({
 	visible,
 	username,
 	onClose,
-	colorScheme,
+	// colorScheme,
 }) => {
 	const modalOpacity = useSharedValue(0);
 	const modalScale = useSharedValue(0.8);
