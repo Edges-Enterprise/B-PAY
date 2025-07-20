@@ -24,10 +24,18 @@ export default function ForgotPasswordScreen() {
 			return;
 		}
 
+		// Simple email validation
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			Alert.alert("Error", "Please enter a valid email address.");
+			return;
+		}
+
 		setLoading(true);
 		try {
 			const { error } = await supabase.auth.resetPasswordForEmail(email, {
-				redirectTo: "https://app.com/redirect",
+				// redirectTo:
+				// 	"https://edges-landing-page.vercel.app/redirect/reset-password",
+				redirectTo: `https://edges-landing-page.vercel.app/redirect/reset-password?email=${encodeURIComponent(email)}`,
 			});
 
 			if (error) throw error;

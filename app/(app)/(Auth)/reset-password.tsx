@@ -16,7 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/config/supabase";
 
 export default function ResetPasswordScreen() {
-	const { token, type } = useLocalSearchParams();
+	// ✅ Extract all parameters at the component level
+	const { token, type, email } = useLocalSearchParams();
 
 	const [newPassword, setNewPassword] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
@@ -38,14 +39,26 @@ export default function ResetPasswordScreen() {
 
 		setLoading(true);
 		try {
-			const sessionToken = Array.isArray(token) ? token[0] : token;
+			const recoveryToken = Array.isArray(token) ? token[0] : token;
+			const userEmail = Array.isArray(email) ? email[0] : email;
 
-			const { error: sessionError } = await supabase.auth.setSession({
-				access_token: sessionToken,
-				refresh_token: sessionToken,
+			// 🔐 Check if email is available
+			if (!userEmail) {
+				throw new Error("Missing email address for recovery.");
+			}
+
+			// ✅ Include email in verifyOtp call
+			const {
+				data: { session },
+				error: verifyError,
+			} = await supabase.auth.verifyOtp({
+				email: userEmail, // ✅ email is required
+				token: recoveryToken,
+				type: "recovery",
 			});
 
-			if (sessionError) throw sessionError;
+			if (verifyError) throw verifyError;
+			if (!session) throw new Error("Session could not be created");
 
 			const { error: updateError } = await supabase.auth.updateUser({
 				password: newPassword,
