@@ -36,6 +36,7 @@ interface DataScreenHeaderProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   resetSearch: () => void;
+  isBalanceLoading: boolean; // Added prop
 }
 
 const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
@@ -50,6 +51,7 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
   searchTerm,
   setSearchTerm,
   resetSearch,
+  isBalanceLoading,
 }) => {
   useEffect(() => {
     console.log("Plan Type Options:", planTypeOptions);
@@ -95,7 +97,12 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
               source={selectedProvider.image}
               style={styles.providerLogo}
               resizeMode="contain"
-              onError={(e) => console.warn(`Image load error for ${selectedProvider.name}:`, e.nativeEvent.error)}
+              onError={(e) =>
+                console.warn(
+                  `Image load error for ${selectedProvider.name}:`,
+                  e.nativeEvent.error,
+                )
+              }
             />
             <Text style={styles.providerName}>{getHeaderTitle()}</Text>
           </>
@@ -104,11 +111,18 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
       <View style={styles.walletBalanceContainer}>
         <Text style={styles.walletBalanceLabel}>Wallet Balance:</Text>
         <Text style={styles.walletBalanceValue}>
-          {walletBalance === null ? "Loading..." : `₦${formatNumberWithCommas(walletBalance)}`}
+          {isBalanceLoading
+            ? "Loading..."
+            : `₦${formatNumberWithCommas(walletBalance ?? 0)}`}
         </Text>
       </View>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#A1A1AA" style={styles.searchIcon} />
+        <Ionicons
+          name="search"
+          size={20}
+          color="#A1A1AA"
+          style={styles.searchIcon}
+        />
         <TextInput
           style={styles.searchInput}
           placeholder="Search plans (e.g., 1GB for 30 days)"
@@ -123,15 +137,25 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
         )}
       </View>
       {!searchTerm && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryBarContent}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryBarContent}
+        >
           {bundleCategories.map((category) => (
             <Pressable
               key={category}
               onPress={() => chooseCategory(category)}
-              style={[styles.categoryButton, activeCategory === category ? styles.activeCategoryButton : {}]}
+              style={[
+                styles.categoryButton,
+                activeCategory === category ? styles.activeCategoryButton : {},
+              ]}
             >
               <Text
-                style={[styles.categoryLabel, activeCategory === category ? styles.activeCategoryLabel : {}]}
+                style={[
+                  styles.categoryLabel,
+                  activeCategory === category ? styles.activeCategoryLabel : {},
+                ]}
               >
                 {category === "Hot" ? "🔥 Hot" : category}
               </Text>
@@ -149,10 +173,16 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
             <Pressable
               key={planType}
               onPress={() => choosePlanType(planType)}
-              style={[styles.planTypeButton, activePlanType === planType ? styles.activePlanTypeButton : {}]}
+              style={[
+                styles.planTypeButton,
+                activePlanType === planType ? styles.activePlanTypeButton : {},
+              ]}
             >
               <Text
-                style={[styles.planTypeLabel, activePlanType === planType ? styles.activePlanTypeLabel : {}]}
+                style={[
+                  styles.planTypeLabel,
+                  activePlanType === planType ? styles.activePlanTypeLabel : {},
+                ]}
               >
                 {getPlanTypeDisplayName(planType)}
               </Text>

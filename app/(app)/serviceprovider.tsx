@@ -96,6 +96,7 @@ const BuyDataScreen: React.FC = () => {
 	const [transactionReference, setTransactionReference] = useState<string>("");
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
 	const pinVerified = useRef<boolean>(false);
 
 	useEffect(() => {
@@ -145,18 +146,17 @@ const BuyDataScreen: React.FC = () => {
 				.eq("user_email", userEmail)
 				.single();
 
-			if (error) {
-				console.error("Error fetching wallet balance:", error);
-				Alert.alert("Error", "Failed to fetch wallet balance");
-				return;
+			if (error && error.code !== "PGRST116") {
+				console.error("Wallet fetch error:", error);
+				throw error; // Only throw for non-PGRST116 errors
 			}
 
-			const balance = data?.balance ?? 0;
-			setWalletBalance(balance);
-			// console.log("Fetched wallet balance:", balance);
+			setWalletBalance(data?.balance ?? 0);
+			// console.log("Fetched wallet balance:", data?.balance ?? 0);
 		} catch (error) {
-			console.error("Error in fetchWalletBalance:", error);
-			Alert.alert("Error", "Failed to fetch wallet balance");
+			// Only log unexpected errors
+			console.error("Unexpected error in fetchWalletBalance:", error);
+			setWalletBalance(0); // Set to 0 for all errors, including PGRST116
 		} finally {
 			setIsLoading(false);
 		}
@@ -209,10 +209,10 @@ const BuyDataScreen: React.FC = () => {
 					setSelectedProvider(normalizedProvider);
 					setNetworkId(id);
 					// console.log(
-					// 	"Initialized provider:",
-					// 	normalizedProvider,
-					// 	"networkId:",
-					// 	id,
+					//   "Initialized provider:",
+					//   normalizedProvider,
+					//   "networkId:",
+					//   id,
 					// );
 				} else {
 					console.error("Invalid provider or networkId:", { provider, id });
@@ -460,9 +460,9 @@ const BuyDataScreen: React.FC = () => {
 		if (userEmail) {
 			ensureProfileExists();
 		}
-  }, [userEmail, ensureProfileExists]);
-  
-  const verifyTransactionPin = useCallback(
+	}, [userEmail, ensureProfileExists]);
+
+	const verifyTransactionPin = useCallback(
 		async (email: string): Promise<boolean> => {
 			if (!email) {
 				console.log("No email provided for PIN verification");
@@ -530,8 +530,6 @@ const BuyDataScreen: React.FC = () => {
 		},
 		[verifyTransactionPin, userEmail],
 	);
-
-
 
 	const savePin = async () => {
 		setIsLoading(true);
@@ -878,7 +876,6 @@ const BuyDataScreen: React.FC = () => {
 					purchaseType: "data",
 				},
 			});
-
 		} catch (error) {
 			console.error("handleProceed error:", error);
 			Alert.alert(
@@ -950,6 +947,7 @@ const BuyDataScreen: React.FC = () => {
 				searchTerm={searchTerm}
 				setSearchTerm={setSearchTerm}
 				resetSearch={resetSearch}
+				isBalanceLoading={isLoading} // Pass loading state
 			/>
 			<DataBundleList
 				dataBundles={dataBundles}
