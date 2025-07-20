@@ -156,12 +156,32 @@ export default function Settings() {
 	};
 
 	const handleItemPress = (section, item) => {
-		if (item === "Fonts") {
+		if (item === "Change Email") {
+			Alert.alert(
+				"Change Email",
+				"To change your email, please contact support.",
+				[
+					{
+						text: "Cancel",
+						style: "cancel",
+					},
+					{
+						text: "Contact Support",
+						onPress: () => router.push("/Customer"),
+						style: "default",
+					},
+				],
+			);
+		} else if (item === "Change Password") {
+			router.push("/changePassword");
+		} else if (item === "Fonts") {
 			setFontModalVisible(true);
 		} else if (item === "Themes") {
 			setThemeModalVisible(true);
 		} else if (item === "Notifications") {
 			toggleNotifications();
+		} else if (item === "Change Transaction PIN") {
+			router.push("/changePin");
 		} else if (item === "Privacy Policy") {
 			router.push("/(app)/(legal)/privacy");
 		} else if (item === "Terms of Service") {
