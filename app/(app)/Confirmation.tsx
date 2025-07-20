@@ -184,7 +184,7 @@ const ConfirmationScreen: React.FC = () => {
         } else {
           const walletBalance = wallet?.balance;
           setBalanceValue(walletBalance ?? balanceValue);
-          console.log('Fetched wallet balance:', walletBalance);
+          // console.log('Fetched wallet balance:', walletBalance);
         }
       } catch (err) {
         console.error('Error in fetchWalletBalance:', err);
