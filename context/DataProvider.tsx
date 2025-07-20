@@ -201,7 +201,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       const currentBalance = walletData?.balance ?? 0;
-      console.log("Fetched wallet balance:", currentBalance);
+      // console.log("Fetched wallet balance:", currentBalance);
       setWalletBalance(currentBalance);
 
       // Subscribe to wallet updates
@@ -240,7 +240,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let parsedData;
       try {
         parsedData = JSON.parse(rawData);
-        console.log("Raw API response:", JSON.stringify(parsedData, null, 2).slice(0, 1000) + "...");
+        // console.log("Raw API response:", JSON.stringify(parsedData, null, 2).slice(0, 1000) + "...");
       } catch (parseError) {
         console.error(`Unable to parse API response: ${rawData.slice(0, 200)}...`, parseError);
         throw new Error("Invalid API response format");
@@ -294,17 +294,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return mappedPlan;
           });
 
-          console.log(`Fetched ${plans.length} plans for ${provider}`, {
-            sample: plans.slice(0, 3).map((p) => ({
-              id: p.id,
-              planType: p.planType,
-              variation_code: p.variation_code,
-              category: p.category,
-              data: p.data,
-              validity: p.validity,
-              price: p.price,
-            })),
-          });
+          // console.log(`Fetched ${plans.length} plans for ${provider}`, {
+          //   sample: plans.slice(0, 3).map((p) => ({
+          //     id: p.id,
+          //     planType: p.planType,
+          //     variation_code: p.variation_code,
+          //     category: p.category,
+          //     data: p.data,
+          //     validity: p.validity,
+          //     price: p.price,
+          //   })),
+          // });
 
           planCache[cacheKey] = { data: plans, timestamp: Date.now() };
         }

@@ -101,24 +101,24 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
           }
         });
 
-        console.log("Fetched hot deals from Supabase:", {
-          count: formattedData.length,
-          providers: [...new Set(formattedData.map(b => b.planType))],
-          byProvider: {
-            MTN: formattedData.filter(b => b.planType === "MTN").length,
-            AIRTEL: formattedData.filter(b => b.planType === "AIRTEL").length,
-            GLO: formattedData.filter(b => b.planType === "GLO").length,
-            "9MOBILE": formattedData.filter(b => b.planType === "9MOBILE").length,
-          },
-          plans: formattedData.map(b => ({
-            id: b.id,
-            data: b.data,
-            price: b.price,
-            validity: b.validity,
-            planType: b.planType,
-            description: b.description,
-          })),
-        });
+        // console.log("Fetched hot deals from Supabase:", {
+        //   count: formattedData.length,
+        //   providers: [...new Set(formattedData.map(b => b.planType))],
+        //   byProvider: {
+        //     MTN: formattedData.filter(b => b.planType === "MTN").length,
+        //     AIRTEL: formattedData.filter(b => b.planType === "AIRTEL").length,
+        //     GLO: formattedData.filter(b => b.planType === "GLO").length,
+        //     "9MOBILE": formattedData.filter(b => b.planType === "9MOBILE").length,
+        //   },
+        //   plans: formattedData.map(b => ({
+        //     id: b.id,
+        //     data: b.data,
+        //     price: b.price,
+        //     validity: b.validity,
+        //     planType: b.planType,
+        //     description: b.description,
+        //   })),
+        // });
 
         setHotDeals(formattedData);
       } catch (err: any) {
