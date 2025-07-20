@@ -69,7 +69,7 @@ const BuyDataScreen: React.FC = () => {
 		null,
 	);
 	const [networkId, setNetworkId] = useState<number | null>(null);
-	const [activeCategory, setActiveCategory] = useState<string>("Daily Plans");
+	const [activeCategory, setActiveCategory] = useState<string>("Hot");
 	const [activePlanType, setActivePlanType] = useState<string>("");
 	const [isPurchaseModalOpen, setIsPurchaseModalOpen] =
 		useState<boolean>(false);
