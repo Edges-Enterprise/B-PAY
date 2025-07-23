@@ -113,7 +113,7 @@ export default function WalletScreen() {
 
       const { data: txData, error: txError } = await supabase
         .from("transactions")
-        .select("amount, status, metadata, created_at")
+        .select("amount, status, metadata, created_at, type")
         .eq("user_email", user.email)
         .eq("status", "success")
         .order("created_at", { ascending: false })
@@ -121,26 +121,141 @@ export default function WalletScreen() {
 
       if (txError) throw txError;
 
+      // const mappedTransactions = txData.map((tx) => {
+      //   const metaType = tx.metadata?.type?.toLowerCase().trim();
+      //   let transactionType = "Wallet Funding";
+      //   if (metaType === "data") {
+      //     transactionType = "Data Purchase";
+      //   } else if (metaType === "airtime") {
+      //     transactionType = "Airtime Purchase";
+      //   }
+      //   return {
+      //     type: transactionType,
+      //     amount: tx.amount,
+      //     method: tx.metadata?.payment_method || tx.metadata?.provider || "Unknown",
+      //     details: tx.metadata?.purchase || tx.metadata?.plan_name || null,
+      //     date: new Date(tx.created_at).toLocaleDateString("en-US", {
+      //       month: "short",
+      //       day: "numeric",
+      //       year: "numeric",
+      //     }),
+      //   };
+      // });
+
+      console.log("tx Data:", txData)
       const mappedTransactions = txData.map((tx) => {
-        const metaType = tx.metadata?.type?.toLowerCase().trim();
-        let transactionType = "Wallet Funding";
-        if (metaType === "data") {
-          transactionType = "Data Purchase";
-        } else if (metaType === "airtime") {
-          transactionType = "Airtime Purchase";
-        }
-        return {
-          type: transactionType,
-          amount: tx.amount,
-          method: tx.metadata?.payment_method || tx.metadata?.provider || "Unknown",
-          details: tx.metadata?.purchase || tx.metadata?.plan_name || null,
-          date: new Date(tx.created_at).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }),
-        };
-      });
+				let transactionType = "Wallet Funding";
+				let method =
+					tx.metadata?.payment_method || tx.metadata?.provider || "Unknown";
+				let details = tx.metadata?.purchase || tx.metadata?.plan || null;
+
+				const transactionTypeRaw = (tx.type || tx.metadata?.type || "unknown")
+					.toLowerCase()
+					.trim();
+				const knownProviders = ["glo", "mtn", "airtel", "9mobile"];
+
+				const parseProviderFromString = (
+					input: string,
+				): { provider: string; data: string } | null => {
+					const inputLower = input.toLowerCase();
+					const matchedProvider = knownProviders.find((p) =>
+						inputLower.includes(p),
+					);
+					if (matchedProvider) {
+						const cleanedData = input
+							.replace(new RegExp(`\\b${matchedProvider}\\b`, "i"), "")
+							.replace(/\s+/g, " ")
+							.trim();
+						return {
+							provider:
+								matchedProvider.charAt(0).toUpperCase() +
+								matchedProvider.slice(1),
+							data:
+								cleanedData ||
+								`${transactionTypeRaw.charAt(0).toUpperCase() + transactionTypeRaw.slice(1)} Purchase`,
+						};
+					}
+					return null;
+				};
+
+				if (
+					transactionTypeRaw === "data" ||
+					(tx.metadata?.plan && tx.amount < 0)
+				) {
+					transactionType = "Data Purchase";
+					method = tx.metadata?.provider || "Unknown Provider";
+					details =
+						tx.metadata?.plan || tx.metadata?.purchase || "Data Purchase";
+					if (method === "Unknown Provider") {
+						const parsed =
+							(tx.metadata?.plan &&
+								parseProviderFromString(tx.metadata.plan)) ||
+							(tx.metadata?.purchase &&
+								parseProviderFromString(tx.metadata.purchase));
+						if (parsed) {
+							method = parsed.provider;
+							details = parsed.data;
+						}
+					}
+				} else if (
+					transactionTypeRaw === "airtime" ||
+					(tx.metadata?.purchase?.toLowerCase().includes("airtime") &&
+						tx.amount < 0)
+				) {
+					transactionType = "Airtime Purchase";
+					method = tx.metadata?.provider || "Unknown Provider";
+					details =
+						tx.metadata?.plan || tx.metadata?.purchase || "Airtime Purchase";
+					if (method === "Unknown Provider") {
+						const parsed =
+							(tx.metadata?.plan &&
+								parseProviderFromString(tx.metadata.plan)) ||
+							(tx.metadata?.purchase &&
+								parseProviderFromString(tx.metadata.purchase));
+						if (parsed) {
+							method = parsed.provider;
+							details = parsed.data;
+						}
+					}
+				} else if (
+					transactionTypeRaw === "deposit" ||
+					(tx.metadata?.payment_method === "Paystack" && tx.amount > 0)
+				) {
+					transactionType = "Wallet Funding";
+					method = tx.metadata?.payment_method || "Payment Gateway";
+					details = "Wallet Funding";
+				} else {
+					transactionType =
+						transactionTypeRaw.charAt(0).toUpperCase() +
+						transactionTypeRaw.slice(1);
+					method = tx.metadata?.provider || "Unknown Provider";
+					details =
+						tx.metadata?.plan || tx.metadata?.purchase || transactionType;
+					if (method === "Unknown Provider") {
+						const parsed =
+							(tx.metadata?.plan &&
+								parseProviderFromString(tx.metadata.plan)) ||
+							(tx.metadata?.purchase &&
+								parseProviderFromString(tx.metadata.purchase));
+						if (parsed) {
+							method = parsed.provider;
+							details = parsed.data;
+						}
+					}
+				}
+
+				return {
+					type: transactionType,
+					amount: tx.amount,
+					method,
+					details,
+					date: new Date(tx.created_at).toLocaleDateString("en-US", {
+						month: "short",
+						day: "numeric",
+						year: "numeric",
+					}),
+				};
+			});
 
       setTransactions(mappedTransactions);
 
