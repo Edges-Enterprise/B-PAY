@@ -109,13 +109,13 @@ const BuyDataScreen: React.FC = () => {
 			};
 			const expectedNetworkId = networkIds[selectedBundle.planType];
 			if (expectedNetworkId && networkId !== expectedNetworkId) {
-				console.log("Synchronizing networkId for Hot plan:", {
-					bundleId: selectedBundle.id,
-					currentNetworkId: networkId,
-					expectedNetworkId,
-					planType: selectedBundle.planType,
-					providerName: selectedProvider?.name,
-				});
+				// console.log("Synchronizing networkId for Hot plan:", {
+				// 	bundleId: selectedBundle.id,
+				// 	currentNetworkId: networkId,
+				// 	expectedNetworkId,
+				// 	planType: selectedBundle.planType,
+				// 	providerName: selectedProvider?.name,
+				// });
 				setNetworkId(expectedNetworkId);
 			}
 		}
@@ -123,7 +123,7 @@ const BuyDataScreen: React.FC = () => {
 
 	useFocusEffect(
 		useCallback(() => {
-			console.log("BuyDataScreen focused, resetting modal states");
+			// console.log("BuyDataScreen focused, resetting modal states");
 			setIsPurchaseModalOpen(false);
 			setIsTransactionModalOpen(false);
 			setIsPinCreationModalOpen(false);

@@ -144,20 +144,20 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
 
     const fallbackProviderName = providerName?.toUpperCase() || dataBundles[0]?.planType?.toUpperCase() || "";
 
-    console.log("Input dataBundles:", {
-      count: dataBundles.length,
-      sample: dataBundles.slice(0, 5).map(b => ({
-        id: b.id,
-        data: b.data,
-        planType: b.planType,
-        category: b.category,
-        price: b.price,
-      })),
-      providerName: fallbackProviderName,
-      activeCategory,
-      activePlanType,
-      searchTerm,
-    });
+    // console.log("Input dataBundles:", {
+    //   count: dataBundles.length,
+    //   sample: dataBundles.slice(0, 5).map(b => ({
+    //     id: b.id,
+    //     data: b.data,
+    //     planType: b.planType,
+    //     category: b.category,
+    //     price: b.price,
+    //   })),
+    //   providerName: fallbackProviderName,
+    //   activeCategory,
+    //   activePlanType,
+    //   searchTerm,
+    // });
 
     let filteredBundles: DataBundle[] = [];
 
@@ -198,18 +198,18 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
         .sort((a, b) => a.price - b.price);
     }
 
-    console.log(`Filtered bundles for ${activeCategory}/${activePlanType || '-'} (${fallbackProviderName || 'undefined'}):`, {
-      count: filteredBundles.length,
-      plans: filteredBundles.map(b => ({
-        id: b.id,
-        data: b.data,
-        planType: b.planType,
-        category: b.category,
-        price: b.price,
-        validity: b.validity,
-        description: b.description,
-      })),
-    });
+    // console.log(`Filtered bundles for ${activeCategory}/${activePlanType || '-'} (${fallbackProviderName || 'undefined'}):`, {
+    //   count: filteredBundles.length,
+    //   plans: filteredBundles.map(b => ({
+    //     id: b.id,
+    //     data: b.data,
+    //     planType: b.planType,
+    //     category: b.category,
+    //     price: b.price,
+    //     validity: b.validity,
+    //     description: b.description,
+    //   })),
+    // });
 
     return filteredBundles;
   }, [dataBundles, activeCategory, activePlanType, searchTerm, providerName, hotDeals]);
@@ -241,16 +241,16 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
     ).current;
 
     const handlePurchase = () => {
-      console.log("Selected bundle:", {
-        id: bundle.id,
-        data: bundle.data,
-        planType: bundle.planType,
-        category: bundle.category,
-        price: bundle.price,
-        validity: bundle.validity,
-        description: bundle.description,
-        providerName,
-      });
+      // console.log("Selected bundle:", {
+      //   id: bundle.id,
+      //   data: bundle.data,
+      //   planType: bundle.planType,
+      //   category: bundle.category,
+      //   price: bundle.price,
+      //   validity: bundle.validity,
+      //   description: bundle.description,
+      //   providerName,
+      // });
       setSelectedBundle(bundle);
       setIsPurchaseModalOpen(true);
     };
