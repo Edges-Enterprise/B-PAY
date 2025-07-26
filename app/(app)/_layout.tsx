@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import UpdateModal from "@/components/common/UpdateModal";
 import { ThemeProvider, useTheme } from "@/context/theme-context";
 import { FontProvider, useFont } from "@/context/font-context";
+import { NotificationsProvider } from "@/context/NotificationsProvider";
 import { colors } from "@/constants/colors";
 
 export const unstable_settings = {
@@ -44,16 +45,18 @@ export default function AppLayout() {
 	};
 
 	return (
-		<FontProvider>
-			<ThemeProvider>
-				<AppStack />
-				<UpdateModal
-					visible={isUpdateModalVisible}
-					onClose={handleUpdateModalClose}
-					isStoreUpdate={false}
-				/>
-			</ThemeProvider>
-		</FontProvider>
+		<NotificationsProvider>
+			<FontProvider>
+				<ThemeProvider>
+					<AppStack />
+					<UpdateModal
+						visible={isUpdateModalVisible}
+						onClose={handleUpdateModalClose}
+						isStoreUpdate={false}
+					/>
+				</ThemeProvider>
+			</FontProvider>
+		</NotificationsProvider>
 	);
 }
 
