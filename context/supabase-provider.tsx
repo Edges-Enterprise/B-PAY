@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CustomSuccessModal from "@/components/CustomSuccessModal";
+import { useNotifications } from "./NotificationsProvider";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +69,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [newUsername, setNewUsername] = useState<string>("");
   const [isLoadingSession, setIsLoadingSession] = useState<boolean>(true);
+  const { requestPermissions } = useNotifications();
 
   const [fontsLoaded] = useFonts({
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
@@ -101,44 +103,44 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     rememberMe: boolean = false,
   ) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: { username: username.trim() },
-        },
-      });
+			const { data, error } = await supabase.auth.signUp({
+				email: email.trim(),
+				password,
+				options: {
+					data: { username: username.trim() },
+				},
+			});
 
-      if (error || !data.user) throw error || new Error("Failed to sign up");
+			if (error || !data.user) throw error || new Error("Failed to sign up");
 
-      const { error: insertError } = await supabase.from("profiles").upsert([
-        {
-          id: data.user.id,
-          username: username.trim(),
-          email: email.trim(),
-          created_at: new Date().toISOString(),
-        },
-      ]);
+			const { error: insertError } = await supabase.from("profiles").upsert([
+				{
+					id: data.user.id,
+					username: username.trim(),
+					email: email.trim(),
+					created_at: new Date().toISOString(),
+				},
+			]);
 
-      if (insertError) {
-        await supabase.auth.admin.deleteUser(data.user.id);
-        throw new Error("Failed to save user profile.");
-      }
+			if (insertError) {
+				await supabase.auth.admin.deleteUser(data.user.id);
+				throw new Error("Failed to save user profile.");
+			}
 
-      try {
-        await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
-      } catch (storageError) {
-        console.warn("Failed to store rememberMe:", storageError);
-      }
+			try {
+				await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
+			} catch (storageError) {
+				console.warn("Failed to store rememberMe:", storageError);
+			}
 
-      setUser(data.user);
-      setSession(data.session);
-      setNewUsername(username.trim());
-
-      setTimeout(() => {
-        setShowSuccessModal(true);
-      }, 100);
-    } catch (err: any) {
+			setUser(data.user);
+			setSession(data.session);
+			setNewUsername(username.trim());
+			await requestPermissions(); // Request permissions after sign-up
+			setTimeout(() => {
+				setShowSuccessModal(true);
+			}, 100);
+		} catch (err: any) {
       console.error("Sign Up Error:", err.message);
       Alert.alert("Sign Up Error", err.message || "Unexpected error occurred.");
       throw err;
@@ -169,6 +171,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
       setUser(data.user);
       setSession(data.session);
+      await requestPermissions();
       router.replace("/(app)/(protected)");
     } catch (err: any) {
       console.error("Sign In Error:", err.message);
@@ -285,6 +288,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
         if (session) {
           setSession(session);
           setUser(session.user);
+          await requestPermissions();
           router.replace("/(app)/(protected)");
         } else if (rememberMe === "true") {
           const { data, error } = await supabase.auth.refreshSession();
@@ -295,6 +299,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
           } else {
             setSession(data.session);
             setUser(data.session.user);
+            await requestPermissions();
             router.replace("/(app)/(protected)");
           }
         }
@@ -321,6 +326,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
       if (session && (rememberMe === "true" || event === "SIGNED_IN")) {
         setSession(session);
         setUser(session.user);
+        await requestPermissions();
         router.replace("/(app)/(protected)");
       } else if (!session) {
         setSession(null);
