@@ -28,6 +28,7 @@ import {
 import { useAuth, useSupabase } from "@/context/supabase-provider";
 import { useFont } from "@/context/font-context";
 import { useTheme } from "@/context/theme-context";
+import { useNotifications } from "@/context/NotificationsProvider";
 import { fonts } from "@/constants/fonts";
 import { colors } from "@/constants/colors";
 import { availableThemes, sections } from "@/constants/helper";
@@ -37,16 +38,14 @@ const { width, height } = Dimensions.get("window");
 
 export default function Settings() {
 	const { deleteOwnAccount } = useSupabase();
-
 	const { colorScheme, setCustomColorScheme } = useTheme();
 	const { selectedFont, setSelectedFont } = useFont();
+	const { notificationsEnabled, setNotificationsEnabled } = useNotifications();
 	const fontOptions = Object.keys(fonts);
 
 	const [fontModalVisible, setFontModalVisible] = useState(false);
 	const [themeModalVisible, setThemeModalVisible] = useState(false);
 	const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-	const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-
 	const { user, profile, signOut } = useAuth();
 
 	const [openSection, setOpenSection] = useState(null);
@@ -54,18 +53,15 @@ export default function Settings() {
 	const [sectionOrder, setSectionOrder] = useState(sections);
 	const [draggingIndex, setDraggingIndex] = useState(null);
 
-	// Ensure sectionOrder is reset to sections on mount
 	useEffect(() => {
 		setSectionOrder(sections);
 	}, []);
 
-	// Animation values
 	const slideAnim = useSharedValue(width);
 	const cardScale = useSharedValue(0.8);
 	const cardOpacity = useSharedValue(0);
 	const cardY = useSharedValue(100);
 
-	// Show logout after 5 seconds
 	useEffect(() => {
 		if (user && profile) {
 			const timer = setTimeout(() => {
@@ -148,11 +144,7 @@ export default function Settings() {
 	};
 
 	const toggleNotifications = () => {
-		setNotificationsEnabled((previous) => !previous);
-		Alert.alert(
-			"Notifications",
-			`Notifications have been ${!notificationsEnabled ? "enabled" : "disabled"}.`,
-		);
+		setNotificationsEnabled(!notificationsEnabled);
 	};
 
 	const handleItemPress = (section, item) => {
@@ -230,7 +222,6 @@ export default function Settings() {
 					{ backgroundColor: colors[colorScheme]?.background },
 				]}
 			>
-				{/* Header */}
 				<View
 					style={[
 						{
@@ -267,7 +258,6 @@ export default function Settings() {
 					<View style={{ width: 24 }} />
 				</View>
 
-				{/* Sections */}
 				{sectionOrder.map((section, index) => (
 					<PanGestureHandler
 						key={section.title}
@@ -320,7 +310,6 @@ export default function Settings() {
 								</Text>
 							</TouchableOpacity>
 
-							{/* Glass Card */}
 							{openSection === section.title && (
 								<Animated.View
 									style={[
@@ -344,7 +333,6 @@ export default function Settings() {
 											{ backgroundColor: colors[colorScheme]?.card },
 										]}
 									>
-										{/* If Account section show user info */}
 										{section.title === "Account" && (
 											<View
 												style={{
@@ -363,7 +351,7 @@ export default function Settings() {
 														},
 													]}
 												>
-													Username: {profile.username}
+													Username: {profile?.username}
 												</Text>
 												<Text
 													style={[
@@ -377,7 +365,7 @@ export default function Settings() {
 														},
 													]}
 												>
-													Email: {profile.email}
+													Email: {profile?.email}
 												</Text>
 												<View style={{ height: 12 }} />
 											</View>
@@ -413,7 +401,6 @@ export default function Settings() {
 													{item}
 												</Text>
 
-												{/* Special handling for Notifications item */}
 												{item === "Notifications" && (
 													<Switch
 														value={notificationsEnabled}
@@ -437,7 +424,6 @@ export default function Settings() {
 				))}
 			</ScrollView>
 
-			{/* Logout */}
 			{logoutVisible && (
 				<Animated.View
 					style={[
@@ -473,7 +459,6 @@ export default function Settings() {
 				</Animated.View>
 			)}
 
-			{/* Font Selection Modal */}
 			<ReusableModal
 				visible={fontModalVisible}
 				onClose={() => setFontModalVisible(false)}
@@ -524,7 +509,6 @@ export default function Settings() {
 				))}
 			</ReusableModal>
 
-			{/* Theme Selection Modal */}
 			<ReusableModal
 				visible={themeModalVisible}
 				onClose={() => setThemeModalVisible(false)}
