@@ -1,29 +1,29 @@
 {
-	"project_info": {
-		"project_number": "718199239674",
-		"project_id": "edges-network",
-		"storage_bucket": "edges-network.firebasestorage.app"
-	},
-	"client": [
-		{
-			"client_info": {
-				"mobilesdk_app_id": "1:718199239674:android:e767ef42c8c086362c6a43",
-				"android_client_info": {
-					"package_name": "com.edgesnetwork.app"
-				}
-			},
-			"oauth_client": [],
-			"api_key": [
-				{
-					"current_key": "AIzaSyDxH3ekoyCPCG2rbxzWnCNR3YJyF1PUaiw"
-				}
-			],
-			"services": {
-				"appinvite_service": {
-					"other_platform_oauth_client": []
-				}
-			}
-		}
-	],
-	"configuration_version": "1"
+  "project_info": {
+    "project_number": "439416188932",
+    "project_id": "edges-network-7a0f6",
+    "storage_bucket": "edges-network-7a0f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439416188932:android:5cf0a442b9ec963b494551",
+        "android_client_info": {
+          "package_name": "com.edgesnetwork.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAV5GLoW071C2AF1ktsuKpO4Zz4j9Y5QyA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
 }
