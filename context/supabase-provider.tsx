@@ -6,38 +6,38 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CustomSuccessModal from "@/components/CustomSuccessModal";
-import { useNotifications } from "./NotificationsProvider";
+import { requestPushPermissions } from "./notifications-utils";
 
 SplashScreen.preventAutoHideAsync();
 
 type UserProfile = {
-	id: string;
-	email: string;
-	username: string;
-	created_at: string;
-	transaction_pin?: string; // Added to support transaction PIN
+  id: string;
+  email: string;
+  username: string;
+  created_at: string;
+  transaction_pin?: string;
 };
 
 type SupabaseContextProps = {
-	auth: any;
-	profile: UserProfile | null;
-	user: User | null;
-	session: Session | null;
-	initialized?: boolean;
-	signUp: (
-		username: string,
-		email: string,
-		password: string,
-		rememberMe?: boolean,
-	) => Promise<any>;
-	signInWithPassword: (
-		email: string,
-		password: string,
-		rememberMe?: boolean,
-	) => Promise<void>;
-	signOut: () => Promise<void>;
-	deleteOwnAccount: () => Promise<void>;
-	updateTransactionPin: (currentPin: string, newPin: string) => Promise<void>;
+  auth: any;
+  profile: UserProfile | null;
+  user: User | null;
+  session: Session | null;
+  initialized?: boolean;
+  signUp: (
+    username: string,
+    email: string,
+    password: string,
+    rememberMe?: boolean,
+  ) => Promise<any>;
+  signInWithPassword: (
+    email: string,
+    password: string,
+    rememberMe?: boolean,
+  ) => Promise<void>;
+  signOut: () => Promise<void>;
+  deleteOwnAccount: () => Promise<void>;
+  updateTransactionPin: (currentPin: string, newPin: string) => Promise<void>;
 };
 
 type SupabaseProviderProps = {
@@ -45,16 +45,16 @@ type SupabaseProviderProps = {
 };
 
 export const SupabaseContext = createContext<SupabaseContextProps>({
-	auth: supabase.auth,
-	user: null,
-	profile: null,
-	session: null,
-	initialized: false,
-	signUp: async () => {},
-	signInWithPassword: async () => {},
-	signOut: async () => {},
-	deleteOwnAccount: async () => {},
-	updateTransactionPin: async () => {},
+  auth: supabase.auth,
+  user: null,
+  profile: null,
+  session: null,
+  initialized: false,
+  signUp: async () => {},
+  signInWithPassword: async () => {},
+  signOut: async () => {},
+  deleteOwnAccount: async () => {},
+  updateTransactionPin: async () => {},
 });
 
 export const useSupabase = () => useContext(SupabaseContext);
@@ -69,7 +69,6 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [newUsername, setNewUsername] = useState<string>("");
   const [isLoadingSession, setIsLoadingSession] = useState<boolean>(true);
-  const { requestPermissions } = useNotifications();
 
   const [fontsLoaded] = useFonts({
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
@@ -103,44 +102,44 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
     rememberMe: boolean = false,
   ) => {
     try {
-			const { data, error } = await supabase.auth.signUp({
-				email: email.trim(),
-				password,
-				options: {
-					data: { username: username.trim() },
-				},
-			});
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: { username: username.trim() },
+        },
+      });
 
-			if (error || !data.user) throw error || new Error("Failed to sign up");
+      if (error || !data.user) throw error || new Error("Failed to sign up");
 
-			const { error: insertError } = await supabase.from("profiles").upsert([
-				{
-					id: data.user.id,
-					username: username.trim(),
-					email: email.trim(),
-					created_at: new Date().toISOString(),
-				},
-			]);
+      const { error: insertError } = await supabase.from("profiles").upsert([
+        {
+          id: data.user.id,
+          username: username.trim(),
+          email: email.trim(),
+          created_at: new Date().toISOString(),
+        },
+      ]);
 
-			if (insertError) {
-				await supabase.auth.admin.deleteUser(data.user.id);
-				throw new Error("Failed to save user profile.");
-			}
+      if (insertError) {
+        await supabase.auth.admin.deleteUser(data.user.id);
+        throw new Error("Failed to save user profile.");
+      }
 
-			try {
-				await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
-			} catch (storageError) {
-				console.warn("Failed to store rememberMe:", storageError);
-			}
+      try {
+        await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
+      } catch (storageError) {
+        console.warn("Failed to store rememberMe:", storageError);
+      }
 
-			setUser(data.user);
-			setSession(data.session);
-			setNewUsername(username.trim());
-			await requestPermissions(); // Request permissions after sign-up
-			setTimeout(() => {
-				setShowSuccessModal(true);
-			}, 100);
-		} catch (err: any) {
+      setUser(data.user);
+      setSession(data.session);
+      setNewUsername(username.trim());
+      await requestPushPermissions(data.user.id);
+      setTimeout(() => {
+        setShowSuccessModal(true);
+      }, 100);
+    } catch (err: any) {
       console.error("Sign Up Error:", err.message);
       Alert.alert("Sign Up Error", err.message || "Unexpected error occurred.");
       throw err;
@@ -171,7 +170,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
       setUser(data.user);
       setSession(data.session);
-      await requestPermissions();
+      await requestPushPermissions(data.user.id);
       router.replace("/(app)/(protected)");
     } catch (err: any) {
       console.error("Sign In Error:", err.message);
@@ -236,42 +235,38 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   };
 
   const updateTransactionPin = async (currentPin: string, newPin: string) => {
-		if (!user || !session) {
-			throw new Error("You must be logged in to update your transaction PIN.");
-		}
+    if (!user || !session) {
+      throw new Error("You must be logged in to update your transaction PIN.");
+    }
 
-		try {
-			// Fetch the current profile to verify the PIN
-			const { data: profileData, error: fetchError } = await supabase
-				.from("profiles")
-				.select("transaction_pin")
-				.eq("id", user.id)
-				.single();
+    try {
+      const { data: profileData, error: fetchError } = await supabase
+        .from("profiles")
+        .select("transaction_pin")
+        .eq("id", user.id)
+        .single();
 
-			if (fetchError) throw fetchError;
+      if (fetchError) throw fetchError;
 
-			// Verify current PIN (assuming it's stored as plain text for simplicity; in production, use hashing)
-			if (profileData.transaction_pin !== currentPin) {
-				throw new Error("Current PIN is incorrect.");
-			}
+      if (profileData.transaction_pin !== currentPin) {
+        throw new Error("Current PIN is incorrect.");
+      }
 
-			// Update the transaction PIN
-			const { error: updateError } = await supabase
-				.from("profiles")
-				.update({ transaction_pin: newPin })
-				.eq("id", user.id);
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ transaction_pin: newPin })
+        .eq("id", user.id);
 
-			if (updateError) throw updateError;
+      if (updateError) throw updateError;
 
-			// Update local profile state
-			setProfile((prev) =>
-				prev ? { ...prev, transaction_pin: newPin } : prev,
-			);
-		} catch (err: any) {
-			console.error("Update Transaction PIN Error:", err.message);
-			throw new Error(err.message || "Failed to update transaction PIN.");
-		}
-	};
+      setProfile((prev) =>
+        prev ? { ...prev, transaction_pin: newPin } : prev,
+      );
+    } catch (err: any) {
+      console.error("Update Transaction PIN Error:", err.message);
+      throw new Error(err.message || "Failed to update transaction PIN.");
+    }
+  };
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -288,7 +283,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
         if (session) {
           setSession(session);
           setUser(session.user);
-          await requestPermissions();
+          await requestPushPermissions(session.user.id);
           router.replace("/(app)/(protected)");
         } else if (rememberMe === "true") {
           const { data, error } = await supabase.auth.refreshSession();
@@ -299,7 +294,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
           } else {
             setSession(data.session);
             setUser(data.session.user);
-            await requestPermissions();
+            await requestPushPermissions(data.session.user.id);
             router.replace("/(app)/(protected)");
           }
         }
@@ -326,7 +321,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
       if (session && (rememberMe === "true" || event === "SIGNED_IN")) {
         setSession(session);
         setUser(session.user);
-        await requestPermissions();
+        await requestPushPermissions(session.user.id);
         router.replace("/(app)/(protected)");
       } else if (!session) {
         setSession(null);
@@ -369,31 +364,31 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
   }, [initialized, fontsLoaded, session, isLoadingSession]);
 
   return (
-		<SupabaseContext.Provider
-			value={{
-				auth: supabase.auth,
-				user,
-				session,
-				profile,
-				initialized,
-				signUp,
-				signInWithPassword,
-				signOut,
-				deleteOwnAccount,
-				updateTransactionPin,
-			}}
-		>
-			<CustomSuccessModal
-				visible={showSuccessModal}
-				username={newUsername}
-				onClose={() => {
-					setShowSuccessModal(false);
-					setTimeout(() => {
-						router.replace("/(app)/(protected)");
-					}, 100);
-				}}
-			/>
-			{children}
-		</SupabaseContext.Provider>
-	);
+    <SupabaseContext.Provider
+      value={{
+        auth: supabase.auth,
+        user,
+        session,
+        profile,
+        initialized,
+        signUp,
+        signInWithPassword,
+        signOut,
+        deleteOwnAccount,
+        updateTransactionPin,
+      }}
+    >
+      <CustomSuccessModal
+        visible={showSuccessModal}
+        username={newUsername}
+        onClose={() => {
+          setShowSuccessModal(false);
+          setTimeout(() => {
+            router.replace("/(app)/(protected)");
+          }, 100);
+        }}
+      />
+      {children}
+    </SupabaseContext.Provider>
+  );
 };
