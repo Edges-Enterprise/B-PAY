@@ -95,7 +95,7 @@ export default function SuccessScreen() {
       try {
         const parsed = JSON.parse(metadata) as Metadata;
         setParsedMetadata(parsed);
-        console.log('Parsed metadata:', parsed);
+        // console.log('Parsed metadata:', parsed);
       } catch (error) {
         console.error('Error parsing metadata:', error);
       }

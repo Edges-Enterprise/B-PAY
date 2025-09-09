@@ -17,7 +17,7 @@ export default function AppLayout() {
 
 	useEffect(() => {
 		if (__DEV__) {
-			console.log("Skipping update check in development mode");
+			// console.log("Skipping update check in development mode");
 			return;
 		}
 		checkForOTAUpdate();
@@ -140,7 +140,7 @@ function AppStack() {
 				/>
 
 				<Stack.Screen name="commingsoon" options={{ headerShown: false }} />
-				<Stack.Screen name="(Auth)" options={{ headerShown: false }} />
+				{/* <Stack.Screen name="(Auth)" options={{ headerShown: false }} /> */}
 
 				<Stack.Screen
 					name="Confirmation"

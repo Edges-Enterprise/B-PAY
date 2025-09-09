@@ -57,7 +57,7 @@ export default function SignUpScreen() {
 
 		setLoading(true);
 		try {
-			console.log("SignUp started with:", { username, email, rememberMe });
+			// console.log("SignUp started with:", { username, email, rememberMe });
 
 			await signUp(username, email, password, rememberMe);
 

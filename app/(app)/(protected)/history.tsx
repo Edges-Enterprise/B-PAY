@@ -94,7 +94,7 @@ export default function HistoryScreen() {
 				return;
 			}
 
-			console.log("Authenticated user email:", user.email);
+			// console.log("Authenticated user email:", user.email);
 			setUserEmail(user.email);
 
 			const { data: txData, error: txError } = await supabase
@@ -120,7 +120,7 @@ export default function HistoryScreen() {
 			}
 
 			if (txData.length === 0) {
-				console.log("No transactions found for user:", user.email);
+				// console.log("No transactions found for user:", user.email);
 				Alert.alert(
 					"No Transactions",
 					"No transactions found for this account.",
@@ -129,7 +129,7 @@ export default function HistoryScreen() {
 				return;
 			}
 
-			console.log("Raw transaction data:", JSON.stringify(txData, null, 2));
+			// console.log("Raw transaction data:", JSON.stringify(txData, null, 2));
 
 			const knownProviders = ["glo", "mtn", "airtel", "9mobile"];
 
@@ -139,9 +139,9 @@ export default function HistoryScreen() {
 				let phoneNumber = "N/A";
 
 				const transactionType = (tx.type || "unknown").toLowerCase().trim();
-				console.log(
-					`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`,
-				);
+				// console.log(
+				// 	`Transaction ID: ${tx.id}, Type: ${transactionType}, Metadata: ${JSON.stringify(tx.metadata, null, 2)}`,
+				// );
 
 				// Enhanced helper function to parse provider from string (combining both approaches)
 				const parseProviderFromString = (
@@ -233,10 +233,10 @@ export default function HistoryScreen() {
 				};
 			});
 
-			console.log(
-				"Formatted history:",
-				JSON.stringify(formattedHistory, null, 2),
-			);
+			// console.log(
+			// 	"Formatted history:",
+			// 	JSON.stringify(formattedHistory, null, 2),
+			// );
 			setHistory(formattedHistory);
 		} catch (error) {
 			console.error("Error fetching history:", error);

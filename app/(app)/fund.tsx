@@ -107,7 +107,7 @@ const FundScreen = () => {
   useEffect(() => {
     let subscription;
     if (paymentReference) {
-      console.log('Subscribing to transaction updates:', paymentReference);
+      // console.log('Subscribing to transaction updates:', paymentReference);
       subscription = supabase
         .channel(`payment-confirm:${paymentReference}`)
         .on(
@@ -143,7 +143,7 @@ const FundScreen = () => {
           }
         )
         .subscribe((status) => {
-          console.log('Subscription status:', { reference: paymentReference, status });
+          // console.log('Subscription status:', { reference: paymentReference, status });
           if (status !== 'SUBSCRIBED') {
             console.error('Subscription failed:', { reference: paymentReference, status });
             Alert.alert('Connection Error', 'Failed to monitor transaction status.');
@@ -165,11 +165,11 @@ const FundScreen = () => {
 
   const verifyTransaction = async (reference: string, expectedAmount: number, retries = 3): Promise<boolean> => {
     try {
-      console.log('Verifying transaction:', { reference, expectedAmount, retries });
+      // console.log('Verifying transaction:', { reference, expectedAmount, retries });
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       const payload = { reference, expectedAmount };
-      console.log('Sending to edge function:', payload);
+      // console.log('Sending to edge function:', payload);
       
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-paystack-transaction`,
@@ -185,12 +185,12 @@ const FundScreen = () => {
       );
       clearTimeout(timeoutId);
 
-      console.log('Verify response:', { status: response.status, ok: response.ok });
+      // console.log('Verify response:', { status: response.status, ok: response.ok });
       const data = await response.json();
-      console.log('Verify data:', data);
+      // console.log('Verify data:', data);
 
       if (response.ok && data.status) {
-        console.log('Verification successful:', reference);
+        // console.log('Verification successful:', reference);
         return true;
       } else {
         if (retries > 0) {
@@ -243,14 +243,14 @@ const FundScreen = () => {
           View your wallet balance in the app.
         `,
       };
-      console.log('Receipt details prepared:', receiptDetails);
+      // console.log('Receipt details prepared:', receiptDetails);
     } catch (error) {
       console.error('sendTestReceipt error:', { message: error.message });
     }
   };
 
   const handleTopUp = debounce(async () => {
-      console.log('handleTopUp:', { amount, user: userEmail, userName, userId });
+      // console.log('handleTopUp:', { amount, user: userEmail, userName, userId });
       const parsedAmount = parseFloat(amount);
       
       if (!user || !session || !userEmail || !userName || !userId) {
@@ -284,11 +284,11 @@ const FundScreen = () => {
 
       const newReference = `Edges_Network_${uuidv4()}`;
       setPaymentReference(newReference);
-      console.log('New payment reference:', newReference);
+      // console.log('New payment reference:', newReference);
 
       try {
         setError('');
-        console.log('Inserting transaction record');
+        // console.log('Inserting transaction record');
         
         const { error: txInsertError } = await supabase
           .from('transactions')
@@ -315,7 +315,7 @@ const FundScreen = () => {
 
         setIsLoading(true);
         setShowWebView(true);
-        console.log('Payment initialization successful');
+        // console.log('Payment initialization successful');
       } catch (error) {
         console.error('handleTopUp error:', { message: error.message, stack: error.stack });
         setShowWebView(false);
@@ -364,7 +364,7 @@ const FundScreen = () => {
   const generatePaystackHTML = useCallback((): string => {
     const reference = paymentReference || `Edges_Network_${uuidv4()}`;
     const paystackKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY;
-    console.log('Generating Paystack HTML with reference:', reference);
+    // console.log('Generating Paystack HTML with reference:', reference);
     
     return `
       <!DOCTYPE html>
@@ -466,12 +466,12 @@ const FundScreen = () => {
 
   const handleWebViewMessage = async (event: any): Promise<void> => {
     const data = event.nativeEvent.data;
-    console.log('WebView message received:', data);
+    // console.log('WebView message received:', data);
     
     try {
       if (data.startsWith('payment-success:')) {
         const reference = data.split(':')[1];
-        console.log('Processing payment success:', reference);
+        // console.log('Processing payment success:', reference);
 
         const parsedAmount = parseFloat(amount);
         if (isNaN(parsedAmount)) {
@@ -587,7 +587,7 @@ const FundScreen = () => {
             </View>
           )}
           onShouldStartLoadWithRequest={(request) => {
-            console.log('WebView navigation attempt:', request.url);
+            // console.log('WebView navigation attempt:', request.url);
             const allowedDomains = ['paystack', 'edgesnetwork', 'about:blank', 'data:'];
             const isAllowed = allowedDomains.some(domain => request.url.includes(domain));
             if (!isAllowed) {

@@ -178,7 +178,7 @@ const BuyDataScreen: React.FC = () => {
 					filter: `user_email=eq.${userEmail}`,
 				},
 				(payload) => {
-					console.log("Real-time wallet balance update:", payload);
+					// console.log("Real-time wallet balance update:", payload);
 					setWalletBalance(payload.new.balance ?? 0);
 				},
 			)
@@ -253,18 +253,18 @@ const BuyDataScreen: React.FC = () => {
 	const allBundles = useMemo(() => {
 		if (!selectedProvider) return [];
 		const apiPlans = providerPlans[selectedProvider.name] || [];
-		console.log(`All Bundles for ${selectedProvider.name}:`, {
-			apiCount: apiPlans.length,
-			totalCount: apiPlans.length,
-			sample: apiPlans.slice(0, 5).map((p: DataBundle) => ({
-				id: p.id,
-				planType: p.planType,
-				category: p.category,
-				validity: p.validity,
-				data: p.data,
-				price: p.price,
-			})),
-		});
+		// console.log(`All Bundles for ${selectedProvider.name}:`, {
+		// 	apiCount: apiPlans.length,
+		// 	totalCount: apiPlans.length,
+		// 	sample: apiPlans.slice(0, 5).map((p: DataBundle) => ({
+		// 		id: p.id,
+		// 		planType: p.planType,
+		// 		category: p.category,
+		// 		validity: p.validity,
+		// 		data: p.data,
+		// 		price: p.price,
+		// 	})),
+		// });
 		return apiPlans;
 	}, [selectedProvider, providerPlans]);
 
@@ -329,7 +329,7 @@ const BuyDataScreen: React.FC = () => {
 			"STANDARD",
 		].filter((category) => categoriesWithPlans.includes(category));
 
-		console.log("Filtered and Ordered Bundle Categories:", orderedCategories);
+		// console.log("Filtered and Ordered Bundle Categories:", orderedCategories);
 		return orderedCategories;
 	}, [allBundles, selectedProvider]);
 
@@ -341,7 +341,7 @@ const BuyDataScreen: React.FC = () => {
 					.map((bundle) => bundle.planType.toUpperCase()),
 			),
 		];
-		console.log(`Available PlanTypes for ${activeCategory}:`, planTypes);
+		// console.log(`Available PlanTypes for ${activeCategory}:`, planTypes);
 		return planTypes;
 	}, [allBundles, activeCategory]);
 
@@ -353,7 +353,7 @@ const BuyDataScreen: React.FC = () => {
 					.map((bundle) => bundle.planType.toUpperCase()),
 			),
 		];
-		console.log(`PlanTypes for ${activeCategory}:`, planTypes);
+		// console.log(`PlanTypes for ${activeCategory}:`, planTypes);
 		return planTypes;
 	}, [dataBundles, activeCategory]);
 
@@ -365,7 +365,7 @@ const BuyDataScreen: React.FC = () => {
 		} else {
 			setActivePlanType(availablePlanTypes[0] || "");
 		}
-		console.log("Updated activePlanType:", activePlanType);
+		// console.log("Updated activePlanType:", activePlanType);
 	}, [activeCategory, availablePlanTypes, categoryPlanTypes]);
 
 	const planTypeOptions = useMemo(() => {
@@ -379,7 +379,7 @@ const BuyDataScreen: React.FC = () => {
 			),
 		];
 
-		console.log("Computed planTypeOptions:", types);
+		// console.log("Computed planTypeOptions:", types);
 		return types;
 	}, [dataBundles, activeCategory]);
 
@@ -402,10 +402,10 @@ const BuyDataScreen: React.FC = () => {
 				);
 				return;
 			}
-			console.log("Checking profile for user:", {
-				userId: user.id,
-				email: userEmail,
-			});
+			// console.log("Checking profile for user:", {
+			// 	userId: user.id,
+			// 	email: userEmail,
+			// });
 			const { data, error } = await supabase
 				.from("profiles")
 				.select("id")
@@ -420,7 +420,7 @@ const BuyDataScreen: React.FC = () => {
 				return;
 			}
 			if (!data || data.length === 0) {
-				console.log("No profile found, creating one for user:", user.id);
+				// console.log("No profile found, creating one for user:", user.id);
 				const derivedUsername = userEmail.split("@")[0] || `user_${user.id}`;
 				const { error: upsertError } = await supabase.from("profiles").upsert(
 					{
@@ -474,14 +474,14 @@ const BuyDataScreen: React.FC = () => {
 					error: authError,
 				} = await supabase.auth.getUser();
 				if (authError || !user) {
-					console.log("No authenticated user");
+					// console.log("No authenticated user");
 					Alert.alert(
 						"Error",
 						`No authenticated user: ${authError?.message || "Unknown error"}`,
 					);
 					return false;
 				}
-				console.log("Verifying PIN for user:", { userId: user.id, email });
+				// console.log("Verifying PIN for user:", { userId: user.id, email });
 				const { data, error } = await supabase
 					.from("profiles")
 					.select("transaction_pin")
@@ -500,7 +500,7 @@ const BuyDataScreen: React.FC = () => {
 					return false;
 				}
 				const exists = !!data?.transaction_pin && data.transaction_pin !== "";
-				console.log("PIN exists:", exists);
+				// console.log("PIN exists:", exists);
 				return exists;
 			} catch (error) {
 				console.error("PIN verification error:", error);
@@ -517,7 +517,7 @@ const BuyDataScreen: React.FC = () => {
 	const updateHasPin = useCallback(
 		async (value: boolean) => {
 			if (!pinVerified.current || value) {
-				console.log("Updating hasPin:", value);
+				// console.log("Updating hasPin:", value);
 				if (value && userEmail) {
 					const pinExists = await verifyTransactionPin(userEmail);
 					setHasPin(pinExists);
@@ -559,11 +559,11 @@ const BuyDataScreen: React.FC = () => {
 					`User not authenticated: ${authError?.message || "Unknown error"}`,
 				);
 			}
-			console.log("Saving PIN for user:", {
-				userId: user.id,
-				email: userEmail,
-				newPin: "****",
-			});
+			// console.log("Saving PIN for user:", {
+			// 	userId: user.id,
+			// 	email: userEmail,
+			// 	newPin: "****",
+			// });
 			// Ensure profile exists before updating
 			await ensureProfileExists();
 			// Debug: Check all profiles for this user
@@ -571,11 +571,11 @@ const BuyDataScreen: React.FC = () => {
 				.from("profiles")
 				.select("*")
 				.eq("id", user.id);
-			console.log("Debug profiles query:", {
-				userId: user.id,
-				data: debugData,
-				error: debugError,
-			});
+			// console.log("Debug profiles query:", {
+			// 	userId: user.id,
+			// 	data: debugData,
+			// 	error: debugError,
+			// });
 			if (debugData && debugData.length > 1) {
 				console.warn("Multiple profiles found for user:", {
 					userId: user.id,
@@ -632,7 +632,7 @@ const BuyDataScreen: React.FC = () => {
 							`PIN verification failed: ${fallbackError?.message || "No profile found"}`,
 						);
 					}
-					console.log("Multiple rows detected, using latest:", fallbackData);
+					// console.log("Multiple rows detected, using latest:", fallbackData);
 					if (fallbackData[0].transaction_pin !== newPin) {
 						return Alert.alert(
 							"Error",
@@ -657,10 +657,10 @@ const BuyDataScreen: React.FC = () => {
 					"PIN not saved correctly: Verification failed",
 				);
 			}
-			console.log("PIN saved and verified:", {
-				transaction_pin: data.transaction_pin,
-				userId: user.id,
-			});
+			// console.log("PIN saved and verified:", {
+			// 	transaction_pin: data.transaction_pin,
+			// 	userId: user.id,
+			// });
 			setHasPin(true);
 			pinVerified.current = true;
 			setIsPinCreationModalOpen(false);
@@ -734,17 +734,17 @@ const BuyDataScreen: React.FC = () => {
 	};
 
 	const handleProceed = async () => {
-		console.log("handleProceed called", {
-			selectedBundle,
-			phoneNumberInput,
-			transactionPinInput,
-			selectedProvider,
-			networkId,
-			userEmail,
-			walletBalance,
-			detectedNetwork,
-			purchaseType: "data",
-		});
+		// console.log("handleProceed called", {
+		// 	selectedBundle,
+		// 	phoneNumberInput,
+		// 	transactionPinInput,
+		// 	selectedProvider,
+		// 	networkId,
+		// 	userEmail,
+		// 	walletBalance,
+		// 	detectedNetwork,
+		// 	purchaseType: "data",
+		// });
 
 		if (!selectedBundle) return Alert.alert("Error", "No plan selected");
 		if (!selectedProvider) return Alert.alert("Error", "No provider selected");
@@ -903,7 +903,7 @@ const BuyDataScreen: React.FC = () => {
 			if (!userEmail) return;
 			await ensureProfileExists();
 			const pinExists = await verifyTransactionPin(userEmail);
-			console.log("Initial PIN check:", pinExists);
+			// console.log("Initial PIN check:", pinExists);
 			setHasPin(pinExists);
 			pinVerified.current = pinExists;
 		};
