@@ -81,9 +81,9 @@ const calculateMTNPrice = (plan: any, provider: string): number => {
 	if (provider.toUpperCase() !== "MTN") {
 		const price = parseFloat(plan.plan_amount || "0");
 		const adjustedPrice = price > 0 ? price + 50 : 0;
-		console.log(
-			`Price for ${provider} plan ID ${plan.id}: ${plan.plan || "Unknown"}, ${plan.month_validate || "Not Specified"} -> ₦${adjustedPrice}`,
-		);
+		// console.log(
+		// 	`Price for ${provider} plan ID ${plan.id}: ${plan.plan || "Unknown"}, ${plan.month_validate || "Not Specified"} -> ₦${adjustedPrice}`,
+		// );
 		return adjustedPrice;
 	}
 
@@ -389,7 +389,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 		// Check initial auth state
 		supabase.auth.getUser().then(({ data: { user }, error }) => {
 			if (user?.email && !error) {
-				console.log("Initial auth check: User signed in:", user.email);
+				// console.log("Initial auth check: User signed in:", user.email);
 				setUserEmail(user.email);
 				fetchData();
 			} else {

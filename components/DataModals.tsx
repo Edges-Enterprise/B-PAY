@@ -116,7 +116,7 @@ const DataModals: React.FC<DataModalsProps> = ({
 			}
 			console.log("PurchaseModal opened, verifying PIN for user:", user.id);
 			const exists = await verifyTransactionPin(userEmail);
-			console.log("Verified PIN exists:", exists);
+			// console.log("Verified PIN exists:", exists);
 			await updateHasPin(exists);
 		} catch (error) {
 			console.error("Error verifying PIN in DataModals:", error);

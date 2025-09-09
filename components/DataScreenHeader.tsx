@@ -55,7 +55,7 @@ const DataScreenHeader: React.FC<DataScreenHeaderProps> = ({
 }) => {
   useEffect(() => {
     console.log("Plan Type Options:", planTypeOptions);
-    console.log("Active Plan Type:", activePlanType);
+    // console.log("Active Plan Type:", activePlanType);
   }, [planTypeOptions, activePlanType]);
 
   const formatNumberWithCommas = (number: number): string => {

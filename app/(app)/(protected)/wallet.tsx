@@ -142,7 +142,7 @@ export default function WalletScreen() {
       //   };
       // });
 
-      console.log("tx Data:", txData)
+      // console.log("tx Data:", txData)
       const mappedTransactions = txData.map((tx) => {
 				let transactionType = "Wallet Funding";
 				let method =
