@@ -206,7 +206,7 @@ const ConfirmationScreen: React.FC = () => {
           filter: `user_email=eq.${userEmail}`,
         },
         (payload) => {
-          console.log('Real-time Wallet Balance Update:', payload);
+          // console.log('Real-time Wallet Balance Update:', payload);
           setBalanceValue(payload.new.balance ?? balanceValue);
         }
       )
@@ -219,7 +219,7 @@ const ConfirmationScreen: React.FC = () => {
 
     return () => {
       supabase.removeChannel(subscription);
-      console.log('Subscription cleaned up');
+      // console.log('Subscription cleaned up');
     };
   }, [userEmail, balanceValue]);
 
@@ -481,7 +481,7 @@ const ConfirmationScreen: React.FC = () => {
             }
 
             setBalanceValue(currentBalance);
-            throw new Error(`Failed to parse Lizzysub API response: ${parseError.message}`);
+            throw new Error(`Failed to parse L API response: ${parseError.message}`);
           }
 
           if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
@@ -500,7 +500,7 @@ const ConfirmationScreen: React.FC = () => {
             if (apiResponse.status === 400 && responseText.includes('insufficient balance')) {
               setTransactionModalVisible(false);
               setErrorModalVisible(true);
-              Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
+              // Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
               return;
             }
 
@@ -512,7 +512,7 @@ const ConfirmationScreen: React.FC = () => {
             }
 
             const errorMessage = responseData.message || responseText.slice(0, 100);
-            throw new Error(`Lizzysub API request failed: ${errorMessage}. Please verify Lizzysub credentials and API access.`);
+            throw new Error(`sub API request failed: ${errorMessage}. Please verify sub credentials and API access.`);
           }
         } else {
           // Use Ebenkdata API for non-Hot data plans
@@ -530,7 +530,7 @@ const ConfirmationScreen: React.FC = () => {
             }
 
             setBalanceValue(currentBalance);
-            throw new Error('Ebenkdata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
+            throw new Error('Edata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
           }
 
           const requestBody = {
@@ -573,7 +573,7 @@ const ConfirmationScreen: React.FC = () => {
             }
 
             setBalanceValue(currentBalance);
-            throw new Error(`Failed to parse Ebenkdata API response: ${parseError.message}`);
+            throw new Error(`Failed to parse Edata API response: ${parseError.message}`);
           }
 
           if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
@@ -592,12 +592,12 @@ const ConfirmationScreen: React.FC = () => {
             if (apiResponse.status === 400 && responseText.includes("You can't purchase this plan due to insufficient balance")) {
               setTransactionModalVisible(false);
               setErrorModalVisible(true);
-              Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
+              // Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
               return;
             }
 
             const errorMessage = responseData.message || responseText.slice(0, 100);
-            throw new Error(`Ebenkdata API request failed: ${errorMessage}`);
+            throw new Error(`Edata API request failed: ${errorMessage}`);
           }
         }
       } else if (purchaseType === 'airtime') {
@@ -616,7 +616,7 @@ const ConfirmationScreen: React.FC = () => {
           }
 
           setBalanceValue(currentBalance);
-          throw new Error('Ebenkdata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
+          throw new Error('Edata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.');
         }
 
         const requestBody = {
@@ -659,7 +659,7 @@ const ConfirmationScreen: React.FC = () => {
           }
 
           setBalanceValue(currentBalance);
-          throw new Error(`Failed to parse Ebenkdata Airtime API response: ${parseError.message}`);
+          throw new Error(`Failed to parse Edata Airtime API response: ${parseError.message}`);
         }
 
         if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
@@ -678,12 +678,12 @@ const ConfirmationScreen: React.FC = () => {
           if (apiResponse.status === 400 && responseText.includes("You can't purchase this airtime due to insufficient balance")) {
             setTransactionModalVisible(false);
             setErrorModalVisible(true);
-            Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
+            // Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
             return;
           }
 
           const errorMessage = responseData.message || responseText.slice(0, 100);
-          throw new Error(`Ebenkdata Airtime API request failed: ${errorMessage}`);
+          throw new Error(`Edata Airtime API request failed: ${errorMessage}`);
         }
       }
 
