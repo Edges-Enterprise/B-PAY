@@ -1,561 +1,643 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
-  View,
-  Text,
-  Pressable,
-  Image,
-  StyleSheet,
-  TextInput,
-  Alert,
-  Animated,
-  PanResponder,
-  Modal,
-  Dimensions,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
-  StatusBar,
-} from 'react-native';
-import { router } from 'expo-router';
-import { supabase } from '@/config/supabase';
-import * as SecureStore from 'expo-secure-store';
-import { DISCO_PROVIDERS } from '@/constants/helper';
-import { Ionicons } from '@expo/vector-icons';
+	View,
+	Text,
+	Pressable,
+	Image,
+	StyleSheet,
+	TextInput,
+	Alert,
+	Animated,
+	PanResponder,
+	Modal,
+	Dimensions,
+	ScrollView,
+	KeyboardAvoidingView,
+	Platform,
+	Keyboard,
+	StatusBar,
+	Switch,
+} from "react-native";
+import { router } from "expo-router";
+import { supabase } from "@/config/supabase";
+import { DISCO_PROVIDERS } from "@/constants/helper";
+import { Ionicons } from "@expo/vector-icons";
 
 // Get screen dimensions for responsive design
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 const scaleFont = (size: number) => (width / 375) * size;
 const scaleSize = (size: number) => (width / 375) * size;
 
 // Define interfaces
 interface Provider {
-  id: number;
-  name: string;
-  image: string;
-  code: string;
-  discoCode: string;
-  apiDiscount: number;
+	id: number;
+	name: string;
+	image: string;
+	code: string;
+	discoCode: string;
 }
 
 interface MeterType {
-  label: string;
-  value: string;
+	label: string;
+	value: string;
 }
 
 interface TransactionResult {
-  id: string;
-  provider: string;
-  data: string;
-  price: string;
-  date: string;
-  status: string;
-  meterNumber: string;
-  meterType: string;
-  reference: string;
-  metadata: string;
+	id: string;
+	provider: string;
+	data: string;
+	price: string;
+	date: string;
+	status: string;
+	meterNumber: string;
+	meterType: string;
+	reference: string;
+	metadata: string;
+	errorMessage: string;
 }
-
 
 // Predefined amounts
 const BILL_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
 // Meter types
 const METER_TYPES: MeterType[] = [
-  { label: 'Prepaid', value: 'prepaid' },
-  { label: 'Postpaid', value: 'postpaid' },
+	{ label: "Prepaid", value: "prepaid" },
+	{ label: "Postpaid", value: "postpaid" },
 ];
 
 const ElectricityBill: React.FC = () => {
+	const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+		null,
+	);
+	const [meterNumber, setMeterNumber] = useState<string>("");
+	const [isMeterValid, setIsMeterValid] = useState<boolean>(false);
+	const [meterOwnerName, setMeterOwnerName] = useState<string | null>(null);
+	const [meterVerificationError, setMeterVerificationError] = useState<
+		string | null
+	>(null);
+	const [isValidatingMeter, setIsValidatingMeter] = useState<boolean>(false);
+	const [bypassVerification, setBypassVerification] = useState<boolean>(false);
+	const [meterType, setMeterType] = useState<string>("prepaid");
+	const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+	const [customAmount, setCustomAmount] = useState<string>("");
+	const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
+	const [transactionPin, setTransactionPin] = useState<string>("");
+	const [balance, setBalance] = useState<number>(0);
+	const [userEmail, setUserEmail] = useState<string>("");
+	const [referenceId, setReferenceId] = useState<string>("");
+	const [transactionModalVisible, setTransactionModalVisible] =
+		useState<boolean>(false);
+	const [transactionStatus, setTransactionStatus] = useState<
+		"processing" | "success" | "failed"
+	>("processing");
+	const [transactionResult, setTransactionResult] =
+		useState<TransactionResult | null>(null);
+	const scrollViewRef = useRef<ScrollView>(null);
+	const [keyboardHeight, setKeyboardHeight] = useState(0);
+	const [focusedInput, setFocusedInput] = useState<
+		"smartCard" | "transactionPin" | null
+	>(null);
 
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [meterNumber, setMeterNumber] = useState<string>('');
-  const [meterType, setMeterType] = useState<string>('prepaid');
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [customAmount, setCustomAmount] = useState<string>('');
-  const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
-  const [appProfit, setAppProfit] = useState<number>(0);
-  const [transactionPin, setTransactionPin] = useState<string>('');
-  const [balance, setBalance] = useState<number>(0);
-  const [userEmail, setUserEmail] = useState<string>('');
-  const [referenceId, setReferenceId] = useState<string>('');
-  const [transactionModalVisible, setTransactionModalVisible] = useState<boolean>(false);
-  const [transactionStatus, setTransactionStatus] = useState<'processing' | 'success' | 'failed'>('processing');
-  const [transactionResult, setTransactionResult] = useState<TransactionResult | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+	// Animation for slide to pay
+	const slideAnim = useRef(new Animated.Value(0)).current;
+	const slideWidth = width - scaleSize(24); // Full width minus padding
+	const maxSlideDistance = slideWidth * 0.6; // Slide 60% of the width
 
-  // Animation for slide to pay
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const slideWidth = width - scaleSize(24); // Full width minus padding
-  const maxSlideDistance = slideWidth * 0.6; // Slide 60% of the width
+	// Check if slide to pay should be enabled
+	const isSlideEnabled = useMemo(() => {
+		const amount = selectedAmount || parseFloat(customAmount) || 0;
+		return (
+			!!selectedProvider &&
+			(bypassVerification || isMeterValid) &&
+			amount >= 1000 &&
+			transactionPin.length >= 4 &&
+			transactionPin.length <= 6
+		);
+	}, [
+		selectedProvider,
+		bypassVerification,
+		isMeterValid,
+		selectedAmount,
+		customAmount,
+		transactionPin,
+	]);
 
-  // Pan responder for slide to pay
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !!selectedProvider,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx >= 0 && gestureState.dx <= maxSlideDistance) {
-          slideAnim.setValue(gestureState.dx);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx > maxSlideDistance * 0.5 && selectedProvider) {
-          handlePurchase();
-        }
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+	// Pan responder for slide to pay
+	// Pan responder for slide to pay
+	const panResponder = useMemo(
+		() =>
+			PanResponder.create({
+				onStartShouldSetPanResponder: () => false,
+				onMoveShouldSetPanResponder: (_, gestureState) =>
+					isSlideEnabled &&
+					Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+					Math.abs(gestureState.dx) > 2,
+				onPanResponderMove: (_, gestureState) => {
+					if (gestureState.dx >= 0 && gestureState.dx <= maxSlideDistance) {
+						slideAnim.setValue(gestureState.dx);
+					}
+				},
+				onPanResponderRelease: (_, gestureState) => {
+					if (gestureState.dx > maxSlideDistance * 0.5 && isSlideEnabled) {
+						handlePurchase();
+					}
+					Animated.spring(slideAnim, {
+						toValue: 0,
+						useNativeDriver: true,
+					}).start();
+				},
+			}),
+		[
+			isSlideEnabled,
+			selectedProvider,
+			bypassVerification,
+			isMeterValid,
+			selectedAmount,
+			customAmount,
+			transactionPin,
+			maxSlideDistance,
+			slideAnim,
+		],
+	);
 
-  // Handle keyboard visibility
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      }
-    );
+	// Handle keyboard visibility
+	useEffect(() => {
+		const keyboardDidShowListener = Keyboard.addListener(
+			Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+			(e) => {
+				setKeyboardHeight(e.endCoordinates.height);
+			},
+		);
 
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
+		const keyboardDidHideListener = Keyboard.addListener(
+			Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+			() => {
+				setKeyboardHeight(0);
+				setFocusedInput(null);
+			},
+		);
 
-  // Validate meter number
-  const validateMeterNumber = (meter: string): boolean => {
-    return meter.length === 11 && /^\d{11}$/.test(meter);
-  };
+		return () => {
+			keyboardDidShowListener.remove();
+			keyboardDidHideListener.remove();
+		};
+	}, []);
 
-  // Handle provider selection
-  const handleSelectProvider = (provider: Provider) => {
-    setSelectedProvider(provider);
-  };
+	// Local validate meter number
+	const validateMeterNumber = (meter: string): boolean => {
+		return meter.length === 11 && /^\d{11}$/.test(meter);
+	};
 
-  // Handle amount selection
-  const selectAmount = (amount: number) => {
-    if (selectedAmount === amount) {
-      setSelectedAmount(null);
-      setCustomAmount('');
-      setDiscountedPrice(null);
-      setAppProfit(0);
-    } else {
-      setSelectedAmount(amount);
-      setCustomAmount('');
-      calculatePrices(amount);
-    }
-  };
+	// Verify meter number using edge function
+	const verifyMeterNumber = async (
+		meter: string,
+		provider: Provider,
+		type: string,
+	) => {
+		setIsValidatingMeter(true);
+		setMeterOwnerName(null);
+		setMeterVerificationError(null);
 
-  // Handle custom amount input
-  const handleCustomAmount = (text: string) => {
-    setCustomAmount(text);
-    setSelectedAmount(null);
-    const amount = parseFloat(text);
-    if (!isNaN(amount) && amount >= 1000) {
-      calculatePrices(amount);
-    } else {
-      setDiscountedPrice(null);
-      setAppProfit(0);
-    }
-  };
+		try {
+			const { data: sessionData, error: sessionError } =
+				await supabase.auth.getSession();
+			if (sessionError || !sessionData.session) {
+				throw new Error("User not authenticated");
+			}
+			const accessToken = sessionData.session.access_token;
 
-  // Calculate prices (0.2% customer discount, 0.3% app profit)
-  const calculatePrices = (amount: number) => {
-    const customerDiscount = amount * 0.998;
-    const appProfitAmount = amount * 0.003;
-    setDiscountedPrice(customerDiscount);
-    setAppProfit(appProfitAmount);
-  };
+			const apiUrl = `https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/electric-validation?meter_number=${meter}&disco=${provider.discoCode}&meter_type=${type}`;
 
-  // Calculate API cost and profit
-  const calculateApiCostAndProfit = (amount: number, provider: Provider): { apiCost: number; totalProfit: number } => {
-    const apiCost = (amount * provider.apiDiscount) / 100;
-    const totalProfit = appProfit;
-    return { apiCost, totalProfit };
-  };
+			const response = await fetch(apiUrl, {
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+				},
+			});
 
-  // Fetch user data
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user || !user.email) {
-          throw new Error('User not authenticated');
-        }
-        setUserEmail(user.email);
+			const data = await response.json();
 
-        const { data: wallet, error: walletError } = await supabase
-          .from('wallet')
-          .select('balance')
-          .eq('user_email', user.email)
-          .single();
+			if (
+				response.ok &&
+				data.status?.toLowerCase() === "success" &&
+				data.name
+			) {
+				setMeterOwnerName(data.name);
+				setMeterVerificationError(null);
+			} else {
+				setMeterOwnerName(null);
+				setMeterVerificationError(data.message || "Validation failed");
+			}
+		} catch (error) {
+			console.error("Meter verification error:", error);
+			setMeterOwnerName(null);
+			setMeterVerificationError(
+				"Failed to verify meter number. Please try again.",
+			);
+		} finally {
+			setIsValidatingMeter(false);
+		}
+	};
 
-        if (walletError && walletError.code !== 'PGRST116') {
-          throw walletError;
-        }
-        setBalance(wallet?.balance || 0);
+	// Update meter validity and trigger verification
+	useEffect(() => {
+		const localValid = validateMeterNumber(meterNumber);
+		setIsMeterValid(localValid);
+		if (!bypassVerification && localValid && selectedProvider) {
+			verifyMeterNumber(meterNumber, selectedProvider, meterType);
+		} else {
+			setMeterOwnerName(null);
+			setMeterVerificationError(null);
+		}
+	}, [meterNumber, selectedProvider, meterType, bypassVerification]);
 
-        const newReferenceId = `EBENKDATA_ELEC_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-        setReferenceId(newReferenceId);
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        Alert.alert('Error', 'Failed to load user data');
-      }
-    };
-    fetchUserData();
-  }, []);
+	// Handle provider selection
+	const handleSelectProvider = (provider: Provider) => {
+		setSelectedProvider(provider);
+	};
 
-  // Create Paystack transfer recipient
-  const createRecipient = async (): Promise<string> => {
-    const secretKey = await SecureStore.getItemAsync('PAYSTACK_SECRET_KEY');
-    if (!secretKey) {
-      throw new Error('Paystack secret key not found');
-    }
-    const response = await fetch('https://api.paystack.co/transferrecipient', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'nuban',
-        name: 'Your Business Name',
-        account_number: '0001234567',
-        bank_code: '058',
-        currency: 'NGN',
-      }),
-    });
-    const data = await response.json();
-    if (!data.status || !data.data || !data.data.recipient_code) {
-      throw new Error('Failed to create Paystack recipient');
-    }
-    return data.data.recipient_code;
-  };
+	// Handle amount selection
+	const selectAmount = (amount: number) => {
+		if (selectedAmount === amount) {
+			setSelectedAmount(null);
+			setCustomAmount("");
+			setDiscountedPrice(null);
+		} else {
+			setSelectedAmount(amount);
+			setCustomAmount("");
+			calculatePrices(amount);
+		}
+	};
 
-  // Initiate Paystack transfer
-  const initiateTransfer = async (recipientCode: string, amount: number): Promise<boolean> => {
-    const secretKey = await SecureStore.getItemAsync('PAYSTACK_SECRET_KEY');
-    if (!secretKey) {
-      throw new Error('Paystack secret key not found');
-    }
-    const response = await fetch('https://api.paystack.co/transfer', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source: 'balance',
-        amount: Math.round(amount * 100),
-        recipient: recipientCode,
-        reason: 'Electricity Bill App Profit',
-      }),
-    });
-    const data = await response.json();
-    return data.status === 'success';
-  };
+	// Handle custom amount input
+	const handleCustomAmount = (text: string) => {
+		setCustomAmount(text);
+		setSelectedAmount(null);
+		const amount = parseFloat(text);
+		if (!isNaN(amount) && amount >= 1000) {
+			calculatePrices(amount);
+		} else {
+			setDiscountedPrice(null);
+		}
+	};
 
-  // Deposit profit to Paystack
-  const depositProfitToPaystack = async (profit: number) => {
-    try {
-      const recipientCode = await createRecipient();
-      const transferSuccess = await initiateTransfer(recipientCode, profit);
-      if (transferSuccess) {
-        console.log(`Successfully deposited ₦${profit} to Paystack`);
-      }
-      return transferSuccess;
-    } catch (error) {
-      console.error('Paystack deposit error:', error);
-      return false;
-    }
-  };
+	// Calculate prices (no discount)
+	const calculatePrices = (amount: number) => {
+		setDiscountedPrice(amount);
+	};
 
-  // Reset form after successful transaction
-  const resetForm = () => {
-    setSelectedProvider(null);
-    setMeterNumber('');
-    setMeterType('prepaid');
-    setSelectedAmount(null);
-    setCustomAmount('');
-    setDiscountedPrice(null);
-    setAppProfit(0);
-    setTransactionPin('');
-    setReferenceId(`EBENKDATA_ELEC_${Date.now()}_${Math.floor(Math.random() * 10000)}`);
-  };
+	// Fetch user data
+	useEffect(() => {
+		const fetchUserData = async () => {
+			try {
+				const {
+					data: { user },
+					error: userError,
+				} = await supabase.auth.getUser();
+				if (userError || !user || !user.email) {
+					throw new Error("User not authenticated");
+				}
+				setUserEmail(user.email);
 
-  // Handle purchase
-  const handlePurchase = async () => {
-    const totalAmount = selectedAmount || parseFloat(customAmount) || 0;
-    if (!selectedProvider) {
-      Alert.alert('Error', 'Please select a provider.');
-      setTransactionModalVisible(true);
-      setTransactionStatus('failed');
-      return;
-    }
-    if (!meterNumber || !validateMeterNumber(meterNumber)) {
-      Alert.alert('Error', 'Please enter a valid 11-digit meter number.');
-      setTransactionModalVisible(true);
-      setTransactionStatus('failed');
-      return;
-    }
-    if (totalAmount < 1000) {
-      Alert.alert('Error', 'Please select or enter an amount (minimum ₦1000).');
-      setTransactionModalVisible(true);
-      setTransactionStatus('failed');
-      return;
-    }
-    if (!transactionPin || transactionPin.length < 4 || transactionPin.length > 6) {
-      Alert.alert('Error', 'Please enter a valid transaction PIN (4-6 digits).');
-      setTransactionModalVisible(true);
-      setTransactionStatus('failed');
-      return;
-    }
-    if (balance < (discountedPrice || totalAmount)) {
-      Alert.alert('Error', 'Insufficient balance. Please fund your wallet.');
-      setTransactionModalVisible(true);
-      setTransactionStatus('failed');
-      return;
-    }
+				const { data: wallet, error: walletError } = await supabase
+					.from("wallet")
+					.select("balance")
+					.eq("user_email", user.email)
+					.single();
 
-    // Verify transaction PIN
-    try {
-      const { data: userData, error: pinError } = await supabase
-        .from('users')
-        .select('transaction_pin')
-        .eq('email', userEmail)
-        .single();
+				if (walletError && walletError.code !== "PGRST116") {
+					throw walletError;
+				}
+				setBalance(wallet?.balance || 0);
 
-      if (pinError || !userData || userData.transaction_pin !== transactionPin) {
-        Alert.alert('Error', 'Invalid transaction PIN');
-        setTransactionStatus('failed');
-        setTransactionModalVisible(true);
-        return;
-      }
-    } catch (error) {
-      console.error('PIN verification error:', error);
-      Alert.alert('Error', 'Failed to verify transaction PIN');
-      setTransactionStatus('failed');
-      setTransactionModalVisible(true);
-      return;
-    }
+				const newReferenceId = `EDGES_ELEC_${user.id}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+				setReferenceId(newReferenceId);
+			} catch (error) {
+				console.error("Error fetching user data:", error);
+				Alert.alert("Error", "Failed to load user data");
+			}
+		};
+		fetchUserData();
+	}, []);
 
-    setTransactionModalVisible(true);
-    setTransactionStatus('processing');
+	// Reset form after successful transaction
+	const resetForm = () => {
+		setSelectedProvider(null);
+		setMeterNumber("");
+		setMeterType("prepaid");
+		setSelectedAmount(null);
+		setCustomAmount("");
+		setDiscountedPrice(null);
+		setTransactionPin("");
+		setBypassVerification(false);
+		setMeterOwnerName(null);
+		setMeterVerificationError(null);
+		setReferenceId(
+			`EDGES_ELEC_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+		);
+	};
 
-    try {
-      const { apiCost, totalProfit } = calculateApiCostAndProfit(totalAmount, selectedProvider);
+	// Handle bypass toggle
+	const toggleBypass = () => {
+		setBypassVerification((prev) => !prev);
+		if (!bypassVerification) {
+			setMeterNumber("");
+		}
+	};
 
-      const transactionData = {
-        user_email: userEmail,
-        amount: -(discountedPrice || totalAmount),
-        reference: referenceId,
-        status: 'pending',
-        metadata: {
-          purchase: `Electricity ₦${totalAmount.toLocaleString()} on ${selectedProvider.name}`,
-          meter_number: meterNumber,
-          meter_type: meterType,
-          validity: 'N/A',
-          type: 'electricity',
-          actual_cost: discountedPrice || totalAmount,
-          api_cost: apiCost,
-          profit: totalProfit,
-          custom_fields: [
-            {
-              display_name: 'Electricity Payment',
-              variable_name: 'electricity_payment',
-              value: 'Ebenkdata',
-            },
-          ],
-        },
-      };
 
-      const { data: pendingTx, error: pendingTxError } = await supabase
-        .from('transactions')
-        .insert(transactionData)
-        .select('id, created_at')
-        .single();
+	// Handle purchase
+	const handlePurchase = async () => {
+		const totalAmount = selectedAmount || parseFloat(customAmount) || 0;
+		const baseTransactionResult: TransactionResult = {
+			id: "N/A",
+			provider: selectedProvider?.name || "Unknown",
+			data: `Electricity ₦${totalAmount.toLocaleString() || "0"}`,
+			price: (totalAmount || 0).toString(),
+			date: new Date().toISOString(),
+			status: "Failed",
+			meterNumber,
+			meterType,
+			reference: referenceId,
+			metadata: JSON.stringify({
+				validity: "N/A",
+				payment_method: "Wallet",
+				type: "electricity",
+				actual_cost: totalAmount || 0,
+			}),
+			errorMessage: "",
+		};
 
-      if (pendingTxError) {
-        throw new Error('Failed to record pending transaction');
-      }
+		if (!selectedProvider) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "No provider selected",
+			});
+			Alert.alert("Error", "Please select a provider.");
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
+		if (!bypassVerification && !isMeterValid) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Invalid meter number",
+			});
+			Alert.alert("Error", "Please enter a valid 11-digit meter number.");
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
+		if (!bypassVerification && !meterOwnerName) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Meter verification failed",
+			});
+			Alert.alert(
+				"Error",
+				"Meter verification failed. Please ensure the meter number is valid or enable bypass verification.",
+			);
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
+		if (totalAmount < 1000) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Amount below minimum",
+			});
+			Alert.alert("Error", "Please select or enter an amount (minimum ₦1000).");
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
+		if (
+			!transactionPin ||
+			transactionPin.length < 4 ||
+			transactionPin.length > 6
+		) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Invalid transaction PIN",
+			});
+			Alert.alert(
+				"Error",
+				"Please enter a valid transaction PIN (4-6 digits).",
+			);
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
+		if (balance < totalAmount) {
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Insufficient balance",
+			});
+			Alert.alert("Error", "Insufficient balance. Please fund your wallet.");
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
 
-      const apiUrl = 'https://ebenkdata.com/api/electricity/';
-      const requestBody = {
-        disco: selectedProvider.discoCode,
-        amount: totalAmount,
-        meter_number: meterNumber,
-        meter_type: meterType,
-      };
+		// Verify transaction PIN
+		try {
+			const { data: userData, error: pinError } = await supabase
+				.from("users")
+				.select("transaction_pin")
+				.eq("email", userEmail)
+				.single();
 
-      const purchaseResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Token de883370902cf73e68ed63f566dbf38a38719f03',
-        },
-        body: JSON.stringify(requestBody),
-      });
+			if (
+				pinError ||
+				!userData ||
+				userData.transaction_pin !== transactionPin
+			) {
+				setTransactionResult({
+					...baseTransactionResult,
+					errorMessage: "Invalid transaction PIN",
+				});
+				Alert.alert("Error", "Invalid transaction PIN");
+				setTransactionStatus("failed");
+				setTransactionModalVisible(true);
+				return;
+			}
+		} catch (error) {
+			console.error("PIN verification error:", error);
+			setTransactionResult({
+				...baseTransactionResult,
+				errorMessage: "Failed to verify transaction PIN",
+			});
+			Alert.alert("Error", "Failed to verify transaction PIN");
+			setTransactionStatus("failed");
+			setTransactionModalVisible(true);
+			return;
+		}
 
-      if (purchaseResponse.status !== 200) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        setTransactionStatus('failed');
-        setTransactionResult({
-          id: pendingTx.id,
-          provider: selectedProvider.name,
-          data: `Electricity ₦${totalAmount.toLocaleString()}`,
-          price: (discountedPrice || totalAmount).toString(),
-          date: new Date().toISOString(),
-          status: 'Failed',
-          meterNumber,
-          meterType,
-          reference: referenceId,
-          metadata: JSON.stringify({
-            validity: 'N/A',
-            payment_method: 'Wallet',
-            type: 'electricity',
-            actual_cost: discountedPrice || totalAmount,
-            api_cost: apiCost,
-            profit: totalProfit,
-          }),
-        });
-        Alert.alert('Error', 'Electricity bill payment failed. Please try again.');
-        return;
-      }
+		setTransactionModalVisible(true);
+		setTransactionStatus("processing");
 
-      const depositSuccess = await depositProfitToPaystack(totalProfit);
-      if (!depositSuccess) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        setTransactionStatus('failed');
-        setTransactionResult({
-          id: pendingTx.id,
-          provider: selectedProvider.name,
-          data: `Electricity ₦${totalAmount.toLocaleString()}`,
-          price: (discountedPrice || totalAmount).toString(),
-          date: new Date().toISOString(),
-          status: 'Failed',
-          meterNumber,
-          meterType,
-          reference: referenceId,
-          metadata: JSON.stringify({
-            validity: 'N/A',
-            payment_method: 'Wallet',
-            type: 'electricity',
-            actual_cost: discountedPrice || totalAmount,
-            api_cost: apiCost,
-            profit: totalProfit,
-          }),
-        });
-        Alert.alert('Error', 'Failed to deposit profit to Paystack.');
-        return;
-      }
+		try {
+			const transactionData = {
+				user_email: userEmail,
+				amount: -totalAmount,
+				reference: referenceId,
+				status: "pending",
+				metadata: {
+					purchase: `Electricity ₦${totalAmount.toLocaleString()} on ${selectedProvider.name}`,
+					meter_number: meterNumber,
+					meter_type: meterType,
+					validity: "N/A",
+					type: "electricity",
+					actual_cost: totalAmount,
+					custom_fields: [
+						{
+							display_name: "Electricity Payment",
+							variable_name: "electricity_payment",
+							value: "Edges_Elec",
+						},
+					],
+				},
+			};
 
-      const newBalance = balance - (discountedPrice || totalAmount);
-      const { error: walletUpdateError } = await supabase
-        .from('wallet')
-        .update({ balance: newBalance })
-        .eq('user_email', userEmail);
+			const { data: pendingTx, error: pendingTxError } = await supabase
+				.from("transactions")
+				.insert(transactionData)
+				.select("id, created_at")
+				.single();
 
-      if (walletUpdateError) {
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', pendingTx.id);
-        throw new Error('Failed to update wallet balance');
-      }
+			if (pendingTxError) {
+				throw new Error("Failed to record pending transaction");
+			}
 
-      const { error: successUpdateError } = await supabase
-        .from('transactions')
-        .update({ status: 'success' })
-        .eq('id', pendingTx.id);
+			const apiUrl = "https://lizzysub.com/api/bill";
+			const requestBody = {
+				disco: parseInt(selectedProvider.discoCode),
+				meter_type: meterType,
+				meter_number: meterNumber,
+				amount: totalAmount,
+				bypass: bypassVerification,
+				"request-id": referenceId,
+			};
 
-      if (successUpdateError) {
-        throw new Error('Failed to update transaction status');
-      }
+			const purchaseResponse = await fetch(apiUrl, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization:
+						"Token b5b39c2645893a318c432507d00a91270f39bd987e5fcc904dc72276a00c",
+				},
+				body: JSON.stringify(requestBody),
+			});
 
-      setBalance(newBalance);
-      setTransactionStatus('success');
-      setTransactionResult({
-        id: pendingTx.id,
-        provider: selectedProvider.name,
-        data: `Electricity ₦${totalAmount.toLocaleString()}`,
-        price: (discountedPrice || totalAmount).toString(),
-        date: new Date().toISOString(),
-        status: 'Success',
-        meterNumber,
-        meterType,
-        reference: referenceId,
-        metadata: JSON.stringify({
-          validity: 'N/A',
-          payment_method: 'Wallet',
-          type: 'electricity',
-          actual_cost: discountedPrice || totalAmount,
-          api_cost: apiCost,
-          profit: totalProfit,
-        }),
-      });
-      resetForm();
-    } catch (error) {
-      console.error('Purchase error:', error);
-      setTransactionStatus('failed');
-      setTransactionResult({
-        id: 'N/A',
-        provider: selectedProvider?.name || 'Unknown',
-        data: `Electricity ₦${totalAmount.toLocaleString() || '0'}`,
-        price: (discountedPrice || totalAmount || 0).toString(),
-        date: new Date().toISOString(),
-        status: 'Failed',
-        meterNumber,
-        meterType,
-        reference: referenceId,
-        metadata: JSON.stringify({
-          validity: 'N/A',
-          payment_method: 'Wallet',
-          type: 'electricity',
-          actual_cost: discountedPrice || totalAmount || 0,
-          api_cost: 0,
-          profit: 0,
-        }),
-      });
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    }
-  };
+			const responseData = await purchaseResponse.json();
 
-  // Close transaction modal
-  const closeTransactionModal = () => {
-    setTransactionModalVisible(false);
-    setTransactionResult(null);
-  };
+			if (responseData.status !== "success") {
+				await supabase
+					.from("transactions")
+					.update({ status: "failed" })
+					.eq("id", pendingTx.id);
+				setTransactionStatus("failed");
+				setTransactionResult({
+					id: pendingTx.id,
+					provider: selectedProvider.name,
+					data: `Electricity ₦${totalAmount.toLocaleString()}`,
+					price: totalAmount.toString(),
+					date: new Date().toISOString(),
+					status: "Failed",
+					meterNumber,
+					meterType,
+					reference: referenceId,
+					metadata: JSON.stringify({
+						validity: "N/A",
+						payment_method: "Wallet",
+						type: "electricity",
+						actual_cost: totalAmount,
+					}),
+					errorMessage:
+						responseData.message || "Electricity bill payment failed",
+				});
+				Alert.alert(
+					"Error",
+					"Electricity bill payment failed. Please try again.",
+				);
+				return;
+			}
 
-  // Format number with commas
-  const formatNumberWithCommas = (number: number | null): string => {
-    if (number === null) return '0';
-    return number.toLocaleString();
-  };
+			const newBalance = balance - totalAmount;
+			const { error: walletUpdateError } = await supabase
+				.from("wallet")
+				.update({ balance: newBalance })
+				.eq("user_email", userEmail);
 
-  // Handle back navigation
-  const handleBack = () => {
-    router.back();
-  };
+			if (walletUpdateError) {
+				await supabase
+					.from("transactions")
+					.update({ status: "failed" })
+					.eq("id", pendingTx.id);
+				throw new Error("Failed to update wallet balance");
+			}
 
-  return (
+			const { error: successUpdateError } = await supabase
+				.from("transactions")
+				.update({ status: "success" })
+				.eq("id", pendingTx.id);
+
+			if (successUpdateError) {
+				throw new Error("Failed to update transaction status");
+			}
+
+			setBalance(newBalance);
+			setTransactionStatus("success");
+			setTransactionResult({
+				id: pendingTx.id,
+				provider: responseData.disco_name || selectedProvider.name,
+				data: `Electricity ₦${totalAmount.toLocaleString()}`,
+				price: totalAmount.toString(),
+				date: new Date().toISOString(),
+				status: "Success",
+				meterNumber,
+				meterType,
+				reference: referenceId,
+				metadata: JSON.stringify({
+					validity: "N/A",
+					payment_method: responseData.wallet_vending || "Wallet",
+					type: "electricity",
+					actual_cost: totalAmount,
+					token: responseData.token || "N/A",
+				}),
+				errorMessage: "", // Explicitly set to empty string for success
+			});
+			resetForm();
+		} catch (error) {
+			console.error("Purchase error:", error);
+			setTransactionStatus("failed");
+			setTransactionResult({
+				...baseTransactionResult,
+				id: "N/A",
+				errorMessage: (error as Error).message || "Failed to process payment",
+			});
+			Alert.alert("Error", "Failed to process payment. Please try again.");
+		}
+	};
+
+	// Close transaction modal
+	const closeTransactionModal = () => {
+		setTransactionModalVisible(false);
+		setTransactionResult(null);
+	};
+
+	// Format number with commas
+	const formatNumberWithCommas = (number: number | null): string => {
+		if (number === null) return "0";
+		return number.toLocaleString();
+	};
+
+	// Handle back navigation
+	const handleBack = () => {
+		router.back();
+	};
+
+	return (
 		<View style={styles.rootContainer}>
 			<StatusBar barStyle="light-content" backgroundColor="black" />
 			<KeyboardAvoidingView
@@ -607,13 +689,45 @@ const ElectricityBill: React.FC = () => {
 					<View style={styles.inputContainer}>
 						<Text style={styles.inputLabel}>Meter Number</Text>
 						<TextInput
-							style={styles.input}
+							style={[
+								styles.input,
+								meterNumber &&
+									isMeterValid &&
+									!meterVerificationError &&
+									!bypassVerification &&
+									styles.inputValid,
+								meterNumber &&
+									(!isMeterValid || meterVerificationError) &&
+									!bypassVerification &&
+									styles.inputInvalid,
+								bypassVerification && styles.inputBypassed,
+							]}
 							value={meterNumber}
 							onChangeText={setMeterNumber}
 							placeholder="Enter 11-digit meter number"
 							placeholderTextColor="#A1A1AA"
 							keyboardType="numeric"
 							maxLength={11}
+						/>
+						{isValidatingMeter && (
+							<Text style={styles.validatingText}>Validating meter...</Text>
+						)}
+						{meterOwnerName && !bypassVerification && (
+							<Text style={styles.iucOwnerText}>Owner: {meterOwnerName}</Text>
+						)}
+						{meterVerificationError && !bypassVerification && (
+							<Text style={styles.iucErrorText}>{meterVerificationError}</Text>
+						)}
+					</View>
+
+					{/* Bypass Verification */}
+					<View style={styles.bypassContainer}>
+						<Text style={styles.bypassLabel}>Bypass Meter Verification</Text>
+						<Switch
+							value={bypassVerification}
+							onValueChange={toggleBypass}
+							trackColor={{ false: "#2D2D2D", true: "#D7A77F" }}
+							thumbColor={bypassVerification ? "#FFFFFF" : "#A1A1AA"}
 						/>
 					</View>
 
@@ -690,7 +804,7 @@ const ElectricityBill: React.FC = () => {
 							style={[styles.input, styles.transactionPinInput]}
 							value={transactionPin}
 							onChangeText={setTransactionPin}
-							placeholder="Enter 4-6 digit PIN"
+							placeholder="Enter PIN"
 							placeholderTextColor="#A1A1AA"
 							keyboardType="numeric"
 							maxLength={6}
@@ -798,256 +912,282 @@ const ElectricityBill: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  rootContainer: {
-    flex: 1,
-    backgroundColor: 'black',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: 'black',
-  },
-  scrollContainer: {
-    flex: 1,
-    backgroundColor: 'black',
-  },
-  innerContainer: {
-    // paddingTop: scaleSize(60),
-    paddingHorizontal: scaleSize(12),
-    flexGrow: 1,
-    backgroundColor: 'black',
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: scaleSize(19),
-  },
-  selectProviderTitle: {
-    fontSize: scaleFont(18),
-    fontWeight: 'bold',
-    color: 'white',
-    flex: 1,
-  },
-  backButton: {
-    padding: scaleSize(8),
-    marginRight: scaleSize(8),
-  },
-  backArrow: {
-    fontSize: scaleFont(18),
-    color: '#3B82F6',
-  },
-  sectionTitle: {
-    fontSize: scaleFont(16),
-    fontWeight: '600',
-    color: 'white',
-    marginBottom: scaleSize(8),
-  },
-  providerScroll: {
-    marginBottom: scaleSize(4), // Reduced to minimize gap
-  },
-  providerScrollContent: {
-    flexDirection: 'row',
-    paddingRight: scaleSize(12),
-  },
-  providerCard: {
-    alignItems: 'center',
-    backgroundColor: '#1E1E1E',
-    borderRadius: scaleSize(10),
-    padding: scaleSize(4),
-    width: scaleSize(60),
-    height: scaleSize(60),
-    marginRight: scaleSize(8),
-    justifyContent: 'center',
-  },
-  providerCardSelected: {
-    borderColor: '#D7A77F',
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  providerLogo: {
-    width: scaleSize(30),
-    height: scaleSize(30),
-    borderRadius: scaleSize(15),
-    backgroundColor: 'white',
-    marginBottom: scaleSize(2),
-  },
-  providerName: {
-    fontSize: scaleFont(8),
-    fontWeight: '600',
-    color: 'white',
-    textAlign: 'center',
-  },
-  inputContainer: {
-    marginBottom: scaleSize(30),
-  },
-  inputLabel: {
-    fontSize: scaleFont(14),
-    color: '#A1A1AA',
-    marginBottom: scaleSize(6),
-  },
-  input: {
-    backgroundColor: '#2D2D2D',
-    borderRadius: scaleSize(6),
-    padding: scaleSize(8),
-    fontSize: scaleFont(14),
-    color: 'white',
-    width: '100%',
-  },
-  transactionPinContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: scaleSize(12),
-  },
-  transactionPinLabel: {
-    fontSize: scaleFont(14),
-    color: '#A1A1AA',
-  },
-  transactionPinInput: {
-    width: scaleSize(120),
-    padding: scaleSize(6),
-  },
-  meterTypeContainer: {
-    flexDirection: 'row',
-    gap: scaleSize(8),
-  },
-  meterTypeButton: {
-    flex: 1,
-    backgroundColor: '#1E1E1E',
-    borderRadius: scaleSize(6),
-    paddingVertical: scaleSize(8),
-    alignItems: 'center',
-  },
-  meterTypeButtonSelected: {
-    borderColor: '#D7A77F',
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  meterTypeText: {
-    fontSize: scaleFont(14),
-    color: 'white',
-    fontWeight: '600',
-  },
-  amountScroll: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: scaleSize(12),
-  },
-  amountButton: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: scaleSize(6),
-    paddingVertical: scaleSize(8),
-    paddingHorizontal: scaleSize(8),
-    marginBottom: scaleSize(6),
-    width: scaleSize(100),
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  amountButtonSelected: {
-    borderColor: '#D7A77F',
-    backgroundColor: 'transparent',
-  },
-  amountText: {
-    fontSize: scaleFont(12),
-    fontWeight: '600',
-    color: 'white',
-  },
-  amountTextSelected: {
-    color: '#D7A77F',
-  },
-  discountBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#2D2D2D',
-    borderRadius: scaleSize(6),
-    padding: scaleSize(12),
-    marginBottom: scaleSize(12),
-  },
-  discountLabel: {
-    fontSize: scaleFont(14),
-    color: '#A1A1AA',
-  },
-  discountValue: {
-    fontSize: scaleFont(14),
-    fontWeight: '600',
-    color: '#D7A77F',
-  },
-  slideTrack: {
-    marginTop: scaleSize(8),
-    marginBottom: scaleSize(12),
-    backgroundColor: '#2D2D2D',
-    borderRadius: scaleSize(6),
-    height: scaleSize(40),
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  slideTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent:'space-between',
-    paddingHorizontal: scaleSize(10),
-  },
-  slideContainerDisabled: {
-    opacity: 0.5,
-  },
-  slideText: {
-    fontSize: scaleFont(14),
-    fontWeight: '600',
-    color: '#D7A77F',
-  },
-  slideTextDisabled: {
-    color: '#A1A1AA',
-  },
-  arrow: {
-    fontSize: scaleFont(18),
-    color: '#D7A77F',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: scaleSize(10),
-    padding: scaleSize(16),
-    width: '90%',
-    maxHeight: height * 0.8,
-  },
-  modalTitle: {
-    fontSize: scaleFont(18),
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: scaleSize(12),
-    textAlign: 'center',
-  },
-  modalMessage: {
-    fontSize: scaleFont(14),
-    color: '#A1A1AA',
-    textAlign: 'center',
-    marginBottom: scaleSize(16),
-  },
-  transactionDetails: {
-    marginBottom: scaleSize(16),
-  },
-  detailText: {
-    fontSize: scaleFont(12),
-    color: 'white',
-    marginBottom: scaleSize(6),
-  },
-  closeButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: scaleSize(6),
-    paddingVertical: scaleSize(10),
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: scaleFont(14),
-    fontWeight: '600',
-    color: 'white',
-  },
+	rootContainer: {
+		flex: 1,
+		backgroundColor: "black",
+	},
+	container: {
+		flex: 1,
+		backgroundColor: "black",
+	},
+	scrollContainer: {
+		flex: 1,
+		backgroundColor: "black",
+	},
+	innerContainer: {
+		paddingHorizontal: scaleSize(12),
+		flexGrow: 1,
+		backgroundColor: "black",
+	},
+	sectionTitle: {
+		fontSize: scaleFont(16),
+		fontWeight: "600",
+		color: "white",
+		marginBottom: scaleSize(8),
+	},
+	providerScroll: {
+		marginBottom: scaleSize(4),
+	},
+	providerScrollContent: {
+		flexDirection: "row",
+		paddingRight: scaleSize(12),
+	},
+	providerCard: {
+		alignItems: "center",
+		backgroundColor: "#1E1E1E",
+		borderRadius: scaleSize(10),
+		padding: scaleSize(4),
+		width: scaleSize(60),
+		height: scaleSize(60),
+		marginRight: scaleSize(8),
+		justifyContent: "center",
+	},
+	providerCardSelected: {
+		borderColor: "#D7A77F",
+		borderWidth: 2,
+		backgroundColor: "transparent",
+	},
+	providerLogo: {
+		width: scaleSize(30),
+		height: scaleSize(30),
+		borderRadius: scaleSize(15),
+		backgroundColor: "white",
+		marginBottom: scaleSize(2),
+	},
+	providerName: {
+		fontSize: scaleFont(8),
+		fontWeight: "600",
+		color: "white",
+		textAlign: "center",
+	},
+	inputContainer: {
+		marginBottom: scaleSize(30),
+	},
+	inputLabel: {
+		fontSize: scaleFont(14),
+		color: "#A1A1AA",
+		marginBottom: scaleSize(6),
+	},
+	input: {
+		backgroundColor: "#2D2D2D",
+		borderRadius: scaleSize(6),
+		padding: scaleSize(8),
+		fontSize: scaleFont(14),
+		color: "white",
+		width: "100%",
+		borderColor: "#2A2A2C",
+		borderWidth: 1,
+	},
+	inputValid: {
+		borderColor: "#D7A77F",
+		shadowColor: "#D7A77F",
+		shadowOffset: { width: 0, height: 0 },
+		shadowOpacity: 0.3,
+		shadowRadius: 4,
+		elevation: 4,
+	},
+	inputInvalid: {
+		borderColor: "#FF0000",
+		shadowColor: "#FF0000",
+		shadowOffset: { width: 0, height: 0 },
+		shadowOpacity: 0.3,
+		shadowRadius: 4,
+		elevation: 4,
+	},
+	inputBypassed: {
+		borderColor: "#A1A1AA",
+	},
+	validatingText: {
+		fontSize: scaleFont(12),
+		color: "#D7A77F",
+		marginTop: scaleSize(4),
+	},
+	iucOwnerText: {
+		fontSize: scaleFont(12),
+		color: "#D7A77F",
+		marginTop: scaleSize(4),
+	},
+	iucErrorText: {
+		fontSize: scaleFont(12),
+		color: "#FF0000",
+		marginTop: scaleSize(4),
+	},
+	bypassContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginBottom: scaleSize(12),
+	},
+	bypassLabel: {
+		fontSize: scaleFont(14),
+		color: "#A1A1AA",
+	},
+	transactionPinContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginBottom: scaleSize(12),
+	},
+	transactionPinLabel: {
+		fontSize: scaleFont(14),
+		color: "#A1A1AA",
+	},
+	transactionPinInput: {
+		width: scaleSize(120),
+		padding: scaleSize(6),
+	},
+	meterTypeContainer: {
+		flexDirection: "row",
+		gap: scaleSize(8),
+	},
+	meterTypeButton: {
+		flex: 1,
+		backgroundColor: "#1E1E1E",
+		borderRadius: scaleSize(6),
+		paddingVertical: scaleSize(8),
+		alignItems: "center",
+	},
+	meterTypeButtonSelected: {
+		borderColor: "#D7A77F",
+		borderWidth: 2,
+		backgroundColor: "transparent",
+	},
+	meterTypeText: {
+		fontSize: scaleFont(14),
+		color: "white",
+		fontWeight: "600",
+	},
+	amountScroll: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+		justifyContent: "space-between",
+		marginBottom: scaleSize(12),
+	},
+	amountButton: {
+		backgroundColor: "#1E1E1E",
+		borderRadius: scaleSize(6),
+		paddingVertical: scaleSize(8),
+		paddingHorizontal: scaleSize(8),
+		marginBottom: scaleSize(6),
+		width: scaleSize(100),
+		alignItems: "center",
+		borderWidth: 2,
+		borderColor: "transparent",
+	},
+	amountButtonSelected: {
+		borderColor: "#D7A77F",
+		backgroundColor: "transparent",
+	},
+	amountText: {
+		fontSize: scaleFont(12),
+		fontWeight: "600",
+		color: "white",
+	},
+	amountTextSelected: {
+		color: "#D7A77F",
+	},
+	discountBar: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		backgroundColor: "#2D2D2D",
+		borderRadius: scaleSize(6),
+		padding: scaleSize(12),
+		marginBottom: scaleSize(12),
+	},
+	discountLabel: {
+		fontSize: scaleFont(14),
+		color: "#A1A1AA",
+	},
+	discountValue: {
+		fontSize: scaleFont(14),
+		fontWeight: "600",
+		color: "#D7A77F",
+	},
+	slideTrack: {
+		marginTop: scaleSize(8),
+		marginBottom: scaleSize(12),
+		backgroundColor: "#2D2D2D",
+		borderRadius: scaleSize(6),
+		height: scaleSize(40),
+		justifyContent: "center",
+		overflow: "hidden",
+	},
+	slideTextContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		paddingHorizontal: scaleSize(10),
+	},
+	slideContainerDisabled: {
+		opacity: 0.5,
+	},
+	slideText: {
+		fontSize: scaleFont(14),
+		fontWeight: "600",
+		color: "#D7A77F",
+	},
+	slideTextDisabled: {
+		color: "#A1A1AA",
+	},
+	arrow: {
+		fontSize: scaleFont(18),
+		color: "#D7A77F",
+	},
+	modalOverlay: {
+		flex: 1,
+		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	modalContainer: {
+		backgroundColor: "#1E1E1E",
+		borderRadius: scaleSize(10),
+		padding: scaleSize(16),
+		width: "90%",
+		maxHeight: height * 0.8,
+	},
+	modalTitle: {
+		fontSize: scaleFont(18),
+		fontWeight: "bold",
+		color: "white",
+		marginBottom: scaleSize(12),
+		textAlign: "center",
+	},
+	modalMessage: {
+		fontSize: scaleFont(14),
+		color: "#A1A1AA",
+		textAlign: "center",
+		marginBottom: scaleSize(16),
+	},
+	transactionDetails: {
+		marginBottom: scaleSize(16),
+	},
+	detailText: {
+		fontSize: scaleFont(12),
+		color: "white",
+		marginBottom: scaleSize(6),
+	},
+	closeButton: {
+		backgroundColor: "#3B82F6",
+		borderRadius: scaleSize(6),
+		paddingVertical: scaleSize(10),
+		alignItems: "center",
+	},
+	closeButtonText: {
+		fontSize: scaleFont(14),
+		fontWeight: "600",
+		color: "white",
+	},
 });
 
 export default ElectricityBill;
