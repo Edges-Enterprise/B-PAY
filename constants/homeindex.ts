@@ -5,6 +5,7 @@ export const ICONS = {
 	CABLE: "tv-outline",
 	SUPPORT: "headset-outline",
 	REFERRAL: "gift-outline",
+	EDUCATION: "school-outline",
 } as const;
 
 export type IconName = (typeof ICONS)[keyof typeof ICONS];
