@@ -119,6 +119,12 @@ function AppStack() {
 				/>
 
 				<Stack.Screen
+					name="education"
+					options={{
+						headerTitle: "Education 🎓",
+					}}
+				/>
+				<Stack.Screen
 					name="changePin"
 					options={{
 						headerTitle: "Change Transaction Pin",
