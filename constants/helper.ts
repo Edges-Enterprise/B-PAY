@@ -69,6 +69,12 @@ export const NETWORK_IMAGES: { [key: string]: string } = {
 	MTN: require("../assets/icons/sp-mtn-logo.jpeg"),
 };
 
+export const EXAM_IMAGES: { [key: string]: string } = {
+	WAEC: require("../assets/icons/ex-waec_logo.png"),
+	NECO: require("../assets/icons/ex-neco-logo.png"),
+	NABTEB: require("../assets/icons/ex-nabteb-logo.png"),
+};
+
 export const DEFAULT_PROVIDER_IMAGE = require("../assets/images/icon.png");
 
 interface DiscosProvider {
@@ -203,6 +209,12 @@ export const actions = [
 		icon: ICONS.SUPPORT,
 		color: "#3B82F6",
 		route: "../Customer" as const,
+	},
+	{
+		title: "Education",
+		icon: ICONS.EDUCATION,
+		color: "#F472B6",
+		route: "../education" as const,
 	},
 	// {
 	// 	title: "Referral",
