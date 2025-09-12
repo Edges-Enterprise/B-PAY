@@ -410,7 +410,7 @@ const BuyDataScreen: React.FC = () => {
 				.from("profiles")
 				.select("id")
 				.eq("id", user.id);
-			console.log("Profile check result:", { userId: user.id, data, error });
+			// console.log("Profile check result:", { userId: user.id, data, error });
 			if (error && error.code !== "PGRST116") {
 				console.error("Error checking profile:", error);
 				Alert.alert(
@@ -465,7 +465,7 @@ const BuyDataScreen: React.FC = () => {
 	const verifyTransactionPin = useCallback(
 		async (email: string): Promise<boolean> => {
 			if (!email) {
-				console.log("No email provided for PIN verification");
+				// console.log("No email provided for PIN verification");
 				return false;
 			}
 			try {
@@ -489,7 +489,7 @@ const BuyDataScreen: React.FC = () => {
 					.single();
 				if (error) {
 					if (error.code === "PGRST116") {
-						console.log("No profile for user ID:", user.id);
+						// console.log("No profile for user ID:", user.id);
 						return false;
 					}
 					console.error("PIN verification error:", error);

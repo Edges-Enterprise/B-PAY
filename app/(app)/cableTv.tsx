@@ -394,7 +394,7 @@ const verifyIucNumber = async (card: string, provider: Provider | null) => {
 		});
 
 		const rawText = await response.text();
-		console.log("Raw response text:", rawText);
+		// console.log("Raw response text:", rawText);
 
 		let data: any = {};
 		try {
@@ -577,7 +577,7 @@ const verifyIucNumber = async (card: string, provider: Provider | null) => {
         token: userToken,
       };
 
-      console.log("Purchase request payload:", requestBody);
+      // console.log("Purchase request payload:", requestBody);
 
       const purchaseResponse = await fetch(apiUrl, {
         method: "POST",

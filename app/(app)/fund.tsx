@@ -119,11 +119,11 @@ const FundScreen = () => {
             filter: `reference=eq.${paymentReference}`,
           },
           async (payload) => {
-            console.log('Real-time update:', {
-              reference: paymentReference,
-              status: payload.new.status,
-              metadata: payload.new.metadata,
-            });
+            // console.log('Real-time update:', {
+            //   reference: paymentReference,
+            //   status: payload.new.status,
+            //   metadata: payload.new.metadata,
+            // });
             if (payload.new.status === 'success') {
               setShowWebView(false);
               setIsLoading(false);
@@ -157,7 +157,7 @@ const FundScreen = () => {
 
     return () => {
       if (subscription) {
-        console.log('Unsubscribing:', paymentReference);
+        // console.log('Unsubscribing:', paymentReference);
         supabase.removeChannel(subscription);
       }
     };

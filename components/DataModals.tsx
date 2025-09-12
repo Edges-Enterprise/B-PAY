@@ -114,7 +114,7 @@ const DataModals: React.FC<DataModalsProps> = ({
 				);
 				return;
 			}
-			console.log("PurchaseModal opened, verifying PIN for user:", user.id);
+			// console.log("PurchaseModal opened, verifying PIN for user:", user.id);
 			const exists = await verifyTransactionPin(userEmail);
 			// console.log("Verified PIN exists:", exists);
 			await updateHasPin(exists);
@@ -150,7 +150,7 @@ const DataModals: React.FC<DataModalsProps> = ({
 	]);
 
 	const closePurchaseModal = () => {
-		console.log("Closing PurchaseModal");
+		// console.log("Closing PurchaseModal");
 		setIsPurchaseModalOpen(false);
 		setPhoneNumberInput("");
 		setTransactionPinInput("");
@@ -159,7 +159,7 @@ const DataModals: React.FC<DataModalsProps> = ({
 	};
 
 	const closeTransactionModal = () => {
-		console.log("Closing TransactionStatusModal");
+		// console.log("Closing TransactionStatusModal");
 		setIsTransactionModalOpen(false);
 		setPhoneNumberInput("");
 		setTransactionPinInput("");
@@ -169,7 +169,7 @@ const DataModals: React.FC<DataModalsProps> = ({
 	};
 
 	const closePinCreationModal = () => {
-		console.log("Closing CreatePinModal");
+		// console.log("Closing CreatePinModal");
 		setIsPinCreationModalOpen(false);
 		setNewPinInput("");
 		setConfirmPinInput("");

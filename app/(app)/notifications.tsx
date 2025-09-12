@@ -148,7 +148,7 @@ export default function NotificationsPage() {
 	};
 
 	const handleNotificationPress = (notification: Notification) => {
-		console.log("Notification pressed:", notification);
+		// console.log("Notification pressed:", notification);
 		if (notification.type === "transaction") {
 			router.push(`/receipt?transactionId=${notification.transaction_id}`);
 		} else if (notification.type === "app_update") {
@@ -165,13 +165,13 @@ export default function NotificationsPage() {
 
 		notificationListener.current =
 			Notifications.addNotificationReceivedListener((notification) => {
-				console.log("Push notification received:", notification);
+				// console.log("Push notification received:", notification);
 				fetchNotifications();
 			});
 
 		responseListener.current =
 			Notifications.addNotificationResponseReceivedListener((response) => {
-				console.log("Push notification tapped:", response);
+				// console.log("Push notification tapped:", response);
 				const data = response.notification.request.content.data;
 				if (data.notificationId) {
 					handleNotificationPress({ id: data.notificationId, ...data });
@@ -189,7 +189,7 @@ export default function NotificationsPage() {
 					filter: `user_id=eq.${user?.id}`,
 				},
 				(payload) => {
-					console.log("Real-time notification event:", payload);
+					// console.log("Real-time notification event:", payload);
 					fetchNotifications();
 				},
 			)

@@ -214,7 +214,7 @@ const ConfirmationScreen: React.FC = () => {
         if (err) {
           console.error('Subscription error:', err);
         }
-        console.log('Subscription status:', status);
+        // console.log('Subscription status:', status);
       });
 
     return () => {

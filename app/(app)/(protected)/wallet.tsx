@@ -106,7 +106,7 @@ export default function WalletScreen() {
           (payload) => {
             const newBalance = payload.new.balance;
             setBalance(newBalance ?? 0);
-            console.log("Wallet balance updated:", newBalance);
+            // console.log("Wallet balance updated:", newBalance);
           }
         )
         .subscribe();

@@ -143,7 +143,7 @@ export function useCreateTransactionPin() {
             return pin;
         },
         onSuccess: () => {
-            console.log("Transaction PIN set successfully");
+            // console.log("Transaction PIN set successfully");
             // Invalidate user-related queries
             queryClient.invalidateQueries({ queryKey: ["user"] });
         },

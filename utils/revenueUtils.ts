@@ -78,7 +78,7 @@ async function logWithdrawal(month: string, amount: number, notes?: string): Pro
 
     if (insertError) throw insertError;
 
-    console.log(`Logged withdrawal of ₦${amount} for ${month}. Carried forward: ₦${newCarriedForward}`);
+    // console.log(`Logged withdrawal of ₦${amount} for ${month}. Carried forward: ₦${newCarriedForward}`);
   } catch (error) {
     console.error('Error logging withdrawal:', error);
     throw error;

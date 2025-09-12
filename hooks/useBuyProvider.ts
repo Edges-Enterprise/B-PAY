@@ -37,7 +37,7 @@ export const useProviders = () => {
 		}
 
 		const data: ApiResponse = await response.json();
-		console.log("API Response:", data);
+		// console.log("API Response:", data);
 
 		// Transform the API response into an array of Provider objects
 		const providerMap: { [key: string]: Provider } = {};
