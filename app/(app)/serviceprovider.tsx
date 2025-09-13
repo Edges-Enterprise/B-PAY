@@ -268,24 +268,50 @@ const BuyDataScreen: React.FC = () => {
 		return apiPlans;
 	}, [selectedProvider, providerPlans]);
 
+	// const dataBundles = useMemo(() => {
+	// 	if (!selectedProvider) return [];
+
+	// 	let plans: DataBundle[];
+	// 	if (activeCategory === "Hot") {
+	// 		plans = [];
+	// 	} else {
+	// 		plans = (providerPlans[selectedProvider.name] || []).filter(
+	// 			(plan: DataBundle) => {
+	// 				const categoryMatch = plan.category === activeCategory;
+	// 				const searchMatch = searchTerm
+	// 					? plan.data.toLowerCase().includes(searchTerm.toLowerCase()) ||
+	// 						plan.description
+	// 							?.toLowerCase()
+	// 							?.includes(searchTerm.toLowerCase()) ||
+	// 						false
+	// 					: true;
+	// 				return categoryMatch && searchMatch;
+	// 			},
+	// 		);
+
+	// 		if (plans.length === 0) {
+	// 			fetchData();
+	// 		}
+	// 	}
+
+	// 	return plans;
+	// }, [selectedProvider, providerPlans, activeCategory, searchTerm, fetchData]);
+
 	const dataBundles = useMemo(() => {
 		if (!selectedProvider) return [];
 
 		let plans: DataBundle[];
-		if (activeCategory === "Hot") {
+
+		// If there's a search term, return all plans for searching
+		if (searchTerm) {
+			plans = providerPlans[selectedProvider.name] || [];
+		} else if (activeCategory === "Hot") {
 			plans = [];
 		} else {
 			plans = (providerPlans[selectedProvider.name] || []).filter(
 				(plan: DataBundle) => {
 					const categoryMatch = plan.category === activeCategory;
-					const searchMatch = searchTerm
-						? plan.data.toLowerCase().includes(searchTerm.toLowerCase()) ||
-							plan.description
-								?.toLowerCase()
-								?.includes(searchTerm.toLowerCase()) ||
-							false
-						: true;
-					return categoryMatch && searchMatch;
+					return categoryMatch;
 				},
 			);
 
