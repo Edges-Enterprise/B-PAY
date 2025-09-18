@@ -74,7 +74,7 @@ const ServiceProviderScreen: React.FC = () => {
 			});
 
 			setProviders(mappedProviders);
-			console.log("Loaded providers from mapping:", mappedProviders);
+			// console.log("Loaded providers from mapping:", mappedProviders);
 		} catch (err: any) {
 			setError("Could not load providers. Please try again.");
 			setProviders([]);
@@ -108,11 +108,11 @@ const ServiceProviderScreen: React.FC = () => {
 
 		const balance = params.balance || "0";
 
-		console.log("Navigating with dual API support:", {
-			provider: provider.name,
-			ebenkId: provider.ebenkId,
-			lizzysubId: provider.lizzysubId,
-		});
+		// console.log("Navigating with dual API support:", {
+		// 	provider: provider.name,
+		// 	ebenkId: provider.ebenkId,
+		// 	lizzysubId: provider.lizzysubId,
+		// });
 
 		router.push({
 			pathname: "/(app)/serviceprovider",
