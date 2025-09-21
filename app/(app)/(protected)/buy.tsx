@@ -108,12 +108,6 @@ const ServiceProviderScreen: React.FC = () => {
 
 		const balance = params.balance || "0";
 
-		// console.log("Navigating with dual API support:", {
-		// 	provider: provider.name,
-		// 	ebenkId: provider.ebenkId,
-		// 	lizzysubId: provider.lizzysubId,
-		// });
-
 		router.push({
 			pathname: "/(app)/serviceprovider",
 			params: {
