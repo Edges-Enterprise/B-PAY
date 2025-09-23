@@ -91,17 +91,17 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
 				}));
 
 				// Log warnings for inconsistent validity vs. description
-				formattedData.forEach((bundle) => {
-					if (bundle.description && bundle.validity !== "Not Specified") {
-						const descMatch = bundle.description.match(/(\d+\s*(Days|Day))/i);
-						const descValidity = descMatch ? descMatch[0] : null;
-						if (descValidity && descValidity !== bundle.validity) {
-							console.warn(
-								`Inconsistent validity for plan ID ${bundle.id}: validity=${bundle.validity}, description=${bundle.description}`,
-							);
-						}
-					}
-				});
+				// formattedData.forEach((bundle) => {
+				// 	if (bundle.description && bundle.validity !== "Not Specified") {
+				// 		const descMatch = bundle.description.match(/(\d+\s*(Days|Day))/i);
+				// 		const descValidity = descMatch ? descMatch[0] : null;
+				// 		if (descValidity && descValidity !== bundle.validity) {
+				// 			console.warn(
+				// 				`Inconsistent validity for plan ID ${bundle.id}: validity=${bundle.validity}, description=${bundle.description}`,
+				// 			);
+				// 		}
+				// 	}
+				// });
 
 				// console.log("Fetched hot deals from Supabase:", {
 				//   count: formattedData.length,
@@ -462,19 +462,19 @@ const DataBundleList: React.FC<DataBundleListProps> = ({
 					{bundle.description && (
 						<Text style={styles.descriptionText}>{bundle.description}</Text>
 					)}
-					{bundle.validity === "Not Specified" && (
+					{/* {bundle.validity === "Not Specified" && (
 						<Text style={styles.warningPreviewText}>
 							Note: Plan duration unclear. Check with provider.
 						</Text>
-					)}
-					{bundle.description &&
+					)} */}
+					{/* {bundle.description &&
 						bundle.description.includes("30 days") &&
 						bundle.validity === "7 Days" && (
 							<Text style={styles.warningPreviewText}>
 								Warning: Validity (7 Days) may differ from description (30
 								days).
 							</Text>
-						)}
+						)} */}
 					<View style={styles.bundleActions}>
 						<MotiView
 							from={{ scale: 1 }}
