@@ -121,27 +121,6 @@ export default function WalletScreen() {
 
       if (txError) throw txError;
 
-      // const mappedTransactions = txData.map((tx) => {
-      //   const metaType = tx.metadata?.type?.toLowerCase().trim();
-      //   let transactionType = "Wallet Funding";
-      //   if (metaType === "data") {
-      //     transactionType = "Data Purchase";
-      //   } else if (metaType === "airtime") {
-      //     transactionType = "Airtime Purchase";
-      //   }
-      //   return {
-      //     type: transactionType,
-      //     amount: tx.amount,
-      //     method: tx.metadata?.payment_method || tx.metadata?.provider || "Unknown",
-      //     details: tx.metadata?.purchase || tx.metadata?.plan_name || null,
-      //     date: new Date(tx.created_at).toLocaleDateString("en-US", {
-      //       month: "short",
-      //       day: "numeric",
-      //       year: "numeric",
-      //     }),
-      //   };
-      // });
-
       // console.log("tx Data:", txData)
       const mappedTransactions = txData.map((tx) => {
 				let transactionType = "Wallet Funding";
