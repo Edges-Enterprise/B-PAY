@@ -208,12 +208,12 @@ const BuyDataScreen: React.FC = () => {
 					};
 					setSelectedProvider(normalizedProvider);
 					setNetworkId(id);
-					// console.log(
-					//   "Initialized provider:",
-					//   normalizedProvider,
-					//   "networkId:",
-					//   id,
-					// );
+					console.log(
+					  "Initialized provider:",
+					  normalizedProvider,
+					  "networkId:",
+					  id,
+					);
 				} else {
 					console.error("Invalid provider or networkId:", { provider, id });
 					Alert.alert("Error", "Invalid provider data");
