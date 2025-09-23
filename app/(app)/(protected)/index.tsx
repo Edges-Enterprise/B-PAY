@@ -159,7 +159,7 @@ export default function HomeScreen() {
 
 		// Redirect to welcome screen if user is null
 		if (!user && segments[1] !== "(auth)") {
-			router.replace("/(app)/(auth)/welcome");
+			router.replace("/(app)/(auth)/sign-in");
 			return;
 		}
 
@@ -266,7 +266,7 @@ export default function HomeScreen() {
 
 		if (!user) {
 			Alert.alert("Error", "You must be logged in to create a PIN.");
-			router.replace("/(app)/(auth)/welcome");
+			router.replace("/(app)/welcome");
 			return;
 		}
 
@@ -300,7 +300,7 @@ export default function HomeScreen() {
 	}) => {
 		if (!user) {
 			Alert.alert("Error", "You must be logged in to make a purchase.");
-			router.replace("/(app)/(auth)/welcome");
+			router.replace("/(app)/(auth)/sign-in");
 			return;
 		}
 
@@ -382,7 +382,7 @@ export default function HomeScreen() {
 			<View style={styles.container}>
 				<StatusBar
 					translucent
-					backgroundColor="transparent"
+					backgroundColor="black"
 					barStyle="light-content"
 				/>
 				<View style={styles.header}>
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
 		zIndex: 10,
 	},
 	notificationIcon: {
-		padding: 8,
+		padding: 24,
 	},
 	badge: {
 		position: "absolute",
