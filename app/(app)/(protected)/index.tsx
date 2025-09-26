@@ -159,7 +159,7 @@ export default function HomeScreen() {
 
 		// Redirect to welcome screen if user is null
 		if (!user && segments[1] !== "(auth)") {
-			router.replace("/(app)/(auth)/sign-in");
+			router.replace("/(app)/(auth)/welcome");
 			return;
 		}
 
@@ -266,7 +266,7 @@ export default function HomeScreen() {
 
 		if (!user) {
 			Alert.alert("Error", "You must be logged in to create a PIN.");
-			router.replace("/(app)/welcome");
+			router.replace("/(app)/(auth)/welcome");
 			return;
 		}
 
@@ -300,7 +300,7 @@ export default function HomeScreen() {
 	}) => {
 		if (!user) {
 			Alert.alert("Error", "You must be logged in to make a purchase.");
-			router.replace("/(app)/(auth)/sign-in");
+			router.replace("/(app)/(auth)/welcome");
 			return;
 		}
 
