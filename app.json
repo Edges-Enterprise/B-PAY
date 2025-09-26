@@ -66,6 +66,12 @@
         "projectId": "c3303360-7e01-48dd-9c1d-a9dff8b12e97"
       }
     },
-    "owner": "phoenix-boss"
+    "owner": "phoenix-boss",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c3303360-7e01-48dd-9c1d-a9dff8b12e97"
+    }
   }
 }
