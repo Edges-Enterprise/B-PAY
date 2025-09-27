@@ -15,7 +15,6 @@ interface CustomSuccessModalProps {
 	visible: boolean;
 	username: string;
 	onClose: () => void;
-	// colorScheme: string;
 	selectedFont?: string;
 }
 
@@ -23,7 +22,6 @@ const CustomSuccessModal: React.FC<CustomSuccessModalProps> = ({
 	visible,
 	username,
 	onClose,
-	// colorScheme,
 }) => {
 	const modalOpacity = useSharedValue(0);
 	const modalScale = useSharedValue(0.8);
@@ -88,8 +86,6 @@ const CustomSuccessModal: React.FC<CustomSuccessModalProps> = ({
 		<Animated.View style={styles.modalOverlay}>
 			<Animated.View style={[styles.modalContainer, modalAnimatedStyle]}>
 				<BlurView
-					// intensity={100}
-					// tint={colorScheme === "dark" ? "dark" : "light"}
 					style={styles.modalBlur}
 				>
 					<Text style={styles.modalTitle}>Hey, {username}</Text>
