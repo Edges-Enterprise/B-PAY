@@ -27,29 +27,22 @@ export const sections = [
 		title: "Preferences",
 		items: [
 			"Notifications",
-			// "Sound",
 			"Themes",
 			"Fonts",
 		],
 	},
 	{
 		title: "Security",
-		items: [
-			// "Authentication",
-			// "Biometric Login",
-			// "Two-Factor Authentication",
-			// "Device Management",
-			"Change Transaction PIN",
-		],
+		items: ["Change Transaction PIN"],
 	},
-	// {
-	// 	title: "Billing",
-	// 	items: ["Manage Subscriptions", "Payment Methods", "Invoices"],
-	// },
+
+	{
+		title: "Updates",
+		items: ["Check for Update", "App Version"],
+	},
 	{
 		title: "Privacy",
 		items: [
-			// "Data Sharing", "Location Services", "Ad Preferences",
 			"Privacy Policy",
 			"Terms of Service",
 			// "User Agreement",
