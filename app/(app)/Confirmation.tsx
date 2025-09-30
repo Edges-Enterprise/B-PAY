@@ -76,24 +76,25 @@ const ConfirmationScreen: React.FC = () => {
 		purchaseType: "data" | "airtime";
 	}>();
 
-	const [selectedBundle, setSelectedBundle] = useState<Bundle | null>(null);
-	const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
-		null,
+	const [selectedBundle, setSelectedBundle] = useState<Bundle>(
+		JSON.parse(bundle),
+	);
+	const [selectedProvider, setSelectedProvider] = useState<Provider>(
+		JSON.parse(provider),
 	);
 	const [parsedNetworkId, setParsedNetworkId] = useState<number>(
-		parseInt(networkId || "0", 10),
+		parseInt(networkId, 10),
 	);
 	const [parsedPlanId, setParsedPlanId] = useState<number>(
-		parseInt(planId || "0", 10),
+		parseInt(planId, 10),
 	);
-	const [balanceValue, setBalanceValue] = useState<number>(
-		parseFloat(balance || "0"),
-	);
-	const [editableMobileNumber, setEditableMobileNumber] = useState<string>(
-		phoneNumber || "",
-	);
+	const [balanceValue, setBalanceValue] = useState<number>(parseFloat(balance));
+	const [editableMobileNumber, setEditableMobileNumber] =
+		useState<string>(phoneNumber);
 	const [isEditingMobile, setIsEditingMobile] = useState<boolean>(false);
-	const [networkProvider, setNetworkProvider] = useState<string>("");
+	const [networkProvider, setNetworkProvider] = useState<string>(
+		selectedProvider.name,
+	);
 	const [transactionModalVisible, setTransactionModalVisible] =
 		useState<boolean>(false);
 	const [transactionStatus, setTransactionStatus] = useState<
@@ -108,27 +109,11 @@ const ConfirmationScreen: React.FC = () => {
 	const pulseAnim = useRef(new Animated.Value(1)).current;
 	const pulseNetworkAnim = useRef(new Animated.Value(1)).current;
 
-	// Parse params safely
-	useEffect(() => {
-		try {
-			if (bundle) setSelectedBundle(JSON.parse(bundle));
-			if (provider) {
-				const parsedProvider = JSON.parse(provider);
-				setSelectedProvider(parsedProvider);
-				setNetworkProvider(parsedProvider.name || "");
-			}
-		} catch (error) {
-			console.error("Error parsing params:", error);
-			Alert.alert("Error", "Invalid data received. Please try again.");
-			router.back();
-		}
-	}, [bundle, provider]);
-
 	// Synchronize parsedNetworkId with selectedBundle.planType for Hot plans
 	useEffect(() => {
 		if (
 			purchaseType === "data" &&
-			selectedBundle?.category === "Hot" &&
+			selectedBundle.category === "Hot" &&
 			selectedBundle.planType
 		) {
 			const networkIds: { [key: string]: number } = {
@@ -139,16 +124,16 @@ const ConfirmationScreen: React.FC = () => {
 			};
 			const expectedNetworkId = networkIds[selectedBundle.planType];
 			if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
-				console.log("Synchronizing networkId:", {
-					currentNetworkId: parsedNetworkId,
-					expectedNetworkId,
-					planType: selectedBundle.planType,
-					bundleId: selectedBundle.id,
+				console.log('Synchronizing networkId:', {
+				  currentNetworkId: parsedNetworkId,
+				  expectedNetworkId,
+				  planType: selectedBundle.planType,
+				  bundleId: selectedBundle.id,
 				});
 				setParsedNetworkId(expectedNetworkId);
 				setNetworkProvider(selectedBundle.planType);
 				setSelectedProvider({
-					...selectedProvider!,
+					...selectedProvider,
 					name: selectedBundle.planType,
 					id: expectedNetworkId,
 				});
@@ -191,6 +176,22 @@ const ConfirmationScreen: React.FC = () => {
 		}
 	}, [errorModalVisible, timeLeft]);
 
+	// Log initial parameters
+	// useEffect(() => {
+	//   console.log('Received navigation params:', {
+	//     bundle: selectedBundle,
+	//     provider: selectedProvider,
+	//     phoneNumber,
+	//     transactionPin: '****',
+	//     userEmail,
+	//     referenceId,
+	//     balance: balanceValue,
+	//     networkId: parsedNetworkId,
+	//     planId: parsedPlanId,
+	//     purchaseType,
+	//   });
+	// }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId, purchaseType]);
+
 	// Fetch wallet balance and set up real-time subscription
 	useEffect(() => {
 		if (!userEmail) {
@@ -213,7 +214,7 @@ const ConfirmationScreen: React.FC = () => {
 				} else {
 					const walletBalance = wallet?.balance;
 					setBalanceValue(walletBalance ?? balanceValue);
-					console.log("Fetched wallet balance:", walletBalance);
+					// console.log('Fetched wallet balance:', walletBalance);
 				}
 			} catch (err) {
 				console.error("Error in fetchWalletBalance:", err);
@@ -235,7 +236,7 @@ const ConfirmationScreen: React.FC = () => {
 					filter: `user_email=eq.${userEmail}`,
 				},
 				(payload) => {
-					console.log("Real-time Wallet Balance Update:", payload);
+					// console.log('Real-time Wallet Balance Update:', payload);
 					setBalanceValue(payload.new.balance ?? balanceValue);
 				},
 			)
@@ -243,199 +244,571 @@ const ConfirmationScreen: React.FC = () => {
 				if (err) {
 					console.error("Subscription error:", err);
 				}
-				console.log("Subscription status:", status);
+				// console.log('Subscription status:', status);
 			});
 
 		return () => {
 			supabase.removeChannel(subscription);
+			// console.log('Subscription cleaned up');
 		};
 	}, [userEmail, balanceValue]);
 
-	// Handle mobile number change
-	const handleMobileNumberChange = (text: string) => {
-		setEditableMobileNumber(text);
-	};
+	// Pulse animation for edit button and network text
+	useEffect(() => {
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(pulseAnim, {
+					toValue: 0.5,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+				Animated.timing(pulseAnim, {
+					toValue: 1,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
 
-	// PanResponder for slide to purchase
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(pulseNetworkAnim, {
+					toValue: 0.8,
+					duration: 1500,
+					useNativeDriver: true,
+				}),
+				Animated.timing(pulseNetworkAnim, {
+					toValue: 1,
+					duration: 1500,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, []);
+
+	// Update network provider when mobile number changes
+	const updateNetworkProvider = useCallback(
+		(mobile: string) => {
+			if (mobile.length !== 11) {
+				setNetworkProvider(selectedProvider.name);
+				return;
+			}
+			const prefix = mobile.slice(0, 4);
+			const mtn = [
+				"0803",
+				"0806",
+				"0703",
+				"0706",
+				"0813",
+				"0816",
+				"0810",
+				"0814",
+				"0903",
+				"0906",
+				"0913",
+				"0916",
+			];
+			const glo = ["0805", "0807", "0705", "0815", "0811", "0905", "0915"];
+			const airtel = [
+				"0802",
+				"0808",
+				"0708",
+				"0812",
+				"0701",
+				"0902",
+				"0907",
+				"0901",
+				"0912",
+			];
+			const nineMobile = ["0809", "0817", "0818", "0909", "0908"];
+			let detectedProvider = selectedProvider.name;
+			let detectedNetworkId = parsedNetworkId;
+
+			if (mtn.includes(prefix)) {
+				detectedProvider = "MTN";
+				detectedNetworkId = 1;
+			} else if (glo.includes(prefix)) {
+				detectedProvider = "GLO";
+				detectedNetworkId = 3;
+			} else if (airtel.includes(prefix)) {
+				detectedProvider = "AIRTEL";
+				detectedNetworkId = 2;
+			} else if (nineMobile.includes(prefix)) {
+				detectedProvider = "9MOBILE";
+				detectedNetworkId = 4;
+			}
+
+			// Only update if the detected provider matches the selected plan's planType for Hot plans
+			if (
+				purchaseType === "data" &&
+				selectedBundle.category === "Hot" &&
+				selectedBundle.planType &&
+				selectedBundle.planType === detectedProvider
+			) {
+				setNetworkProvider(detectedProvider);
+				setParsedNetworkId(detectedNetworkId);
+				setSelectedProvider({
+					...selectedProvider,
+					name: detectedProvider,
+					id: detectedNetworkId,
+				});
+			} else if (
+				purchaseType === "data" &&
+				selectedBundle.category === "Hot" &&
+				selectedBundle.planType
+			) {
+				console.log("Mobile number prefix does not match planType:", {
+					prefix,
+					detectedProvider,
+					planType: selectedBundle.planType,
+					bundleId: selectedBundle.id,
+				});
+			} else {
+				setNetworkProvider(detectedProvider);
+				setParsedNetworkId(detectedNetworkId);
+				setSelectedProvider({
+					...selectedProvider,
+					name: detectedProvider,
+					id: detectedNetworkId,
+				});
+			}
+		},
+		[selectedProvider, parsedNetworkId, selectedBundle, purchaseType],
+	);
+
+	useEffect(() => {
+		if (editableMobileNumber) {
+			const timeoutId = setTimeout(() => {
+				updateNetworkProvider(editableMobileNumber);
+			}, 300);
+			return () => clearTimeout(timeoutId);
+		}
+	}, [editableMobileNumber, updateNetworkProvider]);
+
+	// PanResponder for slide-to-purchase
 	const panResponder = useRef(
 		PanResponder.create({
-			onStartShouldSetPanResponder: () => true,
-			onPanResponderMove: (evt, gs) => {
-				if (gs.dx > 0) {
-					slideAnim.setValue(gs.dx);
+			onStartShouldSetPanResponder: () => false,
+			onMoveShouldSetPanResponder: (_, gestureState) => {
+				return (
+					Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+					Math.abs(gestureState.dx) > 10
+				);
+			},
+			onPanResponderMove: (_, gestureState) => {
+				if (gestureState.dx > 0) {
+					slideAnim.setValue(gestureState.dx);
 				}
 			},
-			onPanResponderRelease: (evt, gs) => {
-				if (gs.dx > 100) {
-					Animated.timing(slideAnim, {
-						toValue: 300,
-						duration: 200,
-						useNativeDriver: true,
-					}).start(() => {
-						handlePurchase();
-					});
-				} else {
-					Animated.timing(slideAnim, {
-						toValue: 0,
-						duration: 200,
-						useNativeDriver: true,
-					}).start();
+			onPanResponderRelease: (_, gestureState) => {
+				if (gestureState.dx > 100) {
+					console.log('Slide to purchase triggered', { referenceId });
+					handlePurchase();
 				}
+				Animated.spring(slideAnim, {
+					toValue: 0,
+					useNativeDriver: true,
+				}).start();
 			},
 		}),
 	).current;
 
-	// Pulse animation
-	useEffect(() => {
-		Animated.loop(
-			Animated.sequence([
-				Animated.timing(pulseAnim, {
-					toValue: 1.2,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-				Animated.timing(pulseAnim, {
-					toValue: 1,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-			]),
-		).start();
-	}, [pulseAnim]);
-
-	// Pulse network animation
-	useEffect(() => {
-		Animated.loop(
-			Animated.sequence([
-				Animated.timing(pulseNetworkAnim, {
-					toValue: 1.1,
-					duration: 800,
-					useNativeDriver: true,
-				}),
-				Animated.timing(pulseNetworkAnim, {
-					toValue: 1,
-					duration: 800,
-					useNativeDriver: true,
-				}),
-			]),
-		).start();
-	}, [pulseNetworkAnim]);
-
-	// Handle purchase logic
-	const handlePurchase = async () => {
-		if (
-			!selectedBundle ||
-			!selectedProvider ||
-			!editableMobileNumber ||
-			!referenceId ||
-			!userEmail
-		) {
-			Alert.alert("Error", "Missing required information");
-			return;
+	const handleMobileNumberChange = (text: string) => {
+		setEditableMobileNumber(text);
+		if (text.length === 11 && /^\d{11}$/.test(text)) {
+			if (
+				networkProvider.toUpperCase() === selectedProvider.name.toUpperCase()
+			) {
+				setIsEditingMobile(false);
+			} else {
+				Alert.alert(
+					"Invalid Mobile Number",
+					`The mobile number does not match the provider (${selectedProvider.name}). Please enter a valid ${selectedProvider.name} number.`,
+				);
+				setEditableMobileNumber(phoneNumber);
+				setIsEditingMobile(false);
+			}
 		}
+	};
 
-		setTransactionModalVisible(true);
-		setTransactionStatus("processing");
+	const formatNumberWithCommas = (number: number): string => {
+		return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	};
 
+	const validateHotPlan = (networkId: number, planType: string): boolean => {
+		const validNetworkIds: { [key: string]: number[] } = {
+			MTN: [1],
+			GLO: [3],
+			"9MOBILE": [4],
+			AIRTEL: [2],
+		};
+		const validIds = validNetworkIds[planType] || [];
+		if (!validIds.includes(networkId)) {
+			console.error("Invalid Network ID for plan:", {
+				networkId,
+				planType,
+				expectedNetworkId: validIds[0],
+			});
+			return false;
+		}
+		return true;
+	};
+
+	const handlePurchase = async () => {
+		let currentBalance: number | undefined;
 		try {
-			const { data: walletData, error: walletError } = await supabase
+			setTransactionModalVisible(true);
+			setTransactionStatus("processing");
+
+			// Verify balance
+			const { data: wallet, error: walletError } = await supabase
 				.from("wallet")
 				.select("balance")
 				.eq("user_email", userEmail)
 				.single();
 
-			if (walletError) {
+			if (walletError && walletError.code !== "PGRST116") {
 				throw new Error(
 					`Failed to fetch wallet balance: ${walletError.message}`,
 				);
 			}
 
-			const currentBalance = walletData.balance;
-			const basePrice = selectedBundle.price || selectedBundle.amount || 0;
+			currentBalance = wallet?.balance ?? balanceValue;
+			const basePrice = (selectedBundle.price || selectedBundle.amount) ?? 0;
 
 			if (currentBalance < basePrice) {
-				throw new Error("Insufficient balance");
+				Alert.alert(
+					"Error",
+					`Insufficient wallet balance. Required: ₦${formatNumberWithCommas(basePrice)}, Available: ₦${formatNumberWithCommas(currentBalance)}. Please top up your wallet.`,
+				);
+				setTransactionModalVisible(false);
+				return;
 			}
 
-			const { error: deductError } = await supabase
-				.from("wallet")
-				.update({ balance: currentBalance - basePrice })
-				.eq("user_email", userEmail);
-
-			if (deductError) {
-				throw new Error(`Failed to deduct from wallet: ${deductError.message}`);
-			}
-
-			setBalanceValue(currentBalance - basePrice);
-
-			let response;
-			let responseData;
-			let responseText;
+			let apiResponse: Response;
+			let responseText: string;
 
 			if (purchaseType === "data") {
-				// Data purchase API call
-				const formData = new FormData();
-				formData.append("network", parsedNetworkId.toString());
-				formData.append("mobile", editableMobileNumber);
-				formData.append("dataplan", parsedPlanId.toString());
-				formData.append("payment_method", "wallet");
-				formData.append("request_id", referenceId);
+				// Check if plan is a Hot plan
+				const isHotPlan = selectedBundle.category === "Hot";
+				console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
 
-				response = await fetch("https://ebenkdata.com/api/v1/buy_data", {
-					method: "POST",
-					body: formData,
-				});
+				if (isHotPlan) {
+					// Validate Hot Plan and Network ID
+					if (
+						!selectedBundle.planType ||
+						!validateHotPlan(parsedNetworkId, selectedBundle.planType)
+					) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
 
-				responseText = await response.text();
-				try {
-					responseData = JSON.parse(responseText);
-				} catch {
-					throw new Error(
-						`Invalid JSON response: ${responseText.slice(0, 100)}`,
-					);
-				}
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
 
-				if (!response.ok || responseData.status !== "success") {
-					if (responseData.message?.includes("insufficient balance")) {
+						setBalanceValue(currentBalance);
 						setTransactionModalVisible(false);
 						setErrorModalVisible(true);
+						Alert.alert(
+							"Error",
+							`Invalid network selected for the plan. Please select a ${selectedBundle.planType} network for the ${selectedBundle.data} plan.`,
+						);
 						return;
 					}
-					const errorMessage =
-						responseData.message || responseText.slice(0, 100);
-					throw new Error(`Edata API request failed: ${errorMessage}`);
+
+					// Use Lizzysub API for Hot plans with static token
+					const requestBody = {
+						network: parsedNetworkId,
+						phone: editableMobileNumber,
+						data_plan: selectedBundle.id,
+						bypass: false,
+						"request-id": `Data_${referenceId}`,
+					};
+
+					console.log('Lizzysub API request:', requestBody);
+
+					apiResponse = await fetch("https://lizzysub.com/api/data", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Token ${LIZZYSUB_TOKEN}`,
+						},
+						body: JSON.stringify(requestBody),
+					});
+
+					responseText = await apiResponse.text();
+					// console.log('Lizzysub API response:', {
+					//   status: apiResponse.status,
+					//   headers: Object.fromEntries(apiResponse.headers.entries()),
+					//   responseText: responseText.slice(0, 500),
+					// });
+
+					let responseData;
+					try {
+						responseData = JSON.parse(responseText);
+					} catch (parseError: any) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
+
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
+
+						setBalanceValue(currentBalance);
+						throw new Error(
+							`Failed to parse L API response: ${parseError.message}`,
+						);
+					}
+
+					if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
+
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
+
+						setBalanceValue(currentBalance);
+
+						if (
+							apiResponse.status === 400 &&
+							responseText.includes("insufficient balance")
+						) {
+							setTransactionModalVisible(false);
+							setErrorModalVisible(true);
+							// Alert.alert('Error', 'Insufficient balance on Lizzysub API. Please try again later.');
+							return;
+						}
+
+						if (responseText.includes("Invalid Data Plan ID or Network")) {
+							setTransactionModalVisible(false);
+							setErrorModalVisible(true);
+							Alert.alert(
+								"Error",
+								"Invalid Data Plan ID or Network. Please select a valid plan and network.",
+							);
+							return;
+						}
+
+						const errorMessage =
+							responseData.message || responseText.slice(0, 100);
+						throw new Error(
+							`sub API request failed: ${errorMessage}. Please verify sub credentials and API access.`,
+						);
+					}
+				} else {
+					// Use Ebenkdata API for non-Hot data plans
+					const ebenkUrl =
+						process.env.EXPO_PUBLIC_EBENK_URL || "https://ebenkdata.com";
+					const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
+					if (!ebenkToken) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
+
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
+
+						setBalanceValue(currentBalance);
+						throw new Error(
+							"Edata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.",
+						);
+					}
+
+					const requestBody = {
+						network: parsedNetworkId,
+						mobile_number: editableMobileNumber,
+						plan: parsedPlanId,
+						Ported_number: true,
+					};
+
+					console.log('Ebenkdata API request:', requestBody);
+
+					apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Token ${ebenkToken}`,
+						},
+						body: JSON.stringify(requestBody),
+					});
+
+					responseText = await apiResponse.text();
+					console.log('Ebenkdata API response:', {
+					  status: apiResponse.status,
+					  headers: Object.fromEntries(apiResponse.headers.entries()),
+					  responseText: responseText.slice(0, 500),
+					});
+
+					let responseData;
+					try {
+						responseData = JSON.parse(responseText);
+					} catch (parseError: any) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
+
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
+
+						setBalanceValue(currentBalance);
+						throw new Error(
+							`Failed to parse Edata API response: ${parseError.message}`,
+						);
+					}
+
+					if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+						const { error: refundError } = await supabase
+							.from("wallet")
+							.update({ balance: currentBalance })
+							.eq("user_email", userEmail);
+
+						if (refundError) {
+							console.error("Error refunding wallet balance:", refundError);
+							throw new Error(
+								`Failed to refund wallet balance: ${refundError.message}`,
+							);
+						}
+
+						setBalanceValue(currentBalance);
+
+						if (
+							apiResponse.status === 400 &&
+							responseText.includes(
+								"You can't purchase this plan due to insufficient balance",
+							)
+						) {
+							setTransactionModalVisible(false);
+							setErrorModalVisible(true);
+							// Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
+							return;
+						}
+
+						const errorMessage =
+							responseData.message || responseText.slice(0, 100);
+						throw new Error(`Edata API request failed: ${errorMessage}`);
+					}
 				}
 			} else if (purchaseType === "airtime") {
-				// Airtime purchase API call
-				const formData = new FormData();
-				formData.append("network", parsedNetworkId.toString());
-				formData.append("mobile", editableMobileNumber);
-				formData.append("amount", basePrice.toString());
-				formData.append("payment_method", "wallet");
-				formData.append("request_id", referenceId);
+				// Use Ebenkdata API for airtime purchases
+				const ebenkUrl =
+					process.env.EXPO_PUBLIC_EBENK_URL || "https://ebenkdata.com";
+				const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
+				if (!ebenkToken) {
+					const { error: refundError } = await supabase
+						.from("wallet")
+						.update({ balance: currentBalance })
+						.eq("user_email", userEmail);
 
-				response = await fetch("https://ebenkdata.com/api/v1/buy_airtime", {
-					method: "POST",
-					body: formData,
-				});
+					if (refundError) {
+						console.error("Error refunding wallet balance:", refundError);
+						throw new Error(
+							`Failed to refund wallet balance: ${refundError.message}`,
+						);
+					}
 
-				responseText = await response.text();
-				try {
-					responseData = JSON.parse(responseText);
-				} catch {
+					setBalanceValue(currentBalance);
 					throw new Error(
-						`Invalid JSON response: ${responseText.slice(0, 100)}`,
+						"Edata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.",
 					);
 				}
 
-				if (!response.ok || responseData.status !== "success") {
+				const requestBody = {
+					network: parsedNetworkId,
+					mobile_number: editableMobileNumber,
+					amount: basePrice,
+					Ported_number: true,
+				};
+
+				// console.log('Ebenkdata Airtime API request:', requestBody);
+
+				apiResponse = await fetch(`${ebenkUrl}/api/airtime/`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Token ${ebenkToken}`,
+					},
+					body: JSON.stringify(requestBody),
+				});
+
+				responseText = await apiResponse.text();
+				// console.log('Ebenkdata Airtime API response:', {
+				//   status: apiResponse.status,
+				//   headers: Object.fromEntries(apiResponse.headers.entries()),
+				//   responseText: responseText.slice(0, 500),
+				// });
+
+				let responseData;
+				try {
+					responseData = JSON.parse(responseText);
+				} catch (parseError: any) {
+					const { error: refundError } = await supabase
+						.from("wallet")
+						.update({ balance: currentBalance })
+						.eq("user_email", userEmail);
+
+					if (refundError) {
+						console.error("Error refunding wallet balance:", refundError);
+						throw new Error(
+							`Failed to refund wallet balance: ${refundError.message}`,
+						);
+					}
+
+					setBalanceValue(currentBalance);
+					throw new Error(
+						`Failed to parse Edata Airtime API response: ${parseError.message}`,
+					);
+				}
+
+				if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+					const { error: refundError } = await supabase
+						.from("wallet")
+						.update({ balance: currentBalance })
+						.eq("user_email", userEmail);
+
+					if (refundError) {
+						console.error("Error refunding wallet balance:", refundError);
+						throw new Error(
+							`Failed to refund wallet balance: ${refundError.message}`,
+						);
+					}
+
+					setBalanceValue(currentBalance);
+
 					if (
+						apiResponse.status === 400 &&
 						responseText.includes(
 							"You can't purchase this airtime due to insufficient balance",
 						)
 					) {
 						setTransactionModalVisible(false);
 						setErrorModalVisible(true);
+						// Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
 						return;
 					}
 
@@ -592,21 +965,8 @@ const ConfirmationScreen: React.FC = () => {
 
 	const purchaseDescription = () =>
 		purchaseType === "data"
-			? selectedBundle?.data || `Plan ID ${parsedPlanId}`
-			: `Airtime ₦${(selectedBundle?.price || selectedBundle?.amount) ?? 0}`;
-
-	// Helper to format numbers (used in alerts)
-	const formatNumberWithCommas = (number: number): string => {
-		return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-	};
-
-	if (!selectedBundle || !selectedProvider) {
-		return (
-			<View style={styles.container}>
-				<Text style={{ color: "#fff" }}>Loading...</Text>
-			</View>
-		);
-	}
+			? selectedBundle.data || `Plan ID ${parsedPlanId}`
+			: `Airtime ₦${(selectedBundle.price || selectedBundle.amount) ?? 0}`;
 
 	return (
 		<View style={styles.container}>
@@ -620,7 +980,7 @@ const ConfirmationScreen: React.FC = () => {
 					handleMobileNumberChange={handleMobileNumberChange}
 					toggleEditMobile={toggleEditMobile}
 					handleCancel={handleCancel}
-					referenceId={referenceId || ""}
+					referenceId={referenceId}
 					pulseAnim={pulseAnim}
 				/>
 				<Animated.View
@@ -640,7 +1000,7 @@ const ConfirmationScreen: React.FC = () => {
 				visible={transactionModalVisible}
 				onClose={closeTransactionModal}
 				transactionStatus={transactionStatus}
-				selectedPlan={selectedBundle as DataBundle} // Type cast if needed
+				selectedPlan={selectedBundle}
 				phoneNumber={editableMobileNumber}
 				networkProvider={networkProvider}
 			/>
