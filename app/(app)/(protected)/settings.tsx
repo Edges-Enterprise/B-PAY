@@ -33,6 +33,9 @@ import { fonts } from "@/constants/fonts";
 import { colors } from "@/constants/colors";
 import { availableThemes, sections } from "@/constants/helper";
 import ReusableModal from "@/components/ReusableModal";
+import { manualUpdateCheck } from "@/utils/manualUpdateCheck";
+
+
 
 const { width, height } = Dimensions.get("window");
 
@@ -166,6 +169,11 @@ export default function Settings() {
 			);
 		} else if (item === "Change Password") {
 			router.push("/changePassword");
+		} else if (item === "Check for Update") {
+			manualUpdateCheck();
+		} else if (item === "App Version") {
+			const version = require("../../../app.json").expo.version;
+			Alert.alert("App Version", `Version ${version}`);
 		} else if (item === "Fonts") {
 			setFontModalVisible(true);
 		} else if (item === "Themes") {
