@@ -14,21 +14,8 @@ import TransactionStatusModal from "@/components/homescreen/TransactionStatusMod
 import PurchaseDetails from "@/components/confirmation/PurchaseDetails";
 import ErrorModal from "@/components/confirmation/ErrorModal";
 
-// Define constants
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-const LIZZYSUB_TOKEN =
-	"b5b39c2645893a318c432507d00a91270f39bd987e5fcc904dc72276a00c";
-
-// Define interfaces
-interface DataBundle {
-	id: number;
-	data: string;
-	price: number;
-	validity: string;
-	category: string;
-	description?: string;
-	planType: string;
-}
+const SUPABASE_EDGE_URL =
+	"https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/lizzysub-proxy";
 
 interface Bundle {
 	id: number;
@@ -124,11 +111,11 @@ const ConfirmationScreen: React.FC = () => {
 			};
 			const expectedNetworkId = networkIds[selectedBundle.planType];
 			if (expectedNetworkId && parsedNetworkId !== expectedNetworkId) {
-				console.log('Synchronizing networkId:', {
-				  currentNetworkId: parsedNetworkId,
-				  expectedNetworkId,
-				  planType: selectedBundle.planType,
-				  bundleId: selectedBundle.id,
+				console.log("Synchronizing networkId:", {
+					currentNetworkId: parsedNetworkId,
+					expectedNetworkId,
+					planType: selectedBundle.planType,
+					bundleId: selectedBundle.id,
 				});
 				setParsedNetworkId(expectedNetworkId);
 				setNetworkProvider(selectedBundle.planType);
@@ -402,7 +389,7 @@ const ConfirmationScreen: React.FC = () => {
 			},
 			onPanResponderRelease: (_, gestureState) => {
 				if (gestureState.dx > 100) {
-					console.log('Slide to purchase triggered', { referenceId });
+					console.log("Slide to purchase triggered", { referenceId });
 					handlePurchase();
 				}
 				Animated.spring(slideAnim, {
@@ -491,7 +478,10 @@ const ConfirmationScreen: React.FC = () => {
 			if (purchaseType === "data") {
 				// Check if plan is a Hot plan
 				const isHotPlan = selectedBundle.category === "Hot";
-				console.log('API routing decision:', { isHotPlan, selectedBundleId: selectedBundle.id });
+				console.log("API routing decision:", {
+					isHotPlan,
+					selectedBundleId: selectedBundle.id,
+				});
 
 				if (isHotPlan) {
 					// Validate Hot Plan and Network ID
@@ -530,23 +520,23 @@ const ConfirmationScreen: React.FC = () => {
 						"request-id": `Data_${referenceId}`,
 					};
 
-					console.log('Lizzysub API request:', requestBody);
+					  console.log("Calling Supabase Edge Function with body:", requestBody);
 
-					apiResponse = await fetch("https://lizzysub.com/api/data", {
+					console.log("Lizzysub API request:", requestBody);
+
+					apiResponse = await fetch(SUPABASE_EDGE_URL, {
 						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Token ${LIZZYSUB_TOKEN}`,
-						},
+						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify(requestBody),
 					});
-
+ console.log("Edge Function response status:", apiResponse.status);
+        console.log("Edge Function response ok:", apiResponse.ok);
 					responseText = await apiResponse.text();
-					// console.log('Lizzysub API response:', {
-					//   status: apiResponse.status,
-					//   headers: Object.fromEntries(apiResponse.headers.entries()),
-					//   responseText: responseText.slice(0, 500),
-					// });
+					console.log("Lizzysub API response:", {
+						status: apiResponse.status,
+						headers: Object.fromEntries(apiResponse.headers.entries()),
+						responseText: responseText,
+					});
 
 					let responseData;
 					try {
@@ -642,7 +632,7 @@ const ConfirmationScreen: React.FC = () => {
 						Ported_number: true,
 					};
 
-					console.log('Ebenkdata API request:', requestBody);
+					console.log("Ebenkdata API request:", requestBody);
 
 					apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
 						method: "POST",
@@ -654,10 +644,10 @@ const ConfirmationScreen: React.FC = () => {
 					});
 
 					responseText = await apiResponse.text();
-					console.log('Ebenkdata API response:', {
-					  status: apiResponse.status,
-					  headers: Object.fromEntries(apiResponse.headers.entries()),
-					  responseText: responseText.slice(0, 500),
+					console.log("Ebenkdata API response:", {
+						status: apiResponse.status,
+						headers: Object.fromEntries(apiResponse.headers.entries()),
+						responseText: responseText.slice(0, 500),
 					});
 
 					let responseData;
