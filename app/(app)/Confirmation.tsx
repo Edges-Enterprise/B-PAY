@@ -163,22 +163,7 @@ const ConfirmationScreen: React.FC = () => {
 		}
 	}, [errorModalVisible, timeLeft]);
 
-	// Log initial parameters
-	// useEffect(() => {
-	//   console.log('Received navigation params:', {
-	//     bundle: selectedBundle,
-	//     provider: selectedProvider,
-	//     phoneNumber,
-	//     transactionPin: '****',
-	//     userEmail,
-	//     referenceId,
-	//     balance: balanceValue,
-	//     networkId: parsedNetworkId,
-	//     planId: parsedPlanId,
-	//     purchaseType,
-	//   });
-	// }, [selectedBundle, selectedProvider, phoneNumber, transactionPin, userEmail, referenceId, balanceValue, parsedNetworkId, parsedPlanId, purchaseType]);
-
+	
 	// Fetch wallet balance and set up real-time subscription
 	useEffect(() => {
 		if (!userEmail) {
@@ -520,23 +505,23 @@ const ConfirmationScreen: React.FC = () => {
 						"request-id": `Data_${referenceId}`,
 					};
 
-					  console.log("Calling Supabase Edge Function with body:", requestBody);
-
-					console.log("Lizzysub API request:", requestBody);
+					// console.log("Lizzysub API request:", requestBody);
 
 					apiResponse = await fetch(SUPABASE_EDGE_URL, {
 						method: "POST",
-						headers: { "Content-Type": "application/json" },
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+						},
 						body: JSON.stringify(requestBody),
 					});
- console.log("Edge Function response status:", apiResponse.status);
-        console.log("Edge Function response ok:", apiResponse.ok);
+
 					responseText = await apiResponse.text();
-					console.log("Lizzysub API response:", {
-						status: apiResponse.status,
-						headers: Object.fromEntries(apiResponse.headers.entries()),
-						responseText: responseText,
-					});
+					// console.log("Lizzysub API response:", {
+					// 	status: apiResponse.status,
+					// 	headers: Object.fromEntries(apiResponse.headers.entries()),
+					// 	responseText: responseText,
+					// });
 
 					let responseData;
 					try {
