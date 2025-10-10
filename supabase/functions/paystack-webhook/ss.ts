@@ -9,8 +9,8 @@ const supabase = createClient(
 
 const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY")!;
 
-// Tiered pricing calculation - returns the FEE amount
-function calculateFees(grossAmount: number): number {
+// Tiered pricing calculation
+function calculateNetAmount(grossAmount: number): number {
 	if (grossAmount >= 500 && grossAmount <= 999) return 50;
 	if (grossAmount >= 1000 && grossAmount <= 1499) return 80;
 	if (grossAmount >= 1500 && grossAmount <= 2499) return 100;

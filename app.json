@@ -3,7 +3,7 @@
     "name": "Edges Network",
     "slug": "edges-network",
     "scheme": "edges-network",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
