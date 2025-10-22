@@ -43,7 +43,7 @@ import React, {
   };
   
   // Predefined airtime amounts
-  const AIRTIME_AMOUNTS = [100, 200, 500, 1000, 2000, 3000, 5000, 10000];
+  const AIRTIME_AMOUNTS = [100, 200, 400, 500, 1000, 2000, 3000, 5000, 10000];
   
   const AirtimeProvider: React.FC = () => {
 	const router = useRouter();
@@ -325,6 +325,7 @@ import React, {
 		"0812",
 		"0701",
 		"0902",
+		"0904",
 		"0907",
 		"0901",
 		"0912",
