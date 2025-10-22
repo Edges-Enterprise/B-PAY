@@ -352,7 +352,7 @@ export default function HistoryScreen() {
 												)}
 											</Text>
 											<Text style={styles.receiptSubField}>
-												- VAT: {formatAmount(fees.vat || grossAmount * 0.02)}
+												- SC: {formatAmount(fees.vat || grossAmount * 0.02)}
 											</Text>
 											<Text style={styles.receiptField}>
 												Total Fees:{" "}
@@ -382,7 +382,7 @@ export default function HistoryScreen() {
 												{formatAmount(fees.api_network_fee)}
 											</Text>
 											<Text style={styles.receiptSubField}>
-												- VAT: {formatAmount(fees.vat)}
+												- SC: {formatAmount(fees.vat)}
 											</Text>
 											<Text style={styles.receiptField}>
 												Total Fees: {formatAmount(fees.total_fee)}
