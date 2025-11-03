@@ -83,6 +83,7 @@ function AppStack() {
 			/>
 			<Stack.Screen name="referral" options={{ headerTitle: "Refer & Earn" }} />
 			<Stack.Screen name="commingsoon" options={{ headerShown: false }} />
+			<Stack.Screen name="confam" options={{ headerShown: false }} />
 			<Stack.Screen
 				name="Confirmation"
 				options={{

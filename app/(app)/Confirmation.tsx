@@ -587,108 +587,72 @@ const ConfirmationScreen: React.FC = () => {
 						);
 					}
 				} else {
-					// Use Ebenkdata API for non-Hot data plans
-					const ebenkUrl =
-						process.env.EXPO_PUBLIC_EBENK_URL || "https://ebenkdata.com";
-					const ebenkToken = process.env.EXPO_PUBLIC_EBENK_TOKEN;
-					if (!ebenkToken) {
-						const { error: refundError } = await supabase
-							.from("wallet")
-							.update({ balance: currentBalance })
-							.eq("user_email", userEmail);
+    // Use Lizzysub API for non-Hot data plans (via proxy)
+    const requestBody = {
+        network: parsedNetworkId,
+        phone: editableMobileNumber,
+        data_plan: selectedBundle.id,
+        bypass: false,
+        "request-id": `Data_${referenceId}`,
+    };
 
-						if (refundError) {
-							console.error("Error refunding wallet balance:", refundError);
-							throw new Error(
-								`Failed to refund wallet balance: ${refundError.message}`,
-							);
-						}
+					// console.log("Lizzysub API request (non-Hot):", requestBody);
 
-						setBalanceValue(currentBalance);
-						throw new Error(
-							"Edata token is not configured. Please check EXPO_PUBLIC_EBENK_TOKEN.",
-						);
-					}
+    apiResponse = await fetch(SUPABASE_EDGE_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(requestBody),
+    });
 
-					const requestBody = {
-						network: parsedNetworkId,
-						mobile_number: editableMobileNumber,
-						plan: parsedPlanId,
-						Ported_number: true,
-					};
+    responseText = await apiResponse.text();
 
-					console.log("Ebenkdata API request:", requestBody);
+    let responseData;
+    try {
+        responseData = JSON.parse(responseText);
+    } catch (parseError: any) {
+        const { error: refundError } = await supabase
+            .from("wallet")
+            .update({ balance: currentBalance })
+            .eq("user_email", userEmail);
+        if (refundError) {
+            console.error("Error refunding wallet balance:", refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+        }
+        setBalanceValue(currentBalance);
+        throw new Error(`Failed to parse Lizzy API response: ${parseError.message}`);
+    }
 
-					apiResponse = await fetch(`${ebenkUrl}/api/data/`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Token ${ebenkToken}`,
-						},
-						body: JSON.stringify(requestBody),
-					});
+    if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
+        const { error: refundError } = await supabase
+            .from("wallet")
+            .update({ balance: currentBalance })
+            .eq("user_email", userEmail);
+        if (refundError) {
+            console.error("Error refunding wallet balance:", refundError);
+            throw new Error(`Failed to refund wallet balance: ${refundError.message}`);
+        }
+        setBalanceValue(currentBalance);
 
-					responseText = await apiResponse.text();
-					console.log("Ebenkdata API response:", {
-						status: apiResponse.status,
-						headers: Object.fromEntries(apiResponse.headers.entries()),
-						responseText: responseText.slice(0, 500),
-					});
+        if (apiResponse.status === 400 && responseText.includes("insufficient balance")) {
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            return;
+        }
 
-					let responseData;
-					try {
-						responseData = JSON.parse(responseText);
-					} catch (parseError: any) {
-						const { error: refundError } = await supabase
-							.from("wallet")
-							.update({ balance: currentBalance })
-							.eq("user_email", userEmail);
+        if (responseText.includes("Invalid Data Plan ID or Network")) {
+            setTransactionModalVisible(false);
+            setErrorModalVisible(true);
+            Alert.alert("Error", "Invalid Data Plan ID or Network. Please select a valid plan and network.");
+            return;
+        }
 
-						if (refundError) {
-							console.error("Error refunding wallet balance:", refundError);
-							throw new Error(
-								`Failed to refund wallet balance: ${refundError.message}`,
-							);
-						}
-
-						setBalanceValue(currentBalance);
-						throw new Error(
-							`Failed to parse Edata API response: ${parseError.message}`,
-						);
-					}
-
-					if (!(apiResponse.status === 200 || apiResponse.status === 201)) {
-						const { error: refundError } = await supabase
-							.from("wallet")
-							.update({ balance: currentBalance })
-							.eq("user_email", userEmail);
-
-						if (refundError) {
-							console.error("Error refunding wallet balance:", refundError);
-							throw new Error(
-								`Failed to refund wallet balance: ${refundError.message}`,
-							);
-						}
-
-						setBalanceValue(currentBalance);
-
-						if (
-							apiResponse.status === 400 &&
-							responseText.includes(
-								"You can't purchase this plan due to insufficient balance",
-							)
-						) {
-							setTransactionModalVisible(false);
-							setErrorModalVisible(true);
-							// Alert.alert('Error', 'Insufficient balance on Ebenkdata API. Please try again later.');
-							return;
-						}
-
-						const errorMessage =
-							responseData.message || responseText.slice(0, 100);
-						throw new Error(`Edata API request failed: ${errorMessage}`);
-					}
-				}
+        const errorMessage = responseData.message || responseText.slice(0, 100);
+        throw new Error(`Lizzy API request failed: ${errorMessage}`);
+    }
+}
 			} else if (purchaseType === "airtime") {
 				// Use Ebenkdata API for airtime purchases
 				const ebenkUrl =

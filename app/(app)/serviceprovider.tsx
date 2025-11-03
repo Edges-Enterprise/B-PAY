@@ -34,12 +34,13 @@ interface DataBundle {
 }
 
 interface Provider {
-	id: number;
-	name: string;
-	image: number;
-	code?: string;
-	imageKey?: string;
-	availablePlanTypes?: string[];
+  id: number;               
+  name: string;
+  image: number;
+  code?: string;
+  imageKey?: string;
+  availablePlanTypes?: string[];
+  lizzysubId: number;      
 }
 
 const VALID_PLAN_TYPES = [
@@ -191,45 +192,36 @@ const BuyDataScreen: React.FC = () => {
 
 	useEffect(() => {
 		if (params.provider && params.networkId) {
-			try {
-				const provider = JSON.parse(params.provider);
-				const id = parseInt(params.networkId, 10);
-				if (provider?.id && !isNaN(id)) {
-					const normalizedProvider: Provider = {
-						id: provider.id,
-						name: provider.name.toUpperCase(),
-						code: provider.code,
-						imageKey: provider.imageKey,
-						image:
-							provider.imageKey && provider.imageKey !== "DEFAULT"
-								? NETWORK_IMAGES[provider.imageKey] || DEFAULT_PROVIDER_IMAGE
-								: DEFAULT_PROVIDER_IMAGE,
-						availablePlanTypes: provider.availablePlanTypes || [],
-					};
-					setSelectedProvider(normalizedProvider);
-					setNetworkId(id);
-					console.log(
-					  "Initialized provider:",
-					  normalizedProvider,
-					  "networkId:",
-					  id,
-					);
-				} else {
-					console.error("Invalid provider or networkId:", { provider, id });
-					Alert.alert("Error", "Invalid provider data");
-					router.back();
-				}
-			} catch (error) {
-				console.error("Error parsing provider params:", error);
-				Alert.alert("Error", "Failed to load provider data");
-				router.back();
-			}
-		} else {
-			console.error("Missing provider or networkId in params");
-			Alert.alert("Error", "No provider selected");
-			router.back();
-		}
-	}, [params.provider, params.networkId]);
+    try {
+      const provider = JSON.parse(params.provider);
+      const id = parseInt(params.networkId, 10);
+      if (!provider?.id || isNaN(id)) throw new Error("Invalid data");
+
+      const normalized: Provider = {
+        id,
+        name: provider.name.toUpperCase(),
+        code: provider.code,
+        imageKey: provider.imageKey,
+        image:
+          provider.imageKey && provider.imageKey !== "DEFAULT"
+            ? NETWORK_IMAGES[provider.imageKey] || DEFAULT_PROVIDER_IMAGE
+            : DEFAULT_PROVIDER_IMAGE,
+        availablePlanTypes: provider.availablePlanTypes || [],
+        lizzysubId: id,
+      };
+
+      setSelectedProvider(normalized);
+      setNetworkId(id);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to load provider");
+      router.back();
+    }
+  } else {
+    Alert.alert("Error", "No provider selected");
+    router.back();
+  }
+}, [params.provider, params.networkId]);
 
 	useEffect(() => {
 		if (selectedProvider) {
@@ -886,22 +878,23 @@ const BuyDataScreen: React.FC = () => {
 
 			router.push({
 				pathname: "/Confirmation",
-				params: {
-					bundle: JSON.stringify(selectedBundle),
-					provider: JSON.stringify({
-						id: selectedProvider.id,
-						name: selectedProvider.name,
-						code: selectedProvider.code,
-						imageKey: selectedProvider.imageKey || "DEFAULT",
-					}),
-					phoneNumber: phoneNumberInput,
-					transactionPin: transactionPinInput,
-					userEmail,
-					referenceId: reference,
-					balance: walletBalance.toString(),
-					networkId: finalNetworkId.toString(),
-					planId: selectedBundle.id.toString(),
-					purchaseType: "data",
+  params: {
+    bundle: JSON.stringify(selectedBundle),
+    provider: JSON.stringify({
+      id: selectedProvider.id,
+      name: selectedProvider.name,
+      code: selectedProvider.code,
+      imageKey: selectedProvider.imageKey || "DEFAULT",
+      lizzysubId: selectedProvider.lizzysubId,
+    }),
+    phoneNumber: phoneNumberInput,
+    transactionPin: transactionPinInput,
+    userEmail,
+    referenceId: reference,
+    balance: walletBalance.toString(),
+    networkId: finalNetworkId.toString(),
+    planId: selectedBundle.id.toString(),
+    purchaseType: "data",
 				},
 			});
 		} catch (error) {

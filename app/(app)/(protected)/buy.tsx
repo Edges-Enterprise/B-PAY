@@ -1,194 +1,154 @@
+// buy.tsx
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
-	View,
-	Text,
-	Pressable,
-	Image,
-	ScrollView,
-	StyleSheet,
-	ActivityIndicator,
-	Alert,
+  View,
+  Text,
+  Pressable,
+  Image,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { NETWORK_IMAGES, DEFAULT_PROVIDER_IMAGE } from "@/constants/helper";
 import SwipeWrapper from "../../../components/SwipeWrapper";
 
 interface Provider {
-	id: number;
-	name: string;
-	image: number;
-	code: string;
-	imageKey?: string;
-	availablePlanTypes?: string[];
-	ebenkId: number;
-	lizzysubId: number;
+  id: number;               
+  name: string;
+  image: number;
+  code: string;
+  imageKey?: string;
+  availablePlanTypes?: string[];
+  lizzysubId: number;       
 }
 
 const SUPPORTED_PROVIDERS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
-const VALID_PLAN_TYPES = [
-	"SME",
-	"SME_GIFTING",
-	"CORPORATE_GIFTING",
-	"GIFTING",
-	"STANDARD",
-	"HOTPLAN",
-];
 
-const NETWORK_ID_MAPPING = {
-	MTN: { ebenk: 1, lizzysub: 1 },
-	AIRTEL: { ebenk: 4, lizzysub: 2 },
-	GLO: { ebenk: 2, lizzysub: 3 },
-	"9MOBILE": { ebenk: 3, lizzysub: 4 },
+/** Lizzy plan_network → provider name */
+const NETWORK_MAP: { [key: number]: string } = {
+  1: "MTN",
+  2: "AIRTEL",
+  3: "GLO",
+  4: "9MOBILE",
 };
 
 const ServiceProviderScreen: React.FC = () => {
-  const flatListRef = useRef(null);
-	const params = useLocalSearchParams<{ balance?: string }>();
-	const [providers, setProviders] = useState<Provider[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>(
-		{},
-	);
-	const scrollViewRef = useRef<ScrollView>(null);
+  const params = useLocalSearchParams<{ balance?: string }>();
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>({});
+  const scrollViewRef = useRef<ScrollView>(null);
 
-	// Instead of fetching, just build providers from hardcoded mapping
-	const loadProviders = () => {
-		try {
-			setLoading(true);
-			setError(null);
+  const loadProviders = useCallback(() => {
+    try {
+      setLoading(true);
+      setError(null);
 
-			const mappedProviders: Provider[] = SUPPORTED_PROVIDERS.map((name) => {
-				const mapping =
-					NETWORK_ID_MAPPING[name as keyof typeof NETWORK_ID_MAPPING];
-				return {
-					id: mapping.ebenk, // we’ll just use EbenkId as the main id
-					name,
-					image: NETWORK_IMAGES[name] || DEFAULT_PROVIDER_IMAGE,
-					code: name.toLowerCase(),
-					imageKey: name,
-					availablePlanTypes: VALID_PLAN_TYPES,
-					ebenkId: mapping.ebenk,
-					lizzysubId: mapping.lizzysub,
-				};
-			});
+      const mapped: Provider[] = SUPPORTED_PROVIDERS.map(name => {
+        const id = Object.entries(NETWORK_MAP).find(([, v]) => v === name)![0];
+        return {
+          id: Number(id),
+          name,
+          image: NETWORK_IMAGES[name] || DEFAULT_PROVIDER_IMAGE,
+          code: name.toLowerCase(),
+          imageKey: name,
+          availablePlanTypes: ["SME", "SME_GIFTING", "CORPORATE_GIFTING", "GIFTING", "STANDARD"],
+          lizzysubId: Number(id),
+        };
+      });
 
-			setProviders(mappedProviders);
-			// console.log("Loaded providers from mapping:", mappedProviders);
-		} catch (err: any) {
-			setError("Could not load providers. Please try again.");
-			setProviders([]);
-			console.error("Provider load error:", err);
-		} finally {
-			setLoading(false);
-		}
-	};
+      setProviders(mapped);
+    } catch (e: any) {
+      setError("Could not load providers.");
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-	useEffect(() => {
-		loadProviders();
-	}, []);
+  useEffect(() => loadProviders(), [loadProviders]);
 
-	const selectProvider = (provider: Provider) => {
-		if (isNaN(provider.ebenkId) || provider.ebenkId <= 0) {
-			console.error("Invalid networkId for provider:", provider);
-			Alert.alert("Error", "Invalid provider data.");
-			return;
-		}
+  const selectProvider = (p: Provider) => {
+    const balance = params.balance || "0";
 
-		const serializableProvider = {
-			id: provider.id,
-			name: provider.name,
-			code: provider.code,
-			imageKey: provider.imageKey,
-			image: provider.image,
-			availablePlanTypes: provider.availablePlanTypes,
-			ebenkId: provider.ebenkId,
-			lizzysubId: provider.lizzysubId,
-		};
+    router.push({
+      pathname: "/(app)/serviceprovider",
+      params: {
+        provider: JSON.stringify({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          imageKey: p.imageKey,
+          image: p.image,
+          availablePlanTypes: p.availablePlanTypes,
+          lizzysubId: p.lizzysubId,
+        }),
+        networkId: p.id.toString(),
+        balance,
+      },
+    });
+  };
 
-		const balance = params.balance || "0";
+  const handleRetry = () => loadProviders();
 
-		router.push({
-			pathname: "/(app)/serviceprovider",
-			params: {
-				provider: JSON.stringify(serializableProvider),
-				networkId: provider.id.toString(),
-				ebenkId: provider.ebenkId.toString(),
-				lizzysubId: provider.lizzysubId.toString(),
-				balance,
-			},
-		});
-	};
+  const handleImageError = (name: string) => {
+    setImageErrors(prev => ({ ...prev, [name]: true }));
+  };
 
-	const handleRetry = useCallback(() => {
-		loadProviders();
-		Alert.alert("Retrying", "Fetching providers...");
-	}, []);
+  return (
+    <SwipeWrapper scrollViewRef={scrollViewRef}>
+      <ScrollView ref={scrollViewRef} style={styles.container}>
+        <Text style={styles.title}>Select Data Provider</Text>
 
-	const handleImageError = (providerName: string) => {
-		console.warn(`Image failed to load for ${providerName}`);
-		setImageErrors((prev) => ({ ...prev, [providerName]: true }));
-	};
-
-	return (
-		<SwipeWrapper scrollViewRef={scrollViewRef} flatListRef={flatListRef}>
-			<ScrollView
-				ref={scrollViewRef}
-				style={styles.container}
-				scrollEventThrottle={16}
-			>
-				<Text style={styles.title}>📱 Select Data Provider</Text>
-
-				{loading ? (
-					<View style={styles.loadingContainer}>
-						<ActivityIndicator size="large" color="#00ff88" />
-						<Text style={styles.loadingText}>Loading providers...</Text>
-					</View>
-				) : error ? (
-					<View style={styles.errorContainer}>
-						<Text style={styles.errorText}>{error}</Text>
-						<Pressable onPress={handleRetry} style={styles.retryButton}>
-							<Text style={styles.retryButtonText}>Retry</Text>
-						</Pressable>
-					</View>
-				) : providers.length === 0 ? (
-					<Text style={styles.noProvidersText}>No providers available.</Text>
-				) : (
-					<View style={styles.providerGrid}>
-						{providers.map((provider) => (
-							<Pressable
-								key={`${provider.name}-${provider.ebenkId}-${provider.lizzysubId}`}
-								onPress={() => selectProvider(provider)}
-								style={styles.providerCard}
-								accessible={true}
-								accessibilityLabel={`Select ${provider.name} provider`}
-								accessibilityRole="button"
-							>
-								<View style={styles.providerCardContent}>
-									{imageErrors[provider.name] ? (
-										<View style={styles.fallbackContainer}>
-											<Text style={styles.fallbackText}>{provider.name}</Text>
-										</View>
-									) : (
-										<Image
-											source={provider.image}
-											style={styles.providerLogo}
-											resizeMode="contain"
-											onError={() => handleImageError(provider.name)}
-										/>
-									)}
-									<Text style={styles.providerName}>{provider.name}</Text>
-									{/* <Text style={styles.supportInfo}>
-										Ebenk: {provider.ebenkId} | Lizzysub: {provider.lizzysubId}
-									</Text> */}
-								</View>
-							</Pressable>
-						))}
-					</View>
-				)}
-			</ScrollView>
-		</SwipeWrapper>
-	);
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#00ff88" />
+            <Text style={styles.loadingText}>Loading providers...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={handleRetry} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : providers.length === 0 ? (
+          <Text style={styles.noProvidersText}>No providers available.</Text>
+        ) : (
+          <View style={styles.providerGrid}>
+            {providers.map(p => (
+              <Pressable
+                key={`${p.name}-${p.id}`}
+                onPress={() => selectProvider(p)}
+                style={styles.providerCard}
+                accessibilityLabel={`Select ${p.name} provider`}
+                accessibilityRole="button"
+              >
+                <View style={styles.providerCardContent}>
+                  {imageErrors[p.name] ? (
+                    <View style={styles.fallbackContainer}>
+                      <Text style={styles.fallbackText}>{p.name}</Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={p.image}
+                      style={styles.providerLogo}
+                      resizeMode="contain"
+                      onError={() => handleImageError(p.name)}
+                    />
+                  )}
+                  <Text style={styles.providerName}>{p.name}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SwipeWrapper>
+  );
 };
 
 const styles = StyleSheet.create({
