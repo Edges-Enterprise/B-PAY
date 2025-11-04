@@ -98,7 +98,7 @@ export default function GenerateToken() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#FFCC00" />
-      <Text style={styles.text}>Generating secure token...</Text>
+      <Text style={styles.text}>✈Generating Discount code...</Text>
     </View>
   );
 }
