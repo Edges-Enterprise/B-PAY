@@ -12,9 +12,6 @@ const corsHeaders = {
 const LIZZYSUB_TOKEN = "b5b39c2645893a318c432507d00a91270f39bd987e5fcc904dc72276a00c";
 const LIZZY_USER_ENDPOINT = "https://lizzysub.com/api/user";
 
-const LIZZY_REFUND_WALLET = "lizzy-refunds@edges.app"; // Your internal refund wallet
-
-// Service prefixes (must match your app's reference generation)
 const SERVICE_PREFIXES = {
   AIRTIME: "Airtime_",
   DATA: "Data_",
@@ -25,25 +22,23 @@ const SERVICE_PREFIXES = {
 
 type ServiceType = keyof typeof SERVICE_PREFIXES;
 
-// Notification titles
 const NOTIFICATION = {
   SUCCESS: "Service Delivered",
   FAILED_REFUNDED: "Delivery Failed – Refunded",
   PENDING: "Processing...",
 };
 
-// Global cache for Lizzysub user (fetched once per invocation, but could be cached longer)
 let lizzyUser: any = null;
 
 // === MAIN HANDLER ===
 serve(async (req) => {
-  // Fetch Lizzysub user context at start
+  // Fetch Lizzysub user context
   try {
     lizzyUser = await fetchLizzyUser();
     console.log(`[Lizzysub User] Logged in as: ${lizzyUser?.username || 'Unknown'} (Balance: ₦${lizzyUser?.balance || 0})`);
   } catch (error) {
     console.error("[Lizzysub User Fetch Error]", error);
-    lizzyUser = { username: "Unknown", balance: 0 }; // Fallback
+    lizzyUser = { username: "Unknown", balance: 0 };
   }
 
   // CORS Preflight
@@ -69,7 +64,6 @@ serve(async (req) => {
     return jsonResponse({ error: "Missing request-id or status" }, 400);
   }
 
-  // Detect service from prefix
   const serviceType = detectServiceFromRequestId(requestId);
   if (!serviceType) {
     return jsonResponse({ error: "Invalid or unsupported request-id prefix" }, 400);
@@ -96,19 +90,17 @@ serve(async (req) => {
     return jsonResponse({ status: "ignored", reason: "tx_not_found" }, 200);
   }
 
-  const userPaidAmount = Math.abs(tx.amount); // Always positive
+  const userPaidAmount = Math.abs(tx.amount);
   const wasSuccess = tx.status === "success";
   const wasPending = ["pending", "processing"].includes(tx.status);
 
-  // === LOG INCOMING WEBHOOK (with Lizzysub user context) ===
   console.log(
     `[Webhook] ${serviceType} | LizzyUser: ${lizzyUser.username} | Ref: ${reference} | Lizzy: ${status} | UserPaid: ₦${userPaidAmount} | Prev: ${tx.status}`
   );
 
-  // === CASE 1: SUCCESS (Delivered) ===
+  // === CASE 1: SUCCESS ===
   if (isSuccess) {
     if (!wasSuccess && wasPending) {
-      // Finalize: already deducted during purchase
       await updateTransaction(supabase, tx.id, "success", payload, lizzyUser);
     }
 
@@ -118,12 +110,14 @@ serve(async (req) => {
       type: "success",
     });
 
-    return jsonResponse({ status: "success", action: "delivered", lizzy_user: lizzyUser.username }, 200);
+    return jsonResponse(
+      { status: "success", action: "delivered", lizzy_user: lizzyUser.username },
+      200
+    );
   }
 
-  // === CASE 2: FAILURE (Not Delivered) ===
+  // === CASE 2: FAILURE ===
   if (!isSuccess) {
-    // If no refund_amount → hold funds, mark pending
     if (refund_amount === undefined || refund_amount === null) {
       await updateTransaction(supabase, tx.id, "pending_refund", payload, lizzyUser);
       await sendNotification(supabase, tx.user_email, {
@@ -139,18 +133,14 @@ serve(async (req) => {
       return jsonResponse({ error: "Invalid refund_amount" }, 400);
     }
 
-    // Refund user FULL amount (only if previously charged)
     if (wasSuccess || wasPending) {
       await refundUserWallet(supabase, tx.user_email, userPaidAmount);
     }
 
-    // Credit your internal refund wallet
     await creditLizzyRefundWallet(supabase, lizzyRefund);
 
-    // Update transaction (now with Lizzysub user context)
     await updateTransaction(supabase, tx.id, "failed", payload, lizzyUser);
 
-    // Notify user
     const serviceName = getServiceName(serviceType, tx.metadata);
     await sendNotification(supabase, tx.user_email, {
       title: NOTIFICATION.FAILED_REFUNDED,
@@ -162,19 +152,22 @@ serve(async (req) => {
       `[Refund] ${serviceType} | LizzyUser: ${lizzyUser.username} | User: +₦${userPaidAmount} | Lizzy: +₦${lizzyRefund} | Ref: ${reference}`
     );
 
-    return jsonResponse({
-      status: "refunded",
-      service: serviceType,
-      lizzy_user: lizzyUser.username,
-      user_refunded: userPaidAmount,
-      lizzy_refunded: lizzyRefund,
-    }, 200);
+    return jsonResponse(
+      {
+        status: "refunded",
+        service: serviceType,
+        lizzy_user: lizzyUser.username,
+        user_refunded: userPaidAmount,
+        lizzy_refunded: lizzyRefund,
+      },
+      200
+    );
   }
 
   return jsonResponse({ status: "no_action" }, 200);
 });
 
-// === NEW: FETCH LIZZYSUB USER ===
+// === HELPERS ===
 async function fetchLizzyUser(): Promise<any> {
   const response = await fetch(LIZZY_USER_ENDPOINT, {
     method: "GET",
@@ -187,11 +180,9 @@ async function fetchLizzyUser(): Promise<any> {
   if (!response.ok) {
     throw new Error(`Failed to fetch Lizzysub user: ${response.status}`);
   }
-
   return await response.json();
 }
 
-// === HELPER FUNCTIONS ===
 function jsonResponse(body: any, status: number) {
   return new Response(JSON.stringify(body), {
     status,
@@ -230,7 +221,6 @@ async function refundUserWallet(supabase: any, email: string, amount: number) {
     .from("wallet")
     .update({ balance: supabase.raw(`balance + ${amount}`) })
     .eq("user_email", email);
-
   if (error) console.error("[Refund Error]", error);
 }
 
@@ -239,17 +229,24 @@ async function creditLizzyRefundWallet(supabase: any, amount: number) {
     .from("wallet")
     .update({ balance: supabase.raw(`balance + ${amount}`) })
     .eq("user_email", LIZZY_REFUND_WALLET);
-
   if (error) console.error("[Lizzy Credit Error]", error);
 }
 
-async function updateTransaction(supabase: any, txId: number, status: string, payload: any, lizzyUser: any) {
+async function updateTransaction(
+  supabase: any,
+  txId: number,
+  status: string,
+  payload: any,
+  lizzyUser: any
+) {
   const { error } = await supabase
     .from("transactions")
     .update({
       status,
       metadata: supabase.raw(
-        `metadata || '{"lizzy_webhook": ${JSON.stringify(payload)}, "lizzy_user": ${JSON.stringify(lizzyUser)}, "updated_at": "${new Date().toISOString()}"}'::jsonb`
+        `COALESCE(metadata, '{}') || '{"lizzy_webhook": ${JSON.stringify(
+          payload
+        )}, "lizzy_user": ${JSON.stringify(lizzyUser)}, "updated_at": "${new Date().toISOString()}"}'::jsonb`
       ),
     })
     .eq("id", txId);
@@ -269,7 +266,6 @@ async function sendNotification(
     type: notif.type,
     read: false,
   });
-
   if (error) console.error("[Notification Error]", error);
 }
 

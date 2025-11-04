@@ -28,7 +28,7 @@ import { useRouter } from "expo-router";
 // -----------------------------------------------------------------------------
 // Separate Proxy URLs
 const AIRTIME_PROXY_URL =
-  "https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/airtime-proxy";
+  "https://jjyyfaxcwanrmiipzkoj.supabase.co/functions/v1/airtime_proxy";
 
 
 // -----------------------------------------------------------------------------
