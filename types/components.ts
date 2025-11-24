@@ -13,8 +13,8 @@ export interface RotatingTextProps {
   
   export interface ButtonsProps {
 		handleNavigation: (
-			route: "/sign-in" | "/sign-up",
-			actionType: "signup" | "signin",
+			route: "/welcome" | "/welcome",
+			actionType: "welcome" | "welcome",
 		) => void;
 		buttonScale: SharedValue<number>;
 	}

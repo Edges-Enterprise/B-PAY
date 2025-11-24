@@ -1,0 +1,224 @@
+<!-- animated-branching-lightning.svg -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 200 400"
+     width="200" height="400"
+     role="img"
+     aria-labelledby="lightningTitle"
+     preserveAspectRatio="xMidYMid meet"
+     style="display:block;">
+  <title id="lightningTitle">Animated branching lightning strike</title>
+
+  <defs>
+    <!-- soft glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <!-- blurred colored glow -->
+      <feGaussianBlur stdDeviation="6" result="blur1" />
+      <feGaussianBlur stdDeviation="14" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- thin highlight for center -->
+    <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.6" result="g1"/>
+      <feMerge><feMergeNode in="g1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- a subtle noise-like motion for flicker via SVG animateTransform on tiny scale -->
+    <clipPath id="bolt-clip">
+      <path d="M100 4 L76 120 L108 120 L68 220 L110 170 L86 260 L140 140 L108 320 L160 220" />
+    </clipPath>
+
+    <style>
+      /* stroke colors and overall timing */
+      :root {
+        --bolt-color: #fff9b0;   /* core brighten */
+        --core-stroke: #fff;     /* inner stroke */
+        --glow-color: #ffd44d;   /* outer glow */
+        --accent: #ffe7a0;       /* subtle fill */
+        --strike-duration: 420ms;
+      }
+
+      .bolt, .branch {
+        fill: none;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      /* main bolt (thicker core) */
+      .bolt-core {
+        stroke: var(--core-stroke);
+        stroke-width: 6;
+        filter: url(#innerGlow);
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: strike var(--strike-duration) cubic-bezier(.2,.8,.2,1) forwards,
+                   flicker-main 900ms linear 120ms infinite;
+        transform-origin: center;
+      }
+
+      /* main outer glow (soft) */
+      .bolt-glow {
+        stroke: var(--glow-color);
+        stroke-width: 12;
+        opacity: 0.95;
+        filter: url(#glow);
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: strike var(--strike-duration) cubic-bezier(.2,.8,.2,1) forwards,
+                   glow-fade 1300ms ease-in 140ms forwards;
+      }
+
+      /* subtle accent stroke */
+      .bolt-accent {
+        stroke: var(--accent);
+        stroke-width: 3;
+        mix-blend-mode: screen;
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: strike var(--strike-duration) cubic-bezier(.2,.8,.2,1) forwards;
+        opacity: 0.85;
+      }
+
+      /* branches (shorter, delayed strike and flicker) */
+      .branch {
+        stroke: var(--core-stroke);
+        stroke-width: 3;
+        opacity: 0.0;
+        stroke-dasharray: 500;
+        stroke-dashoffset: 500;
+        animation: branch-strike 360ms cubic-bezier(.2,.8,.2,1) forwards;
+      }
+
+      .branch.glow {
+        stroke: var(--glow-color);
+        stroke-width: 7;
+        filter: url(#glow);
+        opacity: 0.0;
+        stroke-dasharray: 500;
+        stroke-dashoffset: 500;
+        animation: branch-strike 360ms cubic-bezier(.2,.8,.2,1) forwards;
+      }
+
+      /* timing offsets for branches to feel organic */
+      .branch.delay-1 { animation-delay: 90ms; }
+      .branch.delay-2 { animation-delay: 160ms; }
+      .branch.glow.delay-1 { animation-delay: 95ms; }
+      .branch.glow.delay-2 { animation-delay: 165ms; }
+
+      /* tiny flicker of core + glow to make it alive */
+      @keyframes flicker-main {
+        0%   { opacity: 1; transform: scale(1) }
+        10%  { opacity: 0.8; transform: scale(1.02) }
+        20%  { opacity: 1; transform: scale(0.995) }
+        40%  { opacity: 0.85; transform: scale(1.01) }
+        60%  { opacity: 1; transform: scale(1) }
+        100% { opacity: 0.95; transform: scale(1) }
+      }
+
+      /* main stroke draw animation (dashoffset) */
+      @keyframes strike {
+        0%   { stroke-dashoffset: 1000; opacity: 0.0; transform: translateY(-10px) }
+        35%  { stroke-dashoffset: 220; opacity: 1.0; transform: translateY(4px) }
+        75%  { stroke-dashoffset: 12; opacity: 1.0; transform: translateY(0px) }
+        100% { stroke-dashoffset: 0; opacity: 1.0; transform: translateY(0px) }
+      }
+
+      /* branches draw (shorter) */
+      @keyframes branch-strike {
+        0%   { stroke-dashoffset: 500; opacity: 0.0; transform: translateY(-6px) }
+        40%  { stroke-dashoffset: 90; opacity: 1.0; transform: translateY(2px) }
+        85%  { stroke-dashoffset: 6; opacity: 1.0; transform: translateY(0px) }
+        100% { stroke-dashoffset: 0; opacity: 1.0; }
+      }
+
+      /* glow fade out after strike */
+      @keyframes glow-fade {
+        0%   { opacity: 0.95; filter: url(#glow) }
+        40%  { opacity: 0.95; }
+        80%  { opacity: 0.28; }
+        100% { opacity: 0.14; }
+      }
+
+      /* an additional subtle overall flash (use sparingly if desired) */
+      .flash {
+        animation: screen-flash 140ms linear 80ms forwards;
+        transform-origin: center;
+      }
+      @keyframes screen-flash {
+        0% { opacity: 0; }
+        30% { opacity: 0.18; }
+        100% { opacity: 0; }
+      }
+
+      /* tiny randomized flicker for glow layers (makes branches glint) */
+      @keyframes glow-twitch {
+        0% { opacity: 0.95; filter: url(#glow) }
+        25% { opacity: 0.6; }
+        50% { opacity: 0.9; }
+        75% { opacity: 0.75; }
+        100%{ opacity: 0.95; }
+      }
+
+      /* optional long tail fade for branches */
+      .branch-tail { animation: branch-tail 2200ms ease-out 300ms forwards; }
+      @keyframes branch-tail {
+        0% { opacity: 1; }
+        100% { opacity: 0.08; }
+      }
+    </style>
+  </defs>
+
+  <!-- Optional subtle fullscreen-ish flash rectangle (useful if toggled) -->
+  <rect x="0" y="0" width="200" height="400" fill="#fff" opacity="0" class="flash" />
+
+  <!-- MAIN BOLT: glow layer (draws slightly earlier to produce glow) -->
+  <path class="bolt bolt-glow"
+        d="M100 6
+           L78 110
+           L108 110
+           L68 210
+           L110 160
+           L86 260
+           L140 140
+           L108 320
+           L160 220"
+        stroke-linejoin="round" stroke-linecap="round" />
+
+  <!-- ACCENT thin highlight -->
+  <path class="bolt bolt-accent"
+        d="M100 10 L82 110 L108 112 L72 200 L110 162 L88 254 L140 144 L110 318 L156 226" />
+
+  <!-- CORE (bright) -->
+  <path class="bolt bolt-core"
+        d="M100 6
+           L78 110
+           L108 110
+           L68 210
+           L110 160
+           L86 260
+           L140 140
+           L108 320
+           L160 220" />
+
+  <!-- BRANCHES: two branches with glow + core, delayed to feel organic -->
+  <path class="branch glow delay-1"
+        d="M88 120 L54 98 L30 142" />
+  <path class="branch delay-1 branch-tail"
+        d="M88 120 L54 98 L30 142" />
+
+  <path class="branch glow delay-2"
+        d="M118 160 L146 130 L176 152" />
+  <path class="branch delay-2 branch-tail"
+        d="M118 160 L146 130 L176 152" />
+
+  <!-- tiny sparkles at edges (opacity animated via CSS flicker if you want) -->
+  <g opacity="0.9" transform="translate(0,0)">
+    <circle cx="28" cy="142" r="2.2" fill="#fff" style="opacity:0.0; animation: glow-twitch 900ms linear 220ms forwards;" />
+    <circle cx="176" cy="152" r="2.2" fill="#fff" style="opacity:0.0; animation: glow-twitch 1000ms linear 260ms forwards;" />
+  </g>
+</svg>

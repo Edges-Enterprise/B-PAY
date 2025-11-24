@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Dual-metal gradient for building, roof, base -->
+    <linearGradient id="dualMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="25%" stop-color="#FFC107"/>
+      <stop offset="50%" stop-color="#C0C0C0"/>
+      <stop offset="75%" stop-color="#D8D8D8"/>
+      <stop offset="100%" stop-color="#FFD700"/>
+    </linearGradient>
+
+    <!-- Columns metallic gradient -->
+    <linearGradient id="columns" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7a7a7a"/>
+      <stop offset="50%" stop-color="#505050"/>
+      <stop offset="100%" stop-color="#303030"/>
+    </linearGradient>
+
+    <!-- Deep blue gradient for inner circle -->
+    <radialGradient id="deepBlue" cx="40%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#0A74A8"/>
+      <stop offset="50%" stop-color="#0A4C80"/>
+      <stop offset="100%" stop-color="#072C5A"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Double gold circle border -->
+  <circle cx="120" cy="120" r="115" fill="transparent" stroke="#FFD700" stroke-width="4"/>
+  <circle cx="120" cy="120" r="108" fill="transparent" stroke="#FFD700" stroke-width="2"/>
+
+  <!-- Inner deep blue background -->
+  <circle cx="120" cy="120" r="98" fill="url(#deepBlue)"/>
+
+  <!-- Dark circular overlay covering the entire logo -->
+  <circle cx="120" cy="120" r="110" fill="rgba(0,0,0,0.4)"/>
+
+  <!-- Bank icon -->
+  <g transform="translate(20,38) scale(1.4)">
+    <!-- Roof -->
+    <polygon points="15,35 70,5 125,35" fill="url(#dualMetal)" stroke="#b8860b" stroke-width="1.5"/>
+    <!-- Pediment -->
+    <rect x="25" y="35" width="90" height="6" fill="#d4d7da"/>
+    <!-- Building body -->
+    <rect x="30" y="41" width="80" height="65" rx="4" fill="url(#dualMetal)" stroke="#6c6c6c" stroke-width="1.5"/>
+    <!-- Columns -->
+    <g fill="url(#columns)">
+      <rect x="38" y="46" width="7" height="55" rx="2"/>
+      <rect x="56" y="46" width="7" height="55" rx="2"/>
+      <rect x="74" y="46" width="7" height="55" rx="2"/>
+      <rect x="92" y="46" width="7" height="55" rx="2"/>
+    </g>
+    <!-- Base -->
+    <rect x="25" y="106" width="90" height="6" fill="url(#dualMetal)" stroke="#b8860b" stroke-width="1"/>
+    <!-- Three golden rings on roof -->
+    <circle cx="50" cy="12" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+    <circle cx="70" cy="8" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+    <circle cx="90" cy="12" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+  </g>
+
+  <!-- B-Pay text (white fill, black stroke) -->
+  <text
+    x="120"
+    y="145"
+    text-anchor="middle"
+    font-family="Poppins, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+    font-weight="900"
+    font-size="70"
+    fill="white"
+    stroke="black"
+    stroke-width="2"
+    letter-spacing="1"
+  >
+    B-Pay
+  </text>
+
+  <!-- Inner gloss highlight -->
+  <ellipse cx="120" cy="80" rx="80" ry="40" fill="rgba(255,255,255,0.15)"/>
+</svg>

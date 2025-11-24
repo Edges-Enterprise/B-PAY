@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Edges Network",
-    "slug": "edges-network",
-    "scheme": "edges-network",
+    "name": "B-pay",
+    "slug": "b-pay",
+    "scheme": "b-pay",
     "version": "1.1.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -12,7 +12,7 @@
     ],
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.edgesnetwork.app",
+      "bundleIdentifier": "com.b-pay.app",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -48,7 +48,7 @@
       },
       "jsEngine": "hermes",
       "enableProguardInReleaseBuilds": true,
-      "package": "com.edgesnetwork.app",
+      "package": "com.phoenixboss.bpay",
       "googleServicesFile": "./google-services.json"
     },
     "experiments": {
@@ -63,7 +63,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "c3303360-7e01-48dd-9c1d-a9dff8b12e97"
+        "projectId": "dd06b728-8ffa-4974-88c6-89ff6088c102"
       }
     },
     "owner": "phoenix-boss",
@@ -71,10 +71,10 @@
       "policy": "appVersion"
     },
     "updates": {
-			"enabled": true,
-			"checkAutomatically": "ON_LOAD",
-			"fallbackToCacheTimeout": 0,
-			"url": "https://u.expo.dev/c3303360-7e01-48dd-9c1d-a9dff8b12e97"
-		}
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/dd06b728-8ffa-4974-88c6-89ff6088c102"
+    }
   }
 }

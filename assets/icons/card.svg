@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="900" height="580" viewBox="0 0 900 580">
+
+  <defs>
+    <!-- Premium Dark Gradient (Front Card) -->
+    <linearGradient id="cardDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+
+    <!-- Black Metal Gradient (Back Card) -->
+    <linearGradient id="blackMetal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="50%" stop-color="#111111"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+
+    <!-- Brushed Metal Overlay -->
+    <pattern id="brushed" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path d="M0 0 L4 0 M0 1 L4 1 M0 2 L4 2 M0 3 L4 3" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+    </pattern>
+
+    <!-- Gold Border -->
+    <linearGradient id="goldBorder" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e0b700"/>
+      <stop offset="50%" stop-color="#fff5b5"/>
+      <stop offset="100%" stop-color="#b58e00"/>
+    </linearGradient>
+
+    <!-- Circuit -->
+    <pattern id="circuit" width="200" height="120" patternUnits="userSpaceOnUse">
+      <g stroke="rgba(255,255,255,0.05)" stroke-width="1.8" fill="none">
+        <path d="M10 90 C70 50, 130 140, 190 70" />
+        <path d="M0 35 C50 0, 90 100, 140 10" />
+      </g>
+    </pattern>
+
+    <!-- Emboss filter for text -->
+    <filter id="emboss" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+      <feOffset dx="1.5" dy="1.5" result="offsetBlur"/>
+      <feMerge>
+        <feMergeNode in="offsetBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Chip Reflection -->
+    <linearGradient id="chipHighlight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="white" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Soft Shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-opacity="0.25"/>
+    </filter>
+
+    <!-- B-Pay Logo Symbol -->
+    <symbol id="bpayLogo" viewBox="0 0 240 240">
+      <defs>
+        <linearGradient id="dualMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#FFD700"/>
+          <stop offset="25%" stop-color="#FFC107"/>
+          <stop offset="50%" stop-color="#C0C0C0"/>
+          <stop offset="75%" stop-color="#D8D8D8"/>
+          <stop offset="100%" stop-color="#FFD700"/>
+        </linearGradient>
+        <linearGradient id="columns" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#7a7a7a"/>
+          <stop offset="50%" stop-color="#505050"/>
+          <stop offset="100%" stop-color="#303030"/>
+        </linearGradient>
+        <radialGradient id="deepBlue" cx="40%" cy="35%" r="80%">
+          <stop offset="0%" stop-color="#0A74A8"/>
+          <stop offset="50%" stop-color="#0A4C80"/>
+          <stop offset="100%" stop-color="#072C5A"/>
+        </radialGradient>
+      </defs>
+      <!-- Outer rings -->
+      <circle cx="120" cy="120" r="115" fill="transparent" stroke="#FFD700" stroke-width="4"/>
+      <circle cx="120" cy="120" r="108" fill="transparent" stroke="#FFD700" stroke-width="2"/>
+      <!-- Inner blue circle -->
+      <circle cx="120" cy="120" r="98" fill="url(#deepBlue)"/>
+      <!-- Dark overlay -->
+      <circle cx="120" cy="120" r="110" fill="rgba(0,0,0,0.4)"/>
+      <!-- Bank icon -->
+      <g transform="translate(20,38) scale(1.4)"> <!-- Reverted to original internal scale -->
+        <polygon points="15,35 70,5 125,35" fill="url(#dualMetal)" stroke="#b8860b" stroke-width="1.5"/>
+        <rect x="25" y="35" width="90" height="6" fill="#d4d7da"/>
+        <rect x="30" y="41" width="80" height="65" rx="4" fill="url(#dualMetal)" stroke="#6c6c6c" stroke-width="1.5"/>
+        <g fill="url(#columns)">
+          <rect x="38" y="46" width="7" height="55" rx="2"/>
+          <rect x="56" y="46" width="7" height="55" rx="2"/>
+          <rect x="74" y="46" width="7" height="55" rx="2"/>
+          <rect x="92" y="46" width="7" height="55" rx="2"/>
+        </g>
+        <rect x="25" y="106" width="90" height="6" fill="url(#dualMetal)" stroke="#b8860b" stroke-width="1"/>
+        <circle cx="50" cy="12" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+        <circle cx="70" cy="8" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+        <circle cx="90" cy="12" r="5" fill="black" stroke="#FFD700" stroke-width="2"/>
+      </g>
+      <!-- Text -->
+      <text x="120" y="145" text-anchor="middle"
+            font-family="Poppins, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+            font-weight="900" font-size="70"
+            fill="white" stroke="black" stroke-width="2" letter-spacing="1">
+        B-Pay
+      </text>
+      <!-- Gloss highlight -->
+      <ellipse cx="120" cy="80" rx="80" ry="40" fill="rgba(255,255,255,0.15)"/>
+    </symbol>
+  </defs>
+
+  <!-- BACK CARD (Black Metal Version) -->
+  <g transform="translate(160,70) rotate(-6)" opacity="0.92">
+    <!-- Base -->
+    <rect width="640" height="400" rx="22" fill="url(#blackMetal)" filter="url(#shadow)"/>
+    <!-- Brushed texture -->
+    <rect width="640" height="400" rx="22" fill="url(#brushed)" opacity="0.6"/>
+
+    <!-- Magnetic strip -->
+    <rect x="0" y="50" width="640" height="70" fill="#050505"/>
+
+    <!-- Signature panel -->
+    <rect x="60" y="150" width="520" height="50" rx="6" fill="#222" stroke="#444"/>
+
+    <!-- CVV -->
+    <text x="500" y="185" font-size="22" font-family="monospace" fill="#ddd">123</text>
+
+    <!-- Bottom text -->
+    <text x="60" y="330" font-size="14" fill="#aaa" opacity="0.75">
+      This card is property of the issuing bank. If found, return immediately.
+    </text>
+  </g>
+
+  <!-- FRONT CARD (3D Tilted) -->
+  <g transform="translate(90,130) rotate(-4,360,210)">
+    <!-- Gold Border + Dark Background -->
+    <rect width="720" height="420" rx="26"
+          fill="url(#cardDark)"
+          stroke="url(#goldBorder)"
+          stroke-width="4"
+          filter="url(#shadow)"/>
+
+    <!-- Circuit Layer -->
+    <rect width="720" height="420" rx="26"
+          fill="url(#circuit)" opacity="0.11"/>
+
+    <!-- B-PAY LOGO (Top-Right, within borders) -->
+    <g transform="translate(180,50) scale(0.45)" opacity="0.199"> <!-- Scale is now applied here -->
+    
+      <use href="#bpayLogo"/>
+    </g>
+
+    <!-- CHIP -->
+    <g transform="translate(60,90)">
+      <rect width="90" height="70" rx="10" fill="#c9a100" stroke="#7f5f00" stroke-width="2"/>
+      <!-- Reflection -->
+      <rect width="90" height="20" rx="10" fill="url(#chipHighlight)"/>
+      <!-- Chip lines -->
+      <g stroke="#7f5f00" stroke-width="2">
+        <path d="M10 25 H80"/>
+        <path d="M10 40 H80"/>
+        <path d="M10 55 H80"/>
+      </g>
+    </g>
+
+    <!-- CARDHOLDER NAME (Embossed) -->
+    <text x="60" y="200" fill="#fff"
+          font-size="28" font-family="Arial, sans-serif"
+          filter="url(#emboss)" opacity="0.95">
+  
+    </text>
+
+    <!-- CARD NUMBER -->
+    <text x="60" y="250" fill="#fff"
+          font-size="34" font-family="monospace" opacity="0.9">
+    
+    </text>
+
+    <!-- EXPIRY -->
+    <text x="60" y="300" fill="#888"
+          font-size="16" font-family="monospace">
+      
+    </text>
+
+    <!-- VISA Text -->
+    <text x="560" y="340"
+          fill="#ffd700"
+          font-size="32"
+          font-weight="600"
+          opacity="0.85">
+     
+    </text>
+
+    <!-- MasterCard icon -->
+    <!-- <g transform="translate(560,280)">
+      <circle cx="24" cy="24" r="24" fill="#ffd700" opacity="0.55"/>
+      <circle cx="48" cy="24" r="24" fill="#d49f00" opacity="0.55"/>
+    </g> -->
+  </g>
+</svg>

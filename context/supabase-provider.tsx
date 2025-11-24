@@ -1,394 +1,315 @@
+// app/context/supabase-provider.tsx
+"use client";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/config/supabase";
-import { Session, User } from "@supabase/supabase-js";
-import { useFonts } from "expo-font";
-import { router, useSegments, SplashScreen } from "expo-router";
-import { createContext, useContext, useEffect, useState } from "react";
-import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import CustomSuccessModal from "@/components/CustomSuccessModal";
-import { requestPushPermissions } from "./notifications-utils";
 
-SplashScreen.preventAutoHideAsync();
+// ──────── CONSTANTS ────────
+const AUTH_TOKEN_KEY = "authToken";
+const CURRENT_USER_KEY = "currentUser";
+const SAVED_ACCOUNTS_KEY = "savedAccounts";
+const MAX_ACCOUNTS = 3;
 
-type UserProfile = {
-	id: string;
-	email: string;
-	username: string;
-	created_at: string;
-	transaction_pin?: string;
-};
+// ──────── TYPES ────────
+interface UserProfile {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  is_verified: boolean;
+  country_code: string | null;
+  dial_code: string | null;
+  flag_emoji: string | null;
+  account_pin_hash?: string;
+  transfer_pin_hash?: string;
+}
 
-type SupabaseContextProps = {
-	auth: any;
-	profile: UserProfile | null;
-	user: User | null;
-	session: Session | null;
-	initialized?: boolean;
-	signUp: (
-		username: string,
-		email: string,
-		password: string,
-		rememberMe?: boolean,
-	) => Promise<any>;
-	signInWithPassword: (
-		email: string,
-		password: string,
-		rememberMe?: boolean,
-	) => Promise<void>;
-	signOut: () => Promise<void>;
-	deleteOwnAccount: () => Promise<void>;
-	updateTransactionPin: (currentPin: string, newPin: string) => Promise<void>;
-};
+interface SavedAccount {
+  identifier: string;
+  user_id: string;
+  email: string | null;
+  phone: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  is_verified: boolean;
+  country_code: string | null;
+  dial_code: string | null;
+  flag_emoji: string | null;
+  last_login: string;
+}
 
-type SupabaseProviderProps = {
-	children: React.ReactNode;
-};
+interface SupabaseContextType {
+  user: UserProfile | null;
+  session: any;
+  loading: boolean;
+  savedAccounts: SavedAccount[];
+  currentAccount: SavedAccount | null;
+  signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  switchAccount: (account: SavedAccount) => Promise<void>;
+  addAccount: (account: SavedAccount) => Promise<void>;
+  removeAccount: (identifier: string) => Promise<void>;
+  clearAllAccounts: () => Promise<void>;
+}
 
-export const SupabaseContext = createContext<SupabaseContextProps>({
-	auth: supabase.auth,
-	user: null,
-	profile: null,
-	session: null,
-	initialized: false,
-	signUp: async () => {},
-	signInWithPassword: async () => {},
-	signOut: async () => {},
-	deleteOwnAccount: async () => {},
-	updateTransactionPin: async () => {},
+const SupabaseContext = createContext<SupabaseContextType>({
+  user: null,
+  session: null,
+  loading: true,
+  savedAccounts: [],
+  currentAccount: null,
+  signOut: async () => {},
+  refreshUser: async () => {},
+  switchAccount: async () => {},
+  addAccount: async () => {},
+  removeAccount: async () => {},
+  clearAllAccounts: async () => {},
 });
 
-export const useSupabase = () => useContext(SupabaseContext);
-export const useAuth = () => useSupabase();
+export const SupabaseProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
+  const [currentAccount, setCurrentAccount] = useState<SavedAccount | null>(null);
 
-export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
-	const segments = useSegments();
-	const [user, setUser] = useState<User | null>(null);
-	const [session, setSession] = useState<Session | null>(null);
-	const [profile, setProfile] = useState<UserProfile | null>(null);
-	const [initialized, setInitialized] = useState<boolean>(false);
-	const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
-	const [newUsername, setNewUsername] = useState<string>("");
-	const [isLoadingSession, setIsLoadingSession] = useState<boolean>(true);
+  // Load saved accounts and current user
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // Load saved accounts
+        const accountsJson = await AsyncStorage.getItem(SAVED_ACCOUNTS_KEY);
+        const accounts: SavedAccount[] = accountsJson ? JSON.parse(accountsJson) : [];
+        setSavedAccounts(accounts);
 
-	const [fontsLoaded] = useFonts({
-		"Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
-	});
+        // Load current user
+        const currentUserJson = await AsyncStorage.getItem(CURRENT_USER_KEY);
+        const authToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
 
-	const retryGetSession = async (
-		retries = 3,
-		delay = 1000,
-	): Promise<Session | null> => {
-		for (let i = 0; i < retries; i++) {
-			try {
-				const { data, error } = await supabase.auth.getSession();
-				if (error) throw error;
-				return data.session;
-			} catch (err) {
-				console.warn(`Session retry ${i + 1} failed:`, err);
-				if (i < retries - 1)
-					await new Promise((resolve) => setTimeout(resolve, delay));
-			}
-		}
-		return null;
-	};
+        if (currentUserJson && authToken) {
+          const currentUser: SavedAccount = JSON.parse(currentUserJson);
+          setCurrentAccount(currentUser);
+          
+          // Fetch fresh user data from Supabase
+          const { data: userData, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUser.user_id)
+            .single();
 
-	const signUp = async (
-		username: string,
-		email: string,
-		password: string,
-		rememberMe: boolean = false,
-	) => {
-		try {
-			const { data, error } = await supabase.auth.signUp({
-				email: email.trim(),
-				password,
-				options: {
-					data: { username: username.trim() },
-				},
-			});
+          if (userData && !error) {
+            setUser({
+              id: userData.id,
+              email: userData.email,
+              phone: userData.phone,
+              full_name: userData.full_name,
+              avatar_url: userData.avatar_url,
+              is_verified: userData.is_verified,
+              country_code: userData.country_code,
+              dial_code: userData.dial_code,
+              flag_emoji: userData.flag_emoji,
+              account_pin_hash: userData.account_pin_hash,
+              transfer_pin_hash: userData.transfer_pin_hash,
+            });
+          }
+        }
 
-			if (error || !data.user) throw error || new Error("Failed to sign up");
+        setLoading(false);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        setLoading(false);
+      }
+    };
 
-			const { error: insertError } = await supabase.from("profiles").upsert([
-				{
-					id: data.user.id,
-					username: username.trim(),
-					email: email.trim(),
-					created_at: new Date().toISOString(),
-				},
-			]);
+    initAuth();
+  }, []);
 
-			if (insertError) {
-				await supabase.auth.admin.deleteUser(data.user.id);
-				throw new Error("Failed to save user profile.");
-			}
+  const refreshUser = async () => {
+    if (!currentAccount) return;
 
-			try {
-				await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
-			} catch (storageError) {
-				console.warn("Failed to store rememberMe:", storageError);
-			}
+    try {
+      const { data: userData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentAccount.user_id)
+        .single();
 
-			setUser(data.user);
-			setSession(data.session);
-			setNewUsername(username.trim());
-			await requestPushPermissions(data.user.id);
-			setTimeout(() => {
-				setShowSuccessModal(true);
-			}, 100);
-		} catch (err: any) {
-			console.error("Sign Up Error:", err.message);
-			Alert.alert("Sign Up Error", err.message || "Unexpected error occurred.");
-			throw err;
-		}
-	};
+      if (userData && !error) {
+        const updatedUser: UserProfile = {
+          id: userData.id,
+          email: userData.email,
+          phone: userData.phone,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
+          is_verified: userData.is_verified,
+          country_code: userData.country_code,
+          dial_code: userData.dial_code,
+          flag_emoji: userData.flag_emoji,
+          account_pin_hash: userData.account_pin_hash,
+          transfer_pin_hash: userData.transfer_pin_hash,
+        };
+        
+        setUser(updatedUser);
 
-	const signInWithPassword = async (
-		email: string,
-		password: string,
-		rememberMe: boolean = false,
-	) => {
-		try {
-			const { data, error } = await supabase.auth.signInWithPassword({
-				email,
-				password,
-			});
+        // Update current account in storage
+        const updatedAccount: SavedAccount = {
+          ...currentAccount,
+          email: userData.email,
+          phone: userData.phone,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
+          is_verified: userData.is_verified,
+          last_login: new Date().toISOString(),
+        };
 
-			if (error) throw error;
-			if (!data || !data.user || !data.session) {
-				throw new Error("Invalid login response from Supabase");
-			}
+        setCurrentAccount(updatedAccount);
+        await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedAccount));
 
-			try {
-				await AsyncStorage.setItem("@rememberMe", rememberMe.toString());
-			} catch (storageError) {
-				console.warn("Failed to store rememberMe:", storageError);
-			}
+        // Update in saved accounts
+        const updatedAccounts = savedAccounts.map(acc => 
+          acc.user_id === updatedAccount.user_id ? updatedAccount : acc
+        );
+        setSavedAccounts(updatedAccounts);
+        await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
+      }
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  };
 
-			setUser(data.user);
-			setSession(data.session);
-			await requestPushPermissions(data.user.id);
-			router.replace("/(app)/(protected)");
-		} catch (err: any) {
-			console.error("Sign In Error:", err.message);
-			Alert.alert("Sign In Error", err.message || "Failed to sign in.");
-			throw err;
-		}
-	};
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setCurrentAccount(null);
+    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, CURRENT_USER_KEY]);
+  };
 
-	const signOut = async () => {
-		try {
-			const { error } = await supabase.auth.signOut();
-			if (error) throw error;
-			setUser(null);
-			setSession(null);
-			try {
-				await AsyncStorage.removeItem("@rememberMe");
-			} catch (storageError) {
-				console.warn("Failed to clear rememberMe:", storageError);
-			}
-			router.replace("/(app)/welcome");
-		} catch (err: any) {
-			console.error("Sign Out Error:", err.message);
-			Alert.alert("Sign Out Error", err.message || "Failed to sign out.");
-		}
-	};
+  const switchAccount = async (account: SavedAccount) => {
+    try {
+      // Generate new auth token
+      const authToken = `sb_${account.user_id}_${Date.now()}`;
+      
+      // Update current account
+      const updatedAccount = {
+        ...account,
+        last_login: new Date().toISOString(),
+      };
 
-	const deleteOwnAccount = async () => {
-		if (!user || !session) {
-			Alert.alert("Error", "You must be logged in to delete your account.");
-			return;
-		}
+      setCurrentAccount(updatedAccount);
+      await AsyncStorage.multiSet([
+        [AUTH_TOKEN_KEY, authToken],
+        [CURRENT_USER_KEY, JSON.stringify(updatedAccount)],
+      ]);
 
-		try {
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_SUPABASE_DELETE_ACCOUNT_FUNCTION_URL}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${session.access_token}`,
-					},
-					body: JSON.stringify({ user_id: user.id }),
-				},
-			);
+      // Fetch fresh user data
+      const { data: userData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', account.user_id)
+        .single();
 
-			const result = await response.json();
-			if (!response.ok) throw new Error(result.error || "Delete failed");
+      if (userData && !error) {
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          phone: userData.phone,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
+          is_verified: userData.is_verified,
+          country_code: userData.country_code,
+          dial_code: userData.dial_code,
+          flag_emoji: userData.flag_emoji,
+          account_pin_hash: userData.account_pin_hash,
+          transfer_pin_hash: userData.transfer_pin_hash,
+        });
+      }
 
-			setUser(null);
-			setSession(null);
-			try {
-				await AsyncStorage.removeItem("@rememberMe");
-			} catch (storageError) {
-				console.warn("Failed to clear rememberMe:", storageError);
-			}
-			Alert.alert("Deleted", "Your account was deleted successfully.");
-			router.replace("/(app)/welcome");
-		} catch (err: any) {
-			console.error("Delete account error:", err.message);
-			Alert.alert("Error", err.message || "Failed to delete account.");
-		}
-	};
+      // Update saved accounts with new last_login
+      const updatedAccounts = savedAccounts.map(acc =>
+        acc.user_id === account.user_id ? updatedAccount : acc
+      );
+      setSavedAccounts(updatedAccounts);
+      await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
 
-	const updateTransactionPin = async (currentPin: string, newPin: string) => {
-		if (!user || !session) {
-			throw new Error("You must be logged in to update your transaction PIN.");
-		}
+    } catch (error) {
+      console.error('Error switching account:', error);
+    }
+  };
 
-		try {
-			const { data: profileData, error: fetchError } = await supabase
-				.from("profiles")
-				.select("transaction_pin")
-				.eq("id", user.id)
-				.single();
+  const addAccount = async (account: SavedAccount) => {
+    try {
+      let updatedAccounts: SavedAccount[];
 
-			if (fetchError) throw fetchError;
+      if (savedAccounts.length >= MAX_ACCOUNTS) {
+        // Replace the oldest account (based on last_login)
+        const sortedAccounts = [...savedAccounts].sort(
+          (a, b) => new Date(a.last_login).getTime() - new Date(b.last_login).getTime()
+        );
+        updatedAccounts = [account, ...sortedAccounts.slice(1)];
+      } else {
+        // Add new account
+        updatedAccounts = [account, ...savedAccounts];
+      }
 
-			if (profileData.transaction_pin !== currentPin) {
-				throw new Error("Current PIN is incorrect.");
-			}
+      setSavedAccounts(updatedAccounts);
+      await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
 
-			const { error: updateError } = await supabase
-				.from("profiles")
-				.update({ transaction_pin: newPin })
-				.eq("id", user.id);
+      // Switch to the new account
+      await switchAccount(account);
 
-			if (updateError) throw updateError;
+    } catch (error) {
+      console.error('Error adding account:', error);
+    }
+  };
 
-			setProfile((prev) =>
-				prev ? { ...prev, transaction_pin: newPin } : prev,
-			);
-		} catch (err: any) {
-			console.error("Update Transaction PIN Error:", err.message);
-			throw new Error(err.message || "Failed to update transaction PIN.");
-		}
-	};
+  const removeAccount = async (identifier: string) => {
+    try {
+      const updatedAccounts = savedAccounts.filter(acc => acc.identifier !== identifier);
+      setSavedAccounts(updatedAccounts);
+      await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
 
-	useEffect(() => {
-		const initializeAuth = async () => {
-			setIsLoadingSession(true);
-			try {
-				const session = await retryGetSession();
-				let rememberMe = "false";
-				try {
-					rememberMe = (await AsyncStorage.getItem("@rememberMe")) || "false";
-				} catch (storageError) {
-					console.warn("Failed to retrieve rememberMe:", storageError);
-				}
+      // If we're removing the current account, switch to another one or clear
+      if (currentAccount?.identifier === identifier) {
+        if (updatedAccounts.length > 0) {
+          await switchAccount(updatedAccounts[0]);
+        } else {
+          await signOut();
+        }
+      }
+    } catch (error) {
+      console.error('Error removing account:', error);
+    }
+  };
 
-				if (session) {
-					setSession(session);
-					setUser(session.user);
-					await requestPushPermissions(session.user.id);
-					router.replace("/(app)/(protected)");
-				} else if (rememberMe === "true") {
-					const { data, error } = await supabase.auth.refreshSession();
-					if (error || !data.session) {
-						console.warn("Session refresh failed:", error?.message);
-						setSession(null);
-						setUser(null);
-					} else {
-						setSession(data.session);
-						setUser(data.session.user);
-						await requestPushPermissions(data.session.user.id);
-						router.replace("/(app)/(protected)");
-					}
-				}
-			} catch (err) {
-				console.error("Initialize auth error:", err);
-			} finally {
-				setIsLoadingSession(false);
-				setInitialized(true);
-			}
-		};
+  const clearAllAccounts = async () => {
+    try {
+      setSavedAccounts([]);
+      await AsyncStorage.removeItem(SAVED_ACCOUNTS_KEY);
+      await signOut();
+    } catch (error) {
+      console.error('Error clearing all accounts:', error);
+    }
+  };
 
-		initializeAuth();
-
-		const {
-			data: { subscription },
-		} = supabase.auth.onAuthStateChange(async (event, session) => {
-			let rememberMe = "false";
-			try {
-				rememberMe = (await AsyncStorage.getItem("@rememberMe")) || "false";
-			} catch (storageError) {
-				console.warn(
-					"Failed to retrieve rememberMe in auth state change:",
-					storageError,
-				);
-			}
-
-			if (session && (rememberMe === "true" || event === "SIGNED_IN")) {
-				setSession(session);
-				setUser(session.user);
-				await requestPushPermissions(session.user.id);
-				router.replace("/(app)/(protected)");
-			} else if (!session) {
-				setSession(null);
-				setUser(null);
-			}
-		});
-
-		return () => subscription?.unsubscribe();
-	}, []);
-
-	useEffect(() => {
-		const fetchProfile = async () => {
-			if (!user) return setProfile(null);
-			try {
-				const { data, error } = await supabase
-					.from("profiles")
-					.select("*")
-					.eq("id", user.id)
-					.single();
-				if (!error && data) setProfile(data);
-			} catch (err) {
-				console.warn("Failed to fetch profile:", err);
-			}
-		};
-		fetchProfile();
-	}, [user]);
-
-	useEffect(() => {
-		if (!initialized || !fontsLoaded || isLoadingSession) return;
-
-		const inProtected = segments[1] === "(protected)";
-		const inAuth = segments[1] === "(auth)";
-		if (session && !inProtected) {
-			router.replace("/(app)/(protected)");
-		} else if (!session && !inAuth) {
-			router.replace("/(app)/welcome");
-		}
-
-		SplashScreen.hideAsync();
-	}, [initialized, fontsLoaded, session, isLoadingSession]);
-
-	return (
-		<SupabaseContext.Provider
-			value={{
-				auth: supabase.auth,
-				user,
-				session,
-				profile,
-				initialized,
-				signUp,
-				signInWithPassword,
-				signOut,
-				deleteOwnAccount,
-				updateTransactionPin,
-			}}
-		>
-			<CustomSuccessModal
-				visible={showSuccessModal}
-				username={newUsername}
-				onClose={() => {
-					setShowSuccessModal(false);
-					setTimeout(() => {
-						router.replace("/(app)/(protected)");
-					}, 100);
-				}}
-			/>
-			{children}
-		</SupabaseContext.Provider>
-	);
+  return (
+    <SupabaseContext.Provider value={{
+      user,
+      session,
+      loading,
+      savedAccounts,
+      currentAccount,
+      signOut,
+      refreshUser,
+      switchAccount,
+      addAccount,
+      removeAccount,
+      clearAllAccounts,
+    }}>
+      {children}
+    </SupabaseContext.Provider>
+  );
 };
+
+export const useAuth = () => useContext(SupabaseContext);

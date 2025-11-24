@@ -1,0 +1,173 @@
+<!-- Cinematic ancient vault with steering-wheel handle + classical bank façade -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-labelledby="titleDesc">
+  <title id="titleDesc">Cinematic bank with sealed vault door</title>
+
+  <defs>
+    <!-- General metallic gradients -->
+    <radialGradient id="vaultMetal" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#d8dee3"/>
+      <stop offset="45%" stop-color="#a3a7ac"/>
+      <stop offset="100%" stop-color="#3d4348"/>
+    </radialGradient>
+
+    <linearGradient id="bankStone" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f3f3f2"/>
+      <stop offset="50%" stop-color="#d1d3d4"/>
+      <stop offset="100%" stop-color="#9b9fa3"/>
+    </linearGradient>
+
+    <radialGradient id="vaultShadow" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="rgba(0,0,0,0)" />
+      <stop offset="100%" stop-color="rgba(0,0,0,0.7)" />
+    </radialGradient>
+
+    <radialGradient id="redGlow" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="rgba(255,0,0,0.95)" />
+      <stop offset="40%" stop-color="rgba(255,0,0,0.4)" />
+      <stop offset="100%" stop-color="rgba(255,0,0,0)" />
+    </radialGradient>
+
+    <linearGradient id="handleMetal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#e2e5e8" />
+      <stop offset="50%" stop-color="#8d9398" />
+      <stop offset="100%" stop-color="#4a4f53" />
+    </linearGradient>
+
+    <!-- subtle vignette to push focus to center -->
+    <radialGradient id="vignette" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="rgba(0,0,0,0)" />
+      <stop offset="100%" stop-color="rgba(0,0,0,0.6)" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background: subtle dark gradient -->
+  <rect x="0" y="0" width="320" height="240" fill="#0f1112" />
+
+  <!-- Bank façade (behind the vault) -->
+  <g id="bank" transform="translate(40,18)">
+    <!-- bank base shadow -->
+    <rect x="0" y="10" width="240" height="120" rx="6" fill="rgba(0,0,0,0.45)" />
+
+    <!-- pediment / roof -->
+    <polygon points="20,30 120,0 220,30" fill="url(#bankStone)" stroke="#7a7d80" stroke-width="1.5" />
+
+    <!-- entablature (band under pediment) -->
+    <rect x="24" y="30" width="192" height="18" fill="#bfc2c4" stroke="#808285" stroke-width="1"/>
+
+    <!-- bank name plate -->
+    <rect x="70" y="34" width="80" height="10" fill="#2b2e30" opacity="0.45" rx="2"/>
+    <text x="110" y="42.5" font-family="Georgia, 'Times New Roman', serif" font-size="9.5" text-anchor="middle" fill="#ffd27a" font-weight="700" letter-spacing="1">
+      BANK
+    </text>
+
+    <!-- columns (6 classical columns) -->
+    <g fill="url(#bankStone)" stroke="#9a9d9f" stroke-width="1">
+      <!-- column shadows + shafts -->
+      <rect x="36" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <rect x="66" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <rect x="96" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <rect x="126" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <rect x="156" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <rect x="186" y="48" width="18" height="60" rx="2" fill="url(#bankStone)" />
+      <!-- column capitals -->
+      <rect x="30" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+      <rect x="60" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+      <rect x="90" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+      <rect x="120" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+      <rect x="150" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+      <rect x="180" y="44" width="26" height="6" rx="1" fill="#d7d9da" stroke="#9a9d9f" />
+    </g>
+
+    <!-- entrance steps -->
+    <rect x="52" y="108" width="136" height="8" fill="#c7c9cb" />
+    <rect x="56" y="116" width="128" height="8" fill="#b6b8ba" />
+    <rect x="60" y="124" width="120" height="8" fill="#9da0a3" />
+
+    <!-- subtle building shadow to blend with scene -->
+    <rect x="0" y="10" width="240" height="120" fill="url(#vignette)" opacity="0.18"/>
+  </g>
+
+  <!-- Vault positioned in front of the bank (centered slightly lower) -->
+  <g id="vault" transform="translate(70,40)">
+    <!-- large circular vault outer rim -->
+    <circle cx="90" cy="90" r="80" fill="url(#vaultMetal)" stroke="#2e3336" stroke-width="6" />
+
+    <!-- outer rivets -->
+    <g transform="translate(90,90)" fill="#6c7175" stroke="#2b2f31" stroke-width="1">
+      <circle cx="0" cy="-80" r="2.2"/>
+      <circle cx="56.6" cy="-56.6" r="2.2"/>
+      <circle cx="80" cy="0" r="2.2"/>
+      <circle cx="56.6" cy="56.6" r="2.2"/>
+      <circle cx="0" cy="80" r="2.2"/>
+      <circle cx="-56.6" cy="56.6" r="2.2"/>
+      <circle cx="-80" cy="0" r="2.2"/>
+      <circle cx="-56.6" cy="-56.6" r="2.2"/>
+      <!-- intermediate smaller rivets -->
+      <circle cx="38" cy="-72" r="1.3"/>
+      <circle cx="72" cy="-38" r="1.3"/>
+      <circle cx="72" cy="38" r="1.3"/>
+      <circle cx="38" cy="72" r="1.3"/>
+      <circle cx="-38" cy="72" r="1.3"/>
+      <circle cx="-72" cy="38" r="1.3"/>
+      <circle cx="-72" cy="-38" r="1.3"/>
+      <circle cx="-38" cy="-72" r="1.3"/>
+    </g>
+
+    <!-- inner door plate -->
+    <circle cx="90" cy="90" r="44" fill="url(#vaultMetal)" stroke="#1c1f21" stroke-width="2.5" />
+
+    <!-- steering-wheel style handle (6 spokes) -->
+    <g transform="translate(90,90)">
+      <!-- outer rim -->
+      <circle r="28" fill="none" stroke="url(#handleMetal)" stroke-width="6" />
+      <!-- spokes -->
+      <g stroke="#2a2f31" stroke-width="3" stroke-linecap="round">
+        <line x1="0" y1="-28" x2="0" y2="-14"/>
+        <line x1="0" y1="28" x2="0" y2="14"/>
+        <line x1="24.25" y1="-14" x2="12.5" y2="-7"/>
+        <line x1="24.25" y1="14" x2="12.5" y2="7"/>
+        <line x1="-24.25" y1="-14" x2="-12.5" y2="-7"/>
+        <line x1="-24.25" y1="14" x2="-12.5" y2="7"/>
+      </g>
+      <!-- central hub & rings -->
+      <circle r="7" fill="#1b1e20" stroke="#aaa" stroke-width="1.5" />
+      <circle r="11" fill="none" stroke="#888" stroke-width="1" opacity="0.5"/>
+    </g>
+
+    <!-- locking bolts (cardinal) -->
+    <g transform="translate(90,90)" stroke="#2b2f31" stroke-width="2" stroke-linecap="round">
+      <line x1="-80" y1="0" x2="-54" y2="0" />
+      <line x1="80" y1="0" x2="54" y2="0" />
+      <line x1="0" y1="-80" x2="0" y2="-54" />
+      <line x1="0" y1="80" x2="0" y2="54" />
+    </g>
+
+    <!-- cinematic red X (glow + core) -->
+    <g transform="translate(90,90) rotate(-18)">
+      <line x1="-110" y1="-110" x2="110" y2="110" stroke="url(#redGlow)" stroke-width="26" stroke-linecap="round" opacity="0.55" />
+      <line x1="-110" y1="110" x2="110" y2="-110" stroke="url(#redGlow)" stroke-width="26" stroke-linecap="round" opacity="0.55" />
+      <line x1="-110" y1="-110" x2="110" y2="110" stroke="#ff2b2b" stroke-width="8" stroke-linecap="round" />
+      <line x1="-110" y1="110" x2="110" y2="-110" stroke="#ff2b2b" stroke-width="8" stroke-linecap="round" />
+    </g>
+
+    <!-- soft reflection/gloss on door to sell metal -->
+    <ellipse cx="90" cy="74" rx="38" ry="10" fill="rgba(255,255,255,0.06)" />
+  </g>
+
+  <!-- overall vignette to focus center -->
+  <rect x="0" y="0" width="320" height="240" fill="url(#vignette)" opacity="0.22" />
+
+  <!-- optional caption (commented out) -->
+  <!--
+  <text x="160" y="232" font-family="Georgia, 'Times New Roman', serif" font-size="11" text-anchor="middle" fill="#bdbdbd" opacity="0.9">
+    SCENE SEALED — BANK VAULT
+  </text>
+  -->
+
+  <!-- NOTES:
+       - To move the vault forward/backward relative to the bank, adjust the transform on #vault (translate values).
+       - Change BANK sign color: edit the <text> fill inside the bank group.
+       - Modify the strength/size of the red X by changing stroke-width on the redGlow/core lines.
+       - Make handle appear rotated: rotate the handle <g> inside #vault e.g. transform="translate(90,90) rotate(12)"
+  -->
+</svg>
