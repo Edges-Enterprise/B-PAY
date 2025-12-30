@@ -1,80 +1,71 @@
 {
-  "expo": {
-    "name": "B-pay",
-    "slug": "b-pay",
-    "scheme": "b-pay",
-    "version": "1.1.4",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "newArchEnabled": true,
-    "ios": {
-      "bundleIdentifier": "com.b-pay.app",
-      "supportsTablet": true,
-      "config": {
-        "usesNonExemptEncryption": false
-      },
-      "splash": {
-        "image": "./assets/images/splash.png",
-        "resizeMode": "cover",
-        "backgroundColor": "#ffffff",
-        "dark": {
-          "backgroundColor": "#000000",
-          "resizeMode": "cover",
-          "image": "./assets/images/splash-dark.png"
-        }
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png"
-      },
-      "splash": {
-        "image": "./assets/images/splash.png",
-        "resizeMode": "cover",
-        "backgroundColor": "#ffffff",
-        "dark": {
-          "backgroundColor": "#000000",
-          "resizeMode": "cover",
-          "image": "./assets/images/splash-dark.png"
-        }
-      },
-      "notification": {
-        "icon": "./assets/images/notification-icon.png",
-        "color": "#8B4513"
-      },
-      "jsEngine": "hermes",
-      "enableProguardInReleaseBuilds": true,
-      "package": "com.phoenixboss.bpay",
-      "googleServicesFile": "./google-services.json"
-    },
-    "experiments": {
-      "typedRoutes": true
-    },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store"
-    ],
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "dd06b728-8ffa-4974-88c6-89ff6088c102"
-      }
-    },
-    "owner": "phoenix-boss",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/dd06b728-8ffa-4974-88c6-89ff6088c102"
-    }
-  }
+	"expo": {
+		"name": "B-pay",
+		"slug": "b-pay",
+		"scheme": "b-pay",
+		"version": "1.1.4",
+		"orientation": "portrait",
+		"icon": "./assets/images/icon.png",
+		"userInterfaceStyle": "automatic",
+
+		"assetBundlePatterns": ["**/*"],
+
+		"newArchEnabled": true,
+
+		"ios": {
+			"bundleIdentifier": "com.b-pay.app",
+			"supportsTablet": true,
+
+			"config": {
+				"usesNonExemptEncryption": false
+			},
+
+			"splash": {
+				"image": "./assets/images/splash.png",
+				"resizeMode": "cover",
+				"backgroundColor": "#ffffff",
+				"dark": {
+					"image": "./assets/images/splash-dark.png",
+					"resizeMode": "cover",
+					"backgroundColor": "#000000"
+				}
+			}
+		},
+
+		"android": {
+			"package": "com.phoenixboss.bpay",
+			"jsEngine": "hermes",
+
+			"adaptiveIcon": {
+				"foregroundImage": "./assets/images/adaptive-icon.png",
+				"backgroundColor": "#ffffff"
+			},
+
+			"splash": {
+				"image": "./assets/images/splash.png",
+				"resizeMode": "cover",
+				"backgroundColor": "#ffffff",
+				"dark": {
+					"image": "./assets/images/splash-dark.png",
+					"resizeMode": "cover",
+					"backgroundColor": "#000000"
+				}
+			}
+		},
+
+		"experiments": {
+			"typedRoutes": true
+		},
+
+		"plugins": ["expo-router", "expo-secure-store"],
+
+		"extra": {
+			"router": {
+				"origin": false
+			},
+			"eas": {
+				"projectId": "c7f72e28-1dc6-4af9-b709-1447dbf1ced9"
+			}
+		}
+	}
 }

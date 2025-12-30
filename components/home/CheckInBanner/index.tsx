@@ -1,169 +1,161 @@
-import React, { useState, useEffect } from "react";
+// components/CheckInBanner.tsx
+import React, { useRef, useState, useEffect } from "react";
 import {
   TouchableOpacity,
   View,
   Text,
   StyleSheet,
   Dimensions,
-  Alert,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "@/stores/auth-store";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { useAuth } from '@/stores/auth-store';
+import { useCheckIn } from '@/hooks/useCheckIn';
+import { getTodayString, getDaysInMonth, formatRewardText } from '@/utils/checkin.utils';
 
-// Supabase client
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Country interface matching your existing table
-interface Country {
-  iso_code: string;
-  name: string;
-  flag_emoji: string;
-  dial_code: string;
-  currency_symbol: string;
-  currency_code: string;
-  ppp_reward_amount: number;
-  is_active: boolean;
-}
-
 interface CheckInBannerProps {
-  onPressSubscribe?: () => void;
-  isSubscribed?: boolean;
-  onCheckIn?: (date: string, rewardAmount: number, rewardSymbol: string, currencyCode: string) => void;
-  checkedInDates?: string[];
   onAddNotification?: (title: string, message: string) => void;
 }
 
-// Function to fetch country with PPP reward from Supabase
-const fetchCountryWithPPPReward = async (countryCode: string): Promise<Country> => {
-  const { data, error } = await supabase
-    .from('countries')
-    .select('*')
-    .eq('iso_code', countryCode)
-    .eq('is_active', true)
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to fetch country data for ${countryCode}: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error(`No active country found with code: ${countryCode}`);
-  }
-
-  return data;
-};
-
-// Safe mask identifier function
-const safeMaskIdentifier = (id: string | undefined | null): string => {
-  if (!id) return 'User';
-  
-  // Safe check for includes method
-  if (typeof id.includes !== 'function') {
-    return String(id).slice(0, 4) + '*****' + String(id).slice(-3);
-  }
-  
-  if (id.includes('@')) {
-    const [local, domain] = id.split('@');
-    return `${local?.[0] || ''}***@${domain || ''}`;
-  } else {
-    const digits = String(id).replace(/\D/g, '');
-    if (digits.length < 6) return String(id);
-    return `${String(id).slice(0, 4)}*****${String(id).slice(-3)}`;
-  }
-};
-
-export default function CheckInBanner({
-  onPressSubscribe,
-  isSubscribed = false,
-  onCheckIn,
-  checkedInDates = [],
-  onAddNotification,
-}: CheckInBannerProps) {
+export default function CheckInBanner({ onAddNotification }: CheckInBannerProps) {
   const { currentAccount } = useAuth();
-  const [country, setCountry] = useState<Country | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    country,
+    loading,
+    error,
+    isSubscribed,
+    checkedInDates,
+    processingCheckIn,
+    monthlyStats,
+    subscribe,
+    unsubscribe,
+    checkIn,
+    retry,
+    userCountryCode,
+    hasCheckedInToday,
+  } = useCheckIn();
 
   const today = new Date();
   const month = today.getMonth();
   const year = today.getFullYear();
-  const todayStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(
-    today.getDate()
-  ).padStart(2, "0")}`;
+  const todayStr = getTodayString();
+  const currentDayNum = today.getDate();
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentMonthName = monthNames[month];
+  const safeOnAddNotification = onAddNotification || ((title: string, message: string) => {
+    console.log('Notification:', { title, message });
+  });
 
-  // Get user's country code from auth store with safe fallback
-  const userCountryCode = currentAccount?.country_code || 'NG';
+  const scrollRef = useRef<ScrollView>(null);
+  const [timeLeft, setTimeLeft] = useState('00:00:00');
 
-  // Fetch country data with PPP reward
+  const numPreviousClaimed = checkedInDates.filter(dateStr => {
+    const [yStr, mStr, dStr] = dateStr.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10) - 1;
+    const d = parseInt(dStr, 10);
+    return y === year && m === month && d < currentDayNum;
+  }).length;
+
   useEffect(() => {
-    const loadCountryData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const countryData = await fetchCountryWithPPPReward(userCountryCode);
-        setCountry(countryData);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        setError(errorMessage);
-        console.error('Country data fetch error:', errorMessage);
-      } finally {
-        setLoading(false);
+    if (!isSubscribed || hasCheckedInToday || !scrollRef.current) return;
+    const cellWidthWithMargin = 50 + 4;
+    const position = numPreviousClaimed * cellWidthWithMargin;
+    scrollRef.current.scrollTo({ x: position, animated: false });
+  }, [isSubscribed, hasCheckedInToday, numPreviousClaimed, checkedInDates, currentDayNum]);
+
+  // Countdown timer for next check-in
+  useEffect(() => {
+    if (!hasCheckedInToday) return;
+
+    const updateTimer = () => {
+      const now = new Date();
+      let nextCheckIn = new Date(year, month, currentDayNum + 1, 0, 0, 0);
+      let diff = nextCheckIn.getTime() - now.getTime();
+      if (diff < 0) {
+        nextCheckIn = new Date(nextCheckIn.getTime() + 24 * 60 * 60 * 1000);
+        diff = nextCheckIn.getTime() - now.getTime();
+      }
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [hasCheckedInToday, year, month, currentDayNum]);
+
+  // Send notifications every 2 hours when checked in today
+  useEffect(() => {
+    if (!hasCheckedInToday || !currentAccount?.id) return;
+
+    const sendPeriodicNotification = async () => {
+      const now = new Date();
+      let nextCheckIn = new Date(year, month, currentDayNum + 1, 0, 0, 0);
+      if (nextCheckIn < now) {
+        nextCheckIn = new Date(nextCheckIn.getTime() + 24 * 60 * 60 * 1000);
+      }
+      const diffMs = nextCheckIn.getTime() - now.getTime();
+      const hoursLeft = Math.floor(diffMs / 3600000);
+      const message = `Your next check-in starts in ${hoursLeft} hours. Get ready to claim your daily reward!`;
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: currentAccount.id,
+          title: 'Check-in Reminder',
+          message,
+          read: false,
+          type: 'checkin_reminder',
+        });
+      if (error) {
+        console.error('Failed to insert notification:', error);
       }
     };
 
-    loadCountryData();
-  }, [userCountryCode]);
+    sendPeriodicNotification();
+    const interval = setInterval(sendPeriodicNotification, 2 * 60 * 60 * 1000); // 2 hours
+    return () => clearInterval(interval);
+  }, [hasCheckedInToday, currentAccount?.id, year, month, currentDayNum]);
 
-  // Safely check if user has already checked in today
-  const hasCheckedInToday = Array.isArray(checkedInDates) && checkedInDates.includes(todayStr);
-
-  // Safe default handlers
-  const safeOnPressSubscribe = onPressSubscribe || (() => {
-    console.log('Subscribe pressed - no handler provided');
-    Alert.alert(
-      "Subscription Feature",
-      "Daily Check-In subscription feature is coming soon!",
-      [{ text: "OK" }]
-    );
-  });
-
-  const safeOnCheckIn = onCheckIn || ((date: string, rewardAmount: number, rewardSymbol: string, currencyCode: string) => {
-    console.log('Check-in pressed:', { date, rewardAmount, rewardSymbol, currencyCode });
-    Alert.alert(
-      "Check-In Feature",
-      `Check-in for ${date} - Reward: ${rewardSymbol}${rewardAmount} ${currencyCode}`,
-      [{ text: "OK" }]
-    );
-  });
-
-  const safeOnAddNotification = onAddNotification || ((title: string, message: string) => {
-    console.log('Notification would be added:', { title, message });
-  });
-
-  const handleSubscribe = () => {
-    safeOnPressSubscribe();
-    safeOnAddNotification(
-      "Subscription Successful!",
-      "You've subscribed to Daily Check-In Rewards. Start checking in daily to earn rewards!"
-    );
+  const handleSubscribe = async () => {
+    const result = await subscribe();
+    if (result.success) {
+      safeOnAddNotification(
+        "Subscription Successful! 🎉",
+        "You've subscribed to Daily Check-In Rewards. Check in daily to earn rewards!"
+      );
+    } else {
+      safeOnAddNotification(
+        "Subscription Failed",
+        result.error || "Please try again"
+      );
+    }
   };
 
-  const handleCheckIn = (date: string) => {
-    if (date === todayStr && !hasCheckedInToday && country) {
-      safeOnCheckIn(date, country.ppp_reward_amount, country.currency_symbol, country.currency_code);
-      
+  const handleCheckIn = async (date: string) => {
+    if (date !== todayStr || hasCheckedInToday) return;
+    const result = await checkIn();
+    if (result.success && result.rewardAmount !== undefined && result.currencySymbol) {
       safeOnAddNotification(
-        "Daily Check-In Reward Claimed!",
-        `You've earned ${country.currency_symbol}${country.ppp_reward_amount.toFixed(2)} for checking in today!`
+        "Daily Check-In Reward Claimed! 💰",
+        `You've earned ${result.currencySymbol}${result.rewardAmount.toFixed(2)} for checking in today!`
       );
-      
-      Alert.alert(
-        "Check-In Successful!",
-        `You've earned ${country.currency_symbol}${country.ppp_reward_amount.toFixed(2)} for today's check-in!`
+    } else {
+      safeOnAddNotification(
+        "Check-In Failed",
+        result.error || "Please try again"
       );
     }
   };
@@ -174,109 +166,11 @@ export default function CheckInBanner({
     }
   };
 
-  // Safe format reward text
-  const rewardText = country ? 
-    `${country.currency_symbol || ''}${country.ppp_reward_amount?.toFixed(country.ppp_reward_amount < 1 ? 2 : country.ppp_reward_amount % 1 === 0 ? 0 : 2) || '0.00'}` 
+  const rewardText = country
+    ? formatRewardText(country.ppp_reward_amount, country.currency_symbol)
     : 'Loading...';
 
-  // Generate current month days
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayIndex = new Date(year, month, 1).getDay();
-
-  const renderCalendar = () => {
-    const days = [];
-    const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-    // Day headers
-    for (let i = 0; i < 7; i++) {
-      days.push(
-        <Text key={`header-${i}`} style={styles.calDayHeader}>
-          {dayLabels[i]}
-        </Text>
-      );
-    }
-
-    // Empty cells before 1st day
-    for (let i = 0; i < firstDayIndex; i++) {
-      days.push(<View key={`empty-${i}`} style={styles.calDay} />);
-    }
-
-    // Actual days
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(
-        day
-      ).padStart(2, "0")}`;
-      const isToday = day === today.getDate() && month === today.getMonth();
-      const isCheckedIn = Array.isArray(checkedInDates) && checkedInDates.includes(dateStr);
-      const isFutureDate = new Date(dateStr) > today;
-      const isDisabled = isCheckedIn || isFutureDate;
-
-      days.push(
-        <TouchableOpacity
-          key={day}
-          onPress={() => handleCheckIn(dateStr)}
-          style={[
-            styles.calDay,
-            isToday && styles.calToday,
-            isCheckedIn && styles.calCheckedIn,
-            isDisabled && styles.calDisabled,
-          ]}
-          disabled={isDisabled}
-        >
-          <Text
-            style={[
-              styles.calDayText,
-              isToday && styles.calTodayText,
-              isCheckedIn && styles.calCheckedInText,
-              isDisabled && styles.calDisabledText,
-            ]}
-          >
-            {day}
-          </Text>
-          {isCheckedIn && (
-            <Ionicons 
-              name="checkmark" 
-              size={12} 
-              color="#FFD700" 
-              style={styles.checkedIcon}
-            />
-          )}
-        </TouchableOpacity>
-      );
-    }
-
-    return days;
-  };
-
-  // Calculate monthly stats with safe defaults
-  const totalDaysInMonth = daysInMonth;
-  const checkedInDays = Array.isArray(checkedInDates) 
-    ? checkedInDates.filter(date => 
-        date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`)
-      ).length 
-    : 0;
-  const monthlyEarnings = checkedInDays * (country?.ppp_reward_amount || 0);
-
-  if (!isSubscribed) {
-    return (
-      <TouchableOpacity style={styles.checkInBanner} onPress={handleBannerPress}>
-        <View style={styles.checkInLeft}>
-          <View style={styles.checkInIcon}>
-            <Ionicons name="gift-outline" size={28} color="#FFD700" />
-          </View>
-          <View>
-            <Text style={styles.checkInTitle}>Daily Check-In Reward</Text>
-            <Text style={styles.checkInSubtitle}>
-              Subscribe now & get up to 10% increase in balance every month!
-            </Text>
-          </View>
-        </View>
-        <View style={styles.checkInButton}>
-          <Text style={styles.checkInButtonText}>Subscribe Now</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
+  const { width } = Dimensions.get("window");
 
   if (loading) {
     return (
@@ -295,10 +189,7 @@ export default function CheckInBanner({
         <View style={styles.errorContainer}>
           <Ionicons name="warning-outline" size={24} color="#FF6B6B" />
           <Text style={styles.errorText}>Failed to load rewards</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => window.location.reload()}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={retry}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -306,54 +197,167 @@ export default function CheckInBanner({
     );
   }
 
-  return (
-    <View style={styles.calendarBanner}>
-      <View style={styles.calHeader}>
-        <Text style={styles.calTitle}>Daily Check-In Calendar</Text>
-        <Text style={styles.calReward}>
-          Reward: {rewardText} per check-in ({userCountryCode})
+  if (!isSubscribed) {
+    return (
+      <TouchableOpacity style={styles.checkInBanner} onPress={handleBannerPress}>
+        <View style={styles.checkInLeft}>
+          <View style={styles.checkInIcon}>
+            <Ionicons name="gift-outline" size={28} color="#FFD700" />
+          </View>
+          <View style={styles.checkInTextContainer}>
+            <Text style={styles.checkInTitle}>Daily Check-In </Text>
+            <Text style={styles.checkInSubtitle}>
+              Subscribe now & earn {rewardText} daily! {country?.flag_emoji || '🎁'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.checkInButton}>
+          <Text style={styles.checkInButtonText}>Subscribe Now</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // Collapsed view when checked in today
+  if (hasCheckedInToday) {
+    return (
+      <View style={styles.collapsedBanner}>
+        <Text style={styles.timerText}>
+          Next Check-in  <Text style={styles.timerValue}>{timeLeft}</Text>
         </Text>
-        <View style={styles.monthlyStats}>
-          <Text style={styles.statsText}>
-            This month: {checkedInDays}/{totalDaysInMonth} days
+      </View>
+    );
+  }
+
+  // Full calendar view
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const daysInMonth = getDaysInMonth(year, month);
+
+  // Render days starting from today to end of month
+  const visibleDays = Array.from({ length: daysInMonth - currentDayNum + 1 }, (_, i) => {
+    const dayNum = currentDayNum + i;
+    const date = new Date(year, month, dayNum);
+    const dayOfWeek = date.getDay();
+    const label = dayLabels[dayOfWeek];
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const isToday = dayNum === currentDayNum;
+    const isFuture = dayNum > currentDayNum;
+    const isCheckedIn = checkedInDates.includes(dateStr);
+    const isGrayed = isFuture && !isCheckedIn;
+    const isDisabled = isFuture || isCheckedIn;
+    const cellWidth = 50;
+    return (
+      <View key={dayNum} style={{ width: cellWidth, alignItems: 'center', marginHorizontal: 2 }}>
+        <Text style={styles.dayLabel}>{label}</Text>
+        <TouchableOpacity
+          onPress={() => handleCheckIn(dateStr)}
+          disabled={isDisabled || processingCheckIn}
+          style={[
+            styles.horizontalDayCell,
+            isToday && styles.todayCell,
+            isCheckedIn && styles.checkedInCell,
+            isGrayed && styles.grayedCell,
+          ]}
+        >
+          <Text style={[
+            styles.dayNumber,
+            isToday && styles.todayNumber,
+            isCheckedIn && styles.checkedInNumber,
+            isGrayed && styles.grayedNumber,
+          ]}>
+            {dayNum}
           </Text>
-          <Text style={styles.statsText}>
-            Earned: {country?.currency_symbol || ''}{monthlyEarnings.toFixed(2)}
+          {isCheckedIn && (
+            <Ionicons
+              name="checkmark"
+              size={10}
+              color="#FFD700"
+              style={styles.checkmarkIcon}
+            />
+          )}
+          {processingCheckIn && isToday && !isCheckedIn && (
+            <ActivityIndicator size="small" color="#FFD700" style={styles.spinner} />
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  });
+
+  // Render previous claimed days before today
+  const previousDays = Array.from({ length: currentDayNum - 1 }, (_, i) => {
+    const dayNum = i + 1;
+    const date = new Date(year, month, dayNum);
+    const dayOfWeek = date.getDay();
+    const label = dayLabels[dayOfWeek];
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const isCheckedIn = checkedInDates.includes(dateStr);
+    if (!isCheckedIn) return null; // Only show if claimed
+    const cellWidth = 50;
+    return (
+      <View key={dayNum} style={{ width: cellWidth, alignItems: 'center', marginHorizontal: 2 }}>
+        <Text style={styles.dayLabel}>{label}</Text>
+        <View
+          style={[
+            styles.horizontalDayCell,
+            styles.checkedInCell,
+          ]}
+        >
+          <Text style={styles.checkedInNumber}>
+            {dayNum}
           </Text>
+          <Ionicons
+            name="checkmark"
+            size={10}
+            color="#FFD700"
+            style={styles.checkmarkIcon}
+          />
         </View>
       </View>
-      
-      <View style={styles.calGrid}>{renderCalendar()}</View>
-      
-      {!hasCheckedInToday && (
-        <TouchableOpacity 
-          style={styles.checkInTodayButton}
-          onPress={() => handleCheckIn(todayStr)}
-          disabled={!country}
-        >
-          <Ionicons name="calendar" size={20} color="#000" />
-          <Text style={styles.checkInTodayText}>Check In Today</Text>
-        </TouchableOpacity>
-      )}
-      
-      {hasCheckedInToday && (
-        <View style={styles.checkedInToday}>
-          <Ionicons name="checkmark-circle" size={20} color="#FFD700" />
-          <Text style={styles.checkedInTodayText}>Checked In Today!</Text>
+    );
+  }).filter(Boolean);
+
+  return (
+    <View style={styles.calendarBanner}>
+      <Text style={styles.monthHeader}>{`${currentMonthName} ${year}`}</Text>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+        style={styles.horizontalCalendar}
+      >
+        <View style={styles.horizontalDaysContainer}>
+          {previousDays}
+          {visibleDays}
         </View>
+      </ScrollView>
+      {country && (
+        <TouchableOpacity
+          style={[
+            styles.claimButton,
+            processingCheckIn && styles.claimButtonDisabled,
+          ]}
+          onPress={() => handleCheckIn(todayStr)}
+          disabled={processingCheckIn}
+        >
+          {processingCheckIn ? (
+            <ActivityIndicator size="small" color="#FFD700" />
+          ) : (
+            <Text style={styles.claimButtonText}>
+              Claim {formatRewardText(country.ppp_reward_amount, country.currency_symbol)}
+            </Text>
+          )}
+        </TouchableOpacity>
       )}
     </View>
   );
 }
 
-const { width } = Dimensions.get("window");
-const dayWidth = (width - 48) / 7;
-
 const styles = StyleSheet.create({
   checkInBanner: {
     backgroundColor: "#1a1a1a",
     borderRadius: 14,
-    padding: 16,
+    padding: 5,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -372,6 +376,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginRight: 12,
   },
+  checkInTextContainer: {
+    flex: 1,
+  },
   checkInTitle: {
     color: "#fff",
     fontSize: 15,
@@ -384,9 +391,10 @@ const styles = StyleSheet.create({
   },
   checkInButton: {
     backgroundColor: "#FFD700",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 20,
+    top:30
   },
   checkInButtonText: {
     color: "#000",
@@ -401,148 +409,138 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FFD700",
   },
-  calHeader: {
-    marginBottom: 12,
-  },
-  calTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  calReward: {
-    color: "#FFD700",
-    fontSize: 13,
-    textAlign: "center",
-    marginTop: 4,
-  },
-  monthlyStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    paddingHorizontal: 20,
-  },
-  statsText: {
-    color: "#aaa",
-    fontSize: 12,
-  },
-  calGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  calDayHeader: {
-    width: dayWidth,
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: 12,
-    color: "#aaa",
-    marginBottom: 6,
-  },
-  calDay: {
-    width: dayWidth,
-    height: dayWidth,
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 2,
-    position: "relative",
-  },
-  calDayText: {
-    color: "#fff",
-    fontSize: 14,
-  },
-  calToday: {
-    borderWidth: 2,
+  collapsedBanner: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 1,
     borderColor: "#FFD700",
-    borderRadius: dayWidth / 2,
+    alignItems: "center",
+    minHeight: 5,
   },
-  calTodayText: {
-    color: "#FFD700",
-    fontWeight: "bold",
-  },
-  calCheckedIn: {
-    backgroundColor: "#FFD70033",
-    borderRadius: dayWidth / 2,
-  },
-  calCheckedInText: {
-    color: "#FFD700",
+  monthHeader: {
+    color: "#fff",
+    fontSize: 18,
     fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
   },
-  calDisabled: {
+  horizontalCalendar: {
+    marginBottom: 12,
+    maxHeight: 70,
+  },
+  horizontalDaysContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dayLabel: {
+    color: "#aaa",
+    fontSize: 10,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  horizontalDayCell: {
+    width: 50,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  todayCell: {
+    borderWidth: 2,
+    borderColor: '#FFD700',
+  },
+  checkedInCell: {
+    backgroundColor: '#FFD70033',
+  },
+  grayedCell: {
     opacity: 0.5,
   },
-  calDisabledText: {
-    color: "#666",
+  dayNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
-  checkedIcon: {
-    position: "absolute",
+  todayNumber: {
+    color: '#FFD700',
+  },
+  checkedInNumber: {
+    color: '#FFD700',
+  },
+  grayedNumber: {
+    color: '#666',
+  },
+  checkmarkIcon: {
+    position: 'absolute',
     top: 2,
     right: 2,
   },
-  checkInTodayButton: {
-    backgroundColor: "#FFD700",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    borderRadius: 20,
-    marginTop: 12,
-    gap: 8,
+  spinner: {
+    position: 'absolute',
   },
-  checkInTodayText: {
-    color: "#000",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  checkedInToday: {
-    backgroundColor: "#FFD70022",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    borderRadius: 20,
-    marginTop: 12,
-    gap: 8,
+  claimButton: {
     borderWidth: 1,
     borderColor: "#FFD700",
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12,
   },
-  checkedInTodayText: {
+  claimButtonDisabled: {
+    opacity: 0.7,
+  },
+  claimButtonText: {
     color: "#FFD700",
     fontWeight: "bold",
-    fontSize: 14,
+    fontSize: 12,
+  },
+  timerText: {
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  timerValue: {
+    color: "#FFD700",
+    fontWeight: "bold",
+    fontSize: 18,
   },
   loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
     gap: 12,
   },
   loadingText: {
-    color: '#FFD700',
+    color: "#FFD700",
     fontSize: 14,
   },
   errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
     gap: 12,
   },
   errorText: {
-    color: '#FF6B6B',
+    color: "#FF6B6B",
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
   },
   retryButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: "#FF6B6B",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginTop: 8,
   },
   retryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
     fontSize: 12,
   },
 });

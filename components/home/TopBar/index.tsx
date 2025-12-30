@@ -8,7 +8,7 @@ export default function TopBar() {
 
   const goToSettings = () => router.push("/settings");
   const goToHelp = () => router.push("/help");
-  const goToNotifications = () => router.push("/notifications");
+  const goToNotifications = () => router.push("/(app)/notifications");
   const goToTrending = () => router.push("/transaction");
 
   return (

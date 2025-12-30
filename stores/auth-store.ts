@@ -10,7 +10,8 @@ export interface UserProfile {
   id: string;
   email: string | null;
   phone: string | null;
-  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   avatar_url: string | null;
   is_verified: boolean;
   country_code: string | null;
@@ -21,6 +22,15 @@ export interface UserProfile {
   bpay_tag: string | null;
   bonus_percent: number;
   balance: number;
+  country: string | null;
+  tier: number | null;
+  payscribe_account_number: string | null;
+  payscribe_customer_id: string | null;
+  tag_created_at: string | null;
+  tag_changed_at: string | null;
+  tag_change_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SavedAccount extends UserProfile {
@@ -56,6 +66,12 @@ interface AuthState {
   setCurrentAccount: (account: SavedAccount | null) => void;
   syncProfileToSupabase: (profile: UserProfile) => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  refreshCurrentUser: () => Promise<void>;
+  fetchUserProfile: (userId: string) => Promise<UserProfile | null>;
+  // NEW: Force refresh auth state from Supabase
+  forceRefreshProfile: () => Promise<void>;
+  // NEW: Update just the current account's BPAY tag
+  updateCurrentAccountTag: (bpayTag: string) => void;
 }
 
 const MAX_ACCOUNTS = 3;
@@ -128,9 +144,74 @@ export const hashToken = async (token: string): Promise<string> => {
   return await hashPIN(token);
 };
 
+// Format BPAY tag with @ symbol
+export const formatBpayTag = (tag: string | null): string => {
+  if (!tag) return '';
+  return tag.startsWith('@') ? tag : `@${tag}`;
+};
+
+// Fetch complete user profile from Supabase
+const fetchCompleteUserProfile = async (userId: string): Promise<UserProfile | null> => {
+  try {
+    console.log('🔍 Fetching complete user profile from Supabase for:', userId);
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('❌ Error fetching user profile from Supabase:', error);
+      return null;
+    }
+
+    console.log('✅ Complete user profile fetched:', {
+      id: data.id,
+      email: data.email,
+      bpay_tag: data.bpay_tag,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      balance: data.balance,
+      payscribe_account_number: data.payscribe_account_number,
+      payscribe_customer_id: data.payscribe_customer_id
+    });
+
+    return {
+      id: data.id,
+      email: data.email,
+      phone: data.phone,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      avatar_url: data.avatar_url,
+      is_verified: data.is_verified || false,
+      country_code: data.country_code,
+      dial_code: data.dial_code,
+      flag_emoji: data.flag_emoji,
+      currency_symbol: data.currency_symbol,
+      username: data.username,
+      bpay_tag: data.bpay_tag,
+      bonus_percent: data.bonus_percent || 0,
+      balance: data.balance || 0,
+      country: data.country,
+      tier: data.tier,
+      payscribe_account_number: data.payscribe_account_number,
+      payscribe_customer_id: data.payscribe_customer_id,
+      tag_created_at: data.tag_created_at,
+      tag_changed_at: data.tag_changed_at,
+      tag_change_count: data.tag_change_count || 0,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+  } catch (error) {
+    console.error('💥 Error in fetchCompleteUserProfile:', error);
+    return null;
+  }
+};
+
 // Migration function to handle version updates with account validation
 const migrateAuthStore = (persistedState: any, version: number): AuthState => {
-  console.log(`🔄 Migrating auth store from version ${version} to 9`);
+  console.log(`🔄 Migrating auth store from version ${version} to 11`);
   
   const migratedState: any = {
     currentUser: persistedState?.currentUser || null,
@@ -164,105 +245,139 @@ export const useAuthStore = create<AuthState>()(
       isInitialized: false,
       
       // ──────── ACTIONS ────────
-      initializeAuth: async () => {
-        try {
-          console.log('🔐 Initializing auth state...');
-          set({ isLoading: true });
+     initializeAuth: async () => {
+  try {
+    console.log('🔐 Initializing auth state...');
+    set({ isLoading: true });
+    
+    // Check Supabase for active session (for reference only)
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.user) {
+      console.log('✅ Found active session for user:', session.user.id);
+      
+      // Try to find this user in our saved accounts (Zustand is source of truth)
+      const existingAccount = get().savedAccounts.find(
+        acc => acc.id === session.user.id
+      );
+      
+      if (existingAccount) {
+        console.log('🔄 Found matching account in Zustand store');
+        // Refresh user data from Supabase to ensure we have latest
+        const freshUserData = await get().fetchUserProfile(existingAccount.id);
+        
+        if (freshUserData) {
+          const updatedAccount = {
+            ...existingAccount,
+            ...freshUserData,
+            last_login: new Date().toISOString()
+          };
           
-          // Check Supabase for active session (for reference only)
-          const { data: { session } } = await supabase.auth.getSession();
+          set({
+            currentUser: freshUserData,
+            currentAccount: updatedAccount,
+            isAuthenticated: true,
+            isLoading: false,
+            isInitialized: true,
+          });
           
-          if (session?.user) {
-            console.log('✅ Found active session for user:', session.user.id);
+          // Update saved accounts with fresh data
+          set((state) => ({
+            savedAccounts: state.savedAccounts.map(acc =>
+              acc.id === existingAccount.id ? updatedAccount : acc
+            )
+          }));
+        } else {
+          // Use existing data if refresh fails
+          set({
+            currentUser: existingAccount,
+            currentAccount: existingAccount,
+            isAuthenticated: true,
+            isLoading: false,
+            isInitialized: true,
+          });
+        }
+      } else {
+        console.log('⚠️ Session exists but no matching account in Zustand');
+        set({
+          currentUser: null,
+          currentAccount: null,
+          isAuthenticated: false,
+          isLoading: false,
+          isInitialized: true,
+        });
+      }
+    } else {
+      // No active session - rely on saved accounts
+      console.log('👤 No active session, checking saved accounts');
+      
+      const state = get();
+      
+      // Validate and filter saved accounts
+      const validAccounts = state.savedAccounts.filter(acc => 
+        acc && 
+        acc.identifier && 
+        typeof acc.identifier === 'string' &&
+        acc.identifier.trim().length > 0 &&
+        acc.security_token_hash &&
+        typeof acc.security_token_hash === 'string'
+      );
+      
+      // If we filtered out invalid accounts, update the state
+      if (validAccounts.length !== state.savedAccounts.length) {
+        console.warn(`⚠️ Filtered ${state.savedAccounts.length - validAccounts.length} invalid accounts from storage`);
+        set({ savedAccounts: validAccounts });
+      }
+      
+      console.log('📊 Current Zustand state:', {
+        savedAccounts: validAccounts.length,
+        currentAccount: state.currentAccount?.identifier
+      });
+      
+      if (validAccounts.length > 0) {
+        console.log('📱 Found valid saved accounts:', validAccounts.length);
+        
+        // Auto-select first valid account and refresh data
+        const validAccount = validAccounts.find(acc => acc.security_token_hash);
+        if (validAccount) {
+          console.log('🔄 Auto-selecting valid saved account:', validAccount.identifier);
+          
+          // Refresh user data from Supabase
+          const freshUserData = await get().fetchUserProfile(validAccount.id);
+          
+          if (freshUserData) {
+            const updatedAccount = {
+              ...validAccount,
+              ...freshUserData,
+              last_login: new Date().toISOString()
+            };
             
-            // Try to find this user in our saved accounts (Zustand is source of truth)
-            const existingAccount = get().savedAccounts.find(
-              acc => acc.id === session.user.id
-            );
-            
-            if (existingAccount) {
-              console.log('🔄 Found matching account in Zustand store');
-              set({
-                currentUser: existingAccount,
-                currentAccount: existingAccount,
-                isAuthenticated: true,
-                isLoading: false,
-                isInitialized: true,
-              });
-            } else {
-              console.log('⚠️ Session exists but no matching account in Zustand');
-              set({
-                currentUser: null,
-                currentAccount: null,
-                isAuthenticated: false,
-                isLoading: false,
-                isInitialized: true,
-              });
-            }
-          } else {
-            // No active session - rely on saved accounts
-            console.log('👤 No active session, checking saved accounts');
-            
-            const state = get();
-            
-            // Validate and filter saved accounts
-            const validAccounts = state.savedAccounts.filter(acc => 
-              acc && 
-              acc.identifier && 
-              typeof acc.identifier === 'string' &&
-              acc.identifier.trim().length > 0 &&
-              acc.security_token_hash &&
-              typeof acc.security_token_hash === 'string'
-            );
-            
-            // If we filtered out invalid accounts, update the state
-            if (validAccounts.length !== state.savedAccounts.length) {
-              console.warn(`⚠️ Filtered ${state.savedAccounts.length - validAccounts.length} invalid accounts from storage`);
-              set({ savedAccounts: validAccounts });
-            }
-            
-            console.log('📊 Current Zustand state:', {
-              savedAccounts: validAccounts.length,
-              currentAccount: state.currentAccount?.identifier
+            set({
+              currentAccount: updatedAccount,
+              currentUser: freshUserData,
+              isAuthenticated: false, // Need token verification
+              isLoading: false,
+              isInitialized: true,
             });
             
-            if (validAccounts.length > 0) {
-              console.log('📱 Found valid saved accounts:', validAccounts.length);
-              
-              // Auto-select first valid account
-              const validAccount = validAccounts.find(acc => acc.security_token_hash);
-              if (validAccount) {
-                console.log('🔄 Auto-selecting valid saved account:', validAccount.identifier);
-                set({
-                  currentAccount: validAccount,
-                  currentUser: validAccount,
-                  isAuthenticated: false, // Need token verification
-                  isLoading: false,
-                  isInitialized: true,
-                });
-              } else {
-                console.log('❌ No valid saved accounts with token hashes');
-                set({ 
-                  currentAccount: null,
-                  currentUser: null,
-                  isAuthenticated: false,
-                  isLoading: false,
-                  isInitialized: true 
-                });
-              }
-            } else {
-              console.log('📭 No valid saved accounts found');
-              set({ 
-                currentAccount: null,
-                currentUser: null,
-                isAuthenticated: false,
-                isLoading: false,
-                isInitialized: true 
-              });
-            }
+            // Update saved accounts with fresh data
+            set((state) => ({
+              savedAccounts: state.savedAccounts.map(acc =>
+                acc.id === validAccount.id ? updatedAccount : acc
+              )
+            }));
+          } else {
+            // Use existing data if refresh fails
+            set({
+              currentAccount: validAccount,
+              currentUser: validAccount,
+              isAuthenticated: false,
+              isLoading: false,
+              isInitialized: true,
+            });
           }
-        } catch (error) {
-          console.log('💥 Auth initialization error:', error);
+        } else {
+          console.log('❌ No valid saved accounts with token hashes');
           set({ 
             currentAccount: null,
             currentUser: null,
@@ -271,6 +386,144 @@ export const useAuthStore = create<AuthState>()(
             isInitialized: true 
           });
         }
+      } else {
+        console.log('📭 No valid saved accounts found');
+        set({ 
+          currentAccount: null,
+          currentUser: null,
+          isAuthenticated: false,
+          isLoading: false,
+          isInitialized: true 
+        });
+      }
+    }
+  } catch (error) {
+    console.error('💥 Auth initialization error:', error);
+    set({ 
+      currentAccount: null,
+      currentUser: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitialized: true 
+    });
+  }
+},
+
+      // Fetch user profile from Supabase
+      fetchUserProfile: async (userId: string): Promise<UserProfile | null> => {
+        return await fetchCompleteUserProfile(userId);
+      },
+
+      // NEW: Force refresh from Supabase
+      forceRefreshProfile: async () => {
+        const state = get();
+        if (!state.currentAccount?.id) {
+          console.log('❌ No current account to force refresh');
+          return;
+        }
+
+        try {
+          console.log('🔄 FORCE refreshing current user data from Supabase');
+          const freshUserData = await fetchCompleteUserProfile(state.currentAccount.id);
+          
+          if (freshUserData) {
+            const updatedAccount = {
+              ...state.currentAccount,
+              ...freshUserData
+            };
+            
+            set({
+              currentUser: freshUserData,
+              currentAccount: updatedAccount,
+            });
+            
+            // Update saved accounts with fresh data
+            set((state) => ({
+              savedAccounts: state.savedAccounts.map(acc =>
+                acc.id === updatedAccount.id ? updatedAccount : acc
+              )
+            }));
+            
+            console.log('✅ FORCE refresh completed successfully');
+            return freshUserData;
+          } else {
+            console.log('⚠️ Failed to force refresh user data from Supabase');
+            return null;
+          }
+        } catch (error) {
+          console.error('💥 Error in force refresh:', error);
+          return null;
+        }
+      },
+
+      // Refresh current user data from Supabase
+      refreshCurrentUser: async () => {
+        const state = get();
+        if (!state.currentAccount?.id) {
+          console.log('❌ No current account to refresh');
+          return;
+        }
+
+        try {
+          console.log('🔄 Refreshing current user data from Supabase');
+          const freshUserData = await fetchCompleteUserProfile(state.currentAccount.id);
+          
+          if (freshUserData) {
+            const updatedAccount = {
+              ...state.currentAccount,
+              ...freshUserData
+            };
+            
+            set({
+              currentUser: freshUserData,
+              currentAccount: updatedAccount,
+            });
+            
+            // Update saved accounts with fresh data
+            set((state) => ({
+              savedAccounts: state.savedAccounts.map(acc =>
+                acc.id === updatedAccount.id ? updatedAccount : acc
+              )
+            }));
+            
+            console.log('✅ User data refreshed successfully');
+          } else {
+            console.log('⚠️ Failed to refresh user data from Supabase');
+          }
+        } catch (error) {
+          console.error('💥 Error refreshing user data:', error);
+        }
+      },
+
+      // NEW: Update just the BPAY tag in current account
+      updateCurrentAccountTag: (bpayTag: string) => {
+        const state = get();
+        if (!state.currentAccount) {
+          console.log('❌ No current account to update tag');
+          return;
+        }
+
+        console.log('🏷️ Updating BPAY tag in current account:', bpayTag);
+        
+        const formattedTag = formatBpayTag(bpayTag);
+        const updatedUser = { 
+          ...state.currentUser, 
+          bpay_tag: formattedTag 
+        };
+        const updatedAccount = { 
+          ...state.currentAccount, 
+          bpay_tag: formattedTag 
+        };
+
+        set({
+          currentUser: updatedUser,
+          currentAccount: updatedAccount,
+          savedAccounts: state.savedAccounts.map(acc =>
+            acc.id === updatedAccount.id ? updatedAccount : acc
+          ),
+        });
+
+        console.log('✅ BPAY tag updated in auth store');
       },
 
       // ZUSTAND IS THE SOURCE OF TRUTH - No Supabase verification
@@ -283,11 +536,29 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('Missing required login data: identifier, securityTokenHash, or transferTokenHash');
           }
 
+          // Fetch complete user data from Supabase to ensure we have all fields
+          let completeUserData = userData;
+          if (!skipSupabaseCheck) {
+            const freshData = await fetchCompleteUserProfile(userData.id);
+            if (freshData) {
+              completeUserData = freshData;
+              console.log('✅ Using complete user data from Supabase');
+            } else {
+              console.log('⚠️ Using provided user data (Supabase fetch failed)');
+            }
+          }
+
+          // Format bpay_tag with @ symbol if it exists
+          const formattedUserData = {
+            ...completeUserData,
+            bpay_tag: completeUserData.bpay_tag ? formatBpayTag(completeUserData.bpay_tag) : completeUserData.bpay_tag
+          };
+
           // Create account from userData (Zustand is source of truth)
           const account: SavedAccount = {
-            ...userData,
+            ...formattedUserData,
             identifier,
-            user_id: userData.id, // Same as id - Zustand is source
+            user_id: formattedUserData.id, // Same as id - Zustand is source
             last_login: new Date().toISOString(),
             security_token_hash: securityTokenHash,
             transfer_token_hash: transferTokenHash,
@@ -296,18 +567,16 @@ export const useAuthStore = create<AuthState>()(
           console.log('💾 Saving account to Zustand:', {
             identifier: account.identifier,
             id: account.id,
+            bpay_tag: account.bpay_tag,
+            first_name: account.first_name,
+            last_name: account.last_name,
+            balance: account.balance,
+            payscribe_account_number: account.payscribe_account_number,
             hasSecurityToken: !!securityTokenHash
           });
           
           // 1. IMMEDIATELY save to Zustand (user is logged in NOW)
           get().addAccount(account);
-          
-          // 2. Background sync to Supabase profiles (fire-and-forget)
-          if (!skipSupabaseCheck) {
-            get().syncProfileToSupabase(userData).catch(error => {
-              console.log('⚠️ Background sync to Supabase failed (non-critical):', error);
-            });
-          }
           
           console.log('✅ Login completed successfully - Zustand is source of truth');
         } catch (error) {
@@ -327,7 +596,8 @@ export const useAuthStore = create<AuthState>()(
               id: profile.id,
               email: profile.email,
               phone: profile.phone,
-              full_name: profile.full_name,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
               avatar_url: profile.avatar_url,
               is_verified: profile.is_verified,
               country_code: profile.country_code,
@@ -338,6 +608,13 @@ export const useAuthStore = create<AuthState>()(
               bpay_tag: profile.bpay_tag,
               bonus_percent: profile.bonus_percent,
               balance: profile.balance,
+              country: profile.country,
+              tier: profile.tier,
+              payscribe_account_number: profile.payscribe_account_number,
+              payscribe_customer_id: profile.payscribe_customer_id,
+              tag_created_at: profile.tag_created_at,
+              tag_changed_at: profile.tag_changed_at,
+              tag_change_count: profile.tag_change_count,
               updated_at: new Date().toISOString(),
             }, {
               onConflict: 'id'
@@ -361,16 +638,22 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('No user logged in');
           }
 
+          // Format bpay_tag with @ symbol if it's being updated
+          const formattedUpdates = {
+            ...updates,
+            bpay_tag: updates.bpay_tag ? formatBpayTag(updates.bpay_tag) : updates.bpay_tag
+          };
+
           // Update in Zustand first
-          const updatedUser = { ...state.currentUser, ...updates };
+          const updatedUser = { ...state.currentUser, ...formattedUpdates };
           const updatedAccount = state.currentAccount ? 
-            { ...state.currentAccount, ...updates } : null;
+            { ...state.currentAccount, ...formattedUpdates } : null;
 
           set({
             currentUser: updatedUser,
             currentAccount: updatedAccount,
             savedAccounts: state.savedAccounts.map(acc =>
-              acc.id === updatedUser.id ? { ...acc, ...updates } : acc
+              acc.id === updatedUser.id ? { ...acc, ...formattedUpdates } : acc
             ),
           });
 
@@ -513,7 +796,7 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      switchAccount: (account) => {
+      switchAccount: async (account) => {
         console.log('🔄 Switching to account:', account.identifier);
         
         if (!account.security_token_hash) {
@@ -521,7 +804,12 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
         
-        const updatedAccount = { ...account, last_login: new Date().toISOString() };
+        // Refresh user data from Supabase when switching accounts
+        const freshUserData = await get().fetchUserProfile(account.id);
+        const updatedAccountData = freshUserData ? { ...account, ...freshUserData } : account;
+        
+        const updatedAccount = { ...updatedAccountData, last_login: new Date().toISOString() };
+        
         set({
           savedAccounts: get().savedAccounts.map(a =>
             a.identifier === account.identifier ? updatedAccount : a
@@ -530,6 +818,8 @@ export const useAuthStore = create<AuthState>()(
           currentUser: updatedAccount,
           isAuthenticated: false,
         });
+        
+        console.log('✅ Account switched with fresh data');
       },
 
       removeAccount: (identifier) => {
@@ -635,7 +925,7 @@ export const useAuthStore = create<AuthState>()(
         currentUser: state.currentUser,
         isAuthenticated: state.isAuthenticated,
       }),
-      version: 9, // Incremented version for validation changes
+      version: 11, // Incremented version for schema changes
       migrate: migrateAuthStore,
       onRehydrateStorage: () => {
         console.log('🔄 Zustand storage rehydration started');
@@ -687,9 +977,20 @@ export const useAuth = () => {
     return securityToken.slice(0, 4);
   };
 
+  // Format BPAY tag for display
+  const getFormattedBpayTag = (): string => {
+    if (!store.currentAccount?.bpay_tag) return '';
+    return formatBpayTag(store.currentAccount.bpay_tag);
+  };
+
   console.log('🔍 Auth Hook State:', {
     isAuthenticated: store.isAuthenticated,
     currentAccount: store.currentAccount?.identifier || 'null',
+    bpayTag: getFormattedBpayTag(),
+    first_name: store.currentAccount?.first_name || 'null',
+    last_name: store.currentAccount?.last_name || 'null',
+    balance: store.currentAccount?.balance || 0,
+    payscribe_account_number: store.currentAccount?.payscribe_account_number || 'null',
     savedAccounts: store.savedAccounts.length,
     isLoading: store.isLoading,
     isInitialized: store.isInitialized
@@ -716,9 +1017,16 @@ export const useAuth = () => {
     verifyTransferToken: store.verifyTransferToken,
     syncProfileToSupabase: store.syncProfileToSupabase,
     updateProfile: store.updateProfile,
+    refreshCurrentUser: store.refreshCurrentUser,
+    fetchUserProfile: store.fetchUserProfile,
+    // NEW ACTIONS
+    forceRefreshProfile: store.forceRefreshProfile,
+    updateCurrentAccountTag: store.updateCurrentAccountTag,
     // Helpers
     getMaskedIdentifier,
     getTransferToken,
+    getFormattedBpayTag,
     hashToken,
+    formatBpayTag, // Export the function directly
   };
 };

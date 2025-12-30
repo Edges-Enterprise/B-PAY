@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <!-- Background: Deep charcoal gray -->
+  <rect width="1000" height="1000" fill="#121212"/>
+
+  <!-- Matte Black Disc (85% of frame = 850px diameter) -->
+  <circle cx="500" cy="500" r="425" fill="#000000"/>
+
+  <!-- Electrum Ring (as path): full circle minus 7.2° gap from 223.2° to 230.4° -->
+  <!-- Angles measured clockwise from 12 o’clock (0° = top) -->
+  <!-- Convert to SVG path using polar coordinates -->
+  <!-- Start angle: 230.4°, End angle: 223.2° + 360° = 583.2° (to draw long arc clockwise) -->
+  <!-- But SVG arcs are counter-clockwise by default, so we draw from 230.4° → 223.2° + 360° via large arc -->
+
+  <!-- Helper: angle to point on circle -->
+  <!-- radius = 425 -->
+  <!-- 230.4° from top = 230.4 - 90 = 140.4° in standard math (from +x axis) -->
+  <!-- But easier: in SVG, 0° is east. So 12 o’clock = -90° or 270° -->
+  <!-- So angle θ from 12 o’clock clockwise → SVG angle = 270 - θ -->
+
+  <!-- Compute start point (230.4° from 12 o’clock clockwise) -->
+  <!-- SVG angle = 270 - 230.4 = 39.6° -->
+  <!-- End point (223.2°) → SVG angle = 270 - 223.2 = 46.8° -->
+
+  <!-- But we want to draw the ring *excluding* the gap, so we draw from 230.4° → 223.2° going the long way around -->
+  <!-- That means: from 230.4° clockwise all the way to 223.2° = 352.8° arc -->
+  <!-- In SVG, we draw from start (230.4°) to end (223.2°) with large-arc-flag=1 -->
+
+  <!-- Convert to coordinates -->
+  <!-- radius = 425, center = (500,500) -->
+  <!-- x = cx + r * cos(θ_rad), y = cy + r * sin(θ_rad) -->
+  <!-- θ in radians, with 0° = east -->
+
+  <!-- Start point: 230.4° from top clockwise = 230.4 - 90 = 140.4° from east CCW? -->
+  <!-- Simpler: use standard unit circle where 0° = east, +CCW -->
+  <!-- 12 o’clock = 90° in standard math -->
+  <!-- So angle φ from 12 o’clock clockwise = 90° - φ in standard math -->
+  <!-- Therefore: 230.4° from 12 o’clock CW = 90 - 230.4 = -140.4° = 219.6° standard -->
+  <!-- Similarly, 223.2° → 90 - 223.2 = -133.2° = 226.8° standard -->
+
+  <!-- Let's compute points using JavaScript-style math (but we'll calculate constants): -->
+  <!-- We'll use high precision -->
+
+  <!-- Start of gap = 230.4° from 12 o’clock CW -->
+  <!-- → Standard angle = 90 - 230.4 = -140.4° → 219.6° -->
+  <!-- End of gap = 223.2° → 90 - 223.2 = -133.2° → 226.8° -->
+
+  <!-- But for the ring, we want to draw from END of gap (223.2°) all the way around to START of gap (230.4°) -->
+  <!-- So arc from 226.8° standard → 219.6° standard, going the long way (352.8° sweep) -->
+
+  <!-- However, SVG arc goes from start point to end point. So: -->
+  <!-- Start drawing at 223.2° position (end of gap) → go around to 230.4° position (start of gap) -->
+  <!-- That is: start point = 223.2° from 12 o’clock CW = standard angle = 90 - 223.2 = -133.2° -->
+  <!-- End point = 230.4° from 12 o’clock CW = 90 - 230.4 = -140.4° -->
+
+  <!-- Convert to radians and compute -->
+  <!-- We'll calculate coordinates with high precision -->
+
+  <!-- Constants -->
+  <!-- cx=500, cy=500, r=425 -->
+
+  <!-- Start point (223.2° from 12 o’clock CW): -->
+  <!-- θ_std = 90 - 223.2 = -133.2° = -2.324778564 rad -->
+  <!-- x1 = 500 + 425 * cos(-133.2°) -->
+  <!-- y1 = 500 + 425 * sin(-133.2°) -->
+
+  <!-- cos(-133.2°) = cos(133.2°) = -0.6820... -->
+  <!-- sin(-133.2°) = -sin(133.2°) = -0.7314... -->
+
+  <!-- Let's compute precisely: -->
+  <!-- Using calculator: -->
+  <!-- cos(133.2°) ≈ -0.682048, sin(133.2°) ≈ 0.731354 -->
+  <!-- So: -->
+  <!-- x1 = 500 + 425 * (-0.682048) ≈ 500 - 289.8704 = 210.1296 -->
+  <!-- y1 = 500 + 425 * (-0.731354) ≈ 500 - 310.8255 = 189.1745 -->
+
+  <!-- End point (230.4° from 12 o’clock CW): -->
+  <!-- θ_std = 90 - 230.4 = -140.4° -->
+  <!-- cos(140.4°) ≈ -0.770513, sin(140.4°) ≈ 0.637424 -->
+  <!-- x2 = 500 + 425 * (-0.770513) ≈ 500 - 327.468 = 172.532 -->
+  <!-- y2 = 500 + 425 * (-0.637424) ≈ 500 - 270.905 = 229.095 -->
+
+  <!-- Now draw large arc from (x1,y1) to (x2,y2) with rx=ry=425, large-arc-flag=1, sweep-flag=1 (clockwise) -->
+
+  <!-- But note: in SVG, sweep-flag=1 means clockwise in user space -->
+  <!-- We want to go the long way clockwise, so large-arc=1, sweep=1 -->
+
+  <!-- Ring path -->
+  <path d="
+    M 210.1296 189.1745
+    A 425 425 0 1 1 172.532 229.095
+  " fill="none" stroke="#D4C19A" stroke-width="15.3" stroke-linecap="butt"/>
+
+  <!-- Key-line: radial line from midpoint of gap (226.8° from 12 o’clock CW) to center -->
+  <!-- Midpoint angle = (223.2 + 230.4)/2 = 226.8° from 12 o’clock CW -->
+  <!-- Standard angle = 90 - 226.8 = -136.8° -->
+  <!-- cos(136.8°) ≈ -0.724967, sin(136.8°) ≈ 0.688779 -->
+  <!-- Start point on outer edge: -->
+  <!-- x = 500 + 425 * cos(-136.8°) = 500 + 425 * (-0.724967) ≈ 500 - 308.111 = 191.889 -->
+  <!-- y = 500 + 425 * sin(-136.8°) = 500 + 425 * (-0.688779) ≈ 500 - 292.731 = 207.269 -->
+
+  <!-- The line tapers from 15.3px (same as ring thickness: 0.018/1 * 850 = 15.3px) to 0 at center -->
+  <!-- SVG doesn't support tapered strokes natively, so we approximate with a polygon -->
+
+  <!-- Create a tapered triangle-like shape pointing inward -->
+  <!-- We'll create a narrow isosceles triangle with base = 15.3px perpendicular to radial direction -->
+
+  <!-- Compute perpendicular angle: radial direction = -136.8°, so perpendicular = -136.8° + 90° = -46.8° -->
+  <!-- Half-base offset = 15.3 / 2 = 7.65px -->
+
+  <!-- Point A (outer left): offset perpendicular left -->
+  <!-- dx = 7.65 * cos(-46.8°) ≈ 7.65 * 0.685 ≈ 5.24 -->
+  <!-- dy = 7.65 * sin(-46.8°) ≈ 7.65 * (-0.728) ≈ -5.57 -->
+  <!-- So A = (191.889 + 5.24, 207.269 - 5.57) ≈ (197.129, 201.699) -->
+
+  <!-- Point B (outer right): offset perpendicular right -->
+  <!-- B = (191.889 - 5.24, 207.269 + 5.57) ≈ (186.649, 212.839) -->
+
+  <!-- Point C = center (500,500) -->
+
+  <!-- But wait: the key-line is radial and *tapers to a needle point at center*, so yes, triangle -->
+
+  <polygon points="197.129,201.699 186.649,212.839 500,500" fill="#D4C19A"/>
+
+</svg>
