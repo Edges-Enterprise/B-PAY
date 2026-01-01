@@ -1,0 +1,16 @@
+{
+  "name": "payscribe-proxy",
+  "version": "1.0.0",
+  "description": "Secure proxy to Payscribe (Nigeria) with IP whitelisting",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "axios": "^1.6.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
