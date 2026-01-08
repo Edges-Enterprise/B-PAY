@@ -1,25 +1,38 @@
 // app/(app)/(protected)/_layout.tsx
 import { Tabs, useRouter, usePathname, useSegments } from "expo-router";
-import { Ionicons, FontAwesome } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import { Fontisto } from "@expo/vector-icons";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Asset } from "expo-asset";
-import { SvgUri } from "react-native-svg";
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, TouchableOpacity, Animated, Image, Text } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Animated, Image } from "react-native";
 import InvestorBottomSheet from "@/components/TransferBottomSheet";
 import { useAuth } from "@/stores/auth-store";
 import LoadingScreen from '@/components/LoadingScreen';
 
-// SVG for Home
-const homeSvgUri = Asset.fromModule(require("@/assets/icons/home.svg")).uri;
+// Import the PNG for Home
+const homePngImage = require("@/assets/images/splash.png");
 
-// PNG for History (POS)
-const posPngUri = Asset.fromModule(require("@/assets/icons/pos.png")).uri;
+// 🔧 LOCKED ICON (unchanged)
+const LOCKED_ICON_SIZE = 26;
+const LOCKED_ICON_TOP_ADJUSTMENT = 0;
+const LOCKED_ICON_SCALE = 1;
 
-// ADJUST THIS VALUE TO CHANGE POS ICON SIZE
-const POS_ICON_SIZE = 32;
+// 🔧 PNG-ONLY STYLING – EDIT THESE TO MOVE/RESIZE JUST THE IMAGE
+const PNG_STYLE = {
+  width: 70,        // Image width
+  height: 78,       // Image height
+  left: 2,          // ← Position from LEFT of the 76x76 container
+  top: -1,          // ← Position from TOP (negative = above top edge)
+};
 
-/* Pulsing Ring – Instant Start */
+/*
+  📏 Coordinate system:
+    - Container = 76x76 circle
+    - (0, 0) = top-left of that circle
+    - Increase `left` → move right | Increase `top` → move down
+*/
+
+/* Pulsing Ring – always centered, scales outward */
 const BurstRing = ({ delay = 0 }: { delay?: number }) => {
   const progress = React.useRef(new Animated.Value(0)).current;
 
@@ -43,29 +56,37 @@ const BurstRing = ({ delay = 0 }: { delay?: number }) => {
   return <Animated.View style={[styles.burstRing, { transform: [{ scale }], opacity }]} />;
 };
 
-/* Home Icon */
+/* Home Tab Icon */
 const HomeTabIcon = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity onPress={onPress} style={styles.centerIconContainer} activeOpacity={1}>
+    {/* Centered pulsing rings */}
     <BurstRing delay={0} />
     <BurstRing delay={900} />
-    <SvgUri width={45} height={48} uri={homeSvgUri} fill="#00FF7F" />
+
+    {/* Independent PNG – only this is affected by PNG_STYLE */}
+    <Image 
+      source={homePngImage} 
+      style={[styles.pngAbsolute, PNG_STYLE]} 
+      resizeMode="contain"
+    />
   </TouchableOpacity>
 );
 
-/* History Icon with pos.png */
-const HistoryTabIcon = ({ color }: { color: string }) => (
-  <Image
-    source={{ uri: posPngUri }}
-    style={[
-      styles.posIcon,
-      {
-        width: POS_ICON_SIZE,
-        height: POS_ICON_SIZE,
-        tintColor: color,
-      },
-    ]}
-    resizeMode="contain"
-  />
+/* Locked Icon */
+const LockedTabIcon = ({ color }: { color: string }) => (
+  <View style={[
+    styles.lockedIconContainer,
+    { 
+      top: LOCKED_ICON_TOP_ADJUSTMENT,
+      transform: [{ scale: LOCKED_ICON_SCALE }]
+    }
+  ]}>
+    <Fontisto 
+      name="magento" 
+      size={LOCKED_ICON_SIZE} 
+      color={color} 
+    />
+  </View>
 );
 
 export default function ProtectedLayout() {
@@ -77,7 +98,6 @@ export default function ProtectedLayout() {
   
   const { isAuthenticated, isLoading, isInitialized } = useAuth();
 
-  // Redirect to auth if not authenticated
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
       console.log('🔒 Protected Layout: Not authenticated, redirecting to auth');
@@ -85,20 +105,14 @@ export default function ProtectedLayout() {
     }
   }, [isAuthenticated, isInitialized, router]);
 
-  // Close sheet instantly when navigating away
   useEffect(() => {
     if (!isHome && sheetVisible) {
       setSheetVisible(false);
     }
   }, [isHome, sheetVisible]);
 
-  const openSheet = useCallback(() => {
-    setSheetVisible(true);
-  }, []);
-
-  const closeSheet = useCallback(() => {
-    setSheetVisible(false);
-  }, []);
+  const openSheet = useCallback(() => setSheetVisible(true), []);
+  const closeSheet = useCallback(() => setSheetVisible(false), []);
 
   const handleHomePress = useCallback(() => {
     if (isHome) {
@@ -109,18 +123,14 @@ export default function ProtectedLayout() {
     }
   }, [isHome, router, openSheet, closeSheet]);
 
-  // Show loading during initial auth check
   if (!isInitialized || isLoading) {
     return <LoadingScreen message="Securing your session..." />;
   }
 
-  // Don't render tabs if not authenticated (should redirect via useEffect)
   if (!isAuthenticated) {
     return <LoadingScreen message="Redirecting to login..." />;
   }
 
-  // User is authenticated and initialized - show the protected tabs
-  console.log('🔓 Protected Layout: User authenticated, showing tabs');
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Tabs
@@ -146,24 +156,14 @@ export default function ProtectedLayout() {
           },
         }}
       >
-        {/* HISTORY TAB – NOW USES pos.png */}
-        <Tabs.Screen
-          name="pos"
-          options={{
-            title: "Pos",
-            tabBarIcon: ({ color }) => <HistoryTabIcon color={color} />,
-          }}
-        />
-
         <Tabs.Screen
           name="locked"
           options={{
             title: "Locked",
-            tabBarIcon: ({ color }) => <FontAwesome name="lock" size={24} color={color} />,
+            tabBarIcon: ({ color }) => <LockedTabIcon color={color} />,
           }}
         />
 
-        {/* HOME TAB – CENTER WITH PULSE */}
         <Tabs.Screen
           name="index"
           options={{
@@ -186,17 +186,8 @@ export default function ProtectedLayout() {
             tabBarIcon: ({ color }) => <Ionicons name="trending-up" size={24} color={color} />,
           }}
         />
-
-        <Tabs.Screen
-          name="card"
-          options={{
-            title: "Card",
-            tabBarIcon: ({ color }) => <FontAwesome name="credit-card-alt" size={24} color={color} />,
-          }}
-        />
       </Tabs>
 
-      {/* FULL OPACITY BOTTOM SHEET */}
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
         <InvestorBottomSheet
           visible={sheetVisible && isHome}
@@ -223,6 +214,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 12,
+    // 👇 Critical: allows rings to animate beyond container bounds
+    overflow: "visible",
   },
   burstRing: {
     position: "absolute",
@@ -231,9 +224,17 @@ const styles = StyleSheet.create({
     borderRadius: 38,
     borderWidth: 2.5,
     borderColor: "#00FF7F",
+    zIndex: 1,
+    top: 0,
+    left: 0,
   },
-  posIcon: {
-    // Size controlled by POS_ICON_SIZE constant above
+  pngAbsolute: {
+    position: "absolute",
+    zIndex: 2,
+  },
+  lockedIconContainer: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   bottomSheet: {
     position: "absolute",
